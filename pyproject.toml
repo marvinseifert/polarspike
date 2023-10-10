@@ -24,6 +24,8 @@ spyking-circus = "^1.1.0"
 zstandard = "^0.21.0"
 tslearn = "^0.6.2"
 seaborn = "^0.13.0"
+param = "^1.13.0"
+jupyter-bokeh = "^3.0.7"
 
 
 [build-system]

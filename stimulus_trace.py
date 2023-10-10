@@ -16,7 +16,8 @@ import matplotlib.pyplot as plt
 import scipy.signal as sg
 import plotly.graph_objects as go
 import pickle
-
+import polars as pl
+import re
 
 class Stimulus_Extractor:
     """
@@ -65,16 +66,6 @@ class Stimulus_Extractor:
                 self.channel.Time_s = pd.to_timedelta(self.channel.Time_s, unit="s")
                 self.channel.set_index("Time_s", inplace=True)
 
-            # Stim nr input dialog:
-            # TODO: Deprecated, should be deleted
-            self.nr_stim_input = widgets.BoundedIntText(
-                value=0,
-                min=0,
-                max=1000,
-                step=1,
-                description="Nr of Stimuli:",
-                disabled=False,
-            )
         if format == ".h5":
             with h5py.File(stimulus_file, "r") as f:
                 self.channel = pd.DataFrame(
@@ -86,7 +77,7 @@ class Stimulus_Extractor:
                 self.half_Voltage = (
                         self.min_Voltage + (self.max_Voltage - self.min_Voltage) / 2
                 )
-                print(self.half_Voltage)
+
                 self.Frames = range(0, len(self.channel.index), 1)
                 self.sampling_frequency = freq
                 self.Time = np.asarray(self.Frames) / self.sampling_frequency
@@ -132,11 +123,18 @@ class Stimulus_Extractor:
         self.f: The figure object of the plotly plot.
 
         """
-
+        dsf = int(self.sampling_frequency / convert_time_string_to_frequency(dsf))
         channel = self.channel
+        channel = pl.from_pandas(channel)
+        channel = channel.sort("Frame")
+        df = channel.with_columns((channel['Frame'] // dsf).alias('Group_Key'))
+        grouped_df = df.group_by(['Group_Key'], maintain_order=True).agg(pl.col('Voltage').max().alias('Voltage'))
+        grouped_df = grouped_df.with_columns((pl.col("Group_Key").mul(dsf)).alias('Frame'))
+        channel = grouped_df.to_pandas()
         channel["log"] = channel.Voltage > self.half_Voltage
-        channel = channel.resample(dsf, closed="left").max()
-        # print(len(channel))
+
+
+        convert_time_string_to_frequency
         self.f = go.FigureWidget(
             [
                 go.Scattergl(
@@ -207,23 +205,6 @@ class Stimulus_Extractor:
                 self.scatter.marker.color = c
                 self.scatter.marker.size = s
 
-    def plot_trigger_channel(self, dsf):
-        """
-        Old version of trigger channel plotting, using matplotlib
-        """
-        channel = self.channel.resample(dsf).mean()
-        fig, ax = plt.subplots(figsize=(15, 6))
-        ax.plot(channel.Frame, channel.Voltage)
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-        plt.xlabel("Frames")
-        plt.ylabel("Voltage")
-        plt.title("Stimulus channel complete")
-        # fig = channel.plot.line(x='Frame', y='Voltage')
-        # fig.show()
-        return channel, fig, ax
-        # channel.index.resample('3T').sum()
-
     def trigger_channel_for_selection(self, dsf):
         """
         Function that defines n number of stimuli and creates equal number of
@@ -255,73 +236,6 @@ class Stimulus_Extractor:
         plt.ylabel("Voltage")
         self.stim_select_fig.suptitle("Stimulus channel complete")
 
-    def get_stim_range(self):
-        """
-        Old version of calculating the stimulus range and trigger times, when the
-        stimulus trace was plotted with matplotlib. Deprecated.
-        """
-        self.stimuli = pd.DataFrame(
-            columns=[
-                "Stimulus_name",
-                "Begin_Fr",
-                "End_Fr",
-                "Trigger_Fr_relative",
-                "Trigger_int",
-                "Stimulus_index",
-            ]
-        )
-        for i in range(0, self.nr_stim_input.value):
-            if self.nr_stim_input.value == 1:
-                limits_temp = np.array(self.stim_select_axs.get_xlim())
-            else:
-                limits_temp = np.array(self.stim_select_axs[i].get_xlim())
-
-            if limits_temp[0] < 0:
-                limits_temp[0] = 0
-            if limits_temp[1] < 0:
-                limits_temp[1] = 0
-            limits_int = limits_temp.astype(int)
-            channel_cut = self.channel[limits_int[0]: limits_int[1]]
-            channel_log = channel_cut.Voltage > self.half_Voltage
-            peaks = sg.find_peaks(channel_log, height=1, plateau_size=2)
-
-            peaks[0][:] = peaks[0][:] + limits_temp[0]
-            peaks_left = peaks[1]["left_edges"] + limits_temp[0]
-            stim_begin = int(peaks_left[0])
-            trigger_interval = np.diff(peaks_left)
-            min_trigger_interval = np.min(trigger_interval)
-
-            stim_end = int(
-                peaks_left[-1] + min_trigger_interval
-            )  # Adds time after the last trigger, to get the whole stimulus
-            # Failsafe: If last trigger was close to the end of the recording make last frame stimulus end
-            trigger_interval = np.diff(peaks_left)
-            if len(self.channel) < stim_end:
-                stim_end = len(self.channel)
-
-            nr_trigger = len(peaks_left)
-            plot_ones = np.ones(nr_trigger) * self.max_Voltage
-
-            df_temp = pd.DataFrame()
-            df_temp["Stimulus_name"] = ""
-            df_temp["Begin_Fr"] = [stim_begin]
-            df_temp["End_Fr"] = [stim_end]
-            df_temp["Trigger_Fr_relative"] = [peaks_left - peaks_left[0]]
-            df_temp["Trigger_int"] = [trigger_interval]
-            df_temp["Stimulus_index"] = [i]
-            df_temp["Stimulus_repeat_logic"] = [0]
-            df_temp["Stimulus_repeat_sublogic"] = [0]
-            self.stimuli = self.stimuli.append(df_temp, ignore_index=True)
-
-            # Update the figure from stimulus selection with trigger points
-            if self.nr_stim_input.value == 1:
-                self.stim_select_axs.scatter(peaks_left, plot_ones, color="hotpink")
-                self.stim_select_axs.set_xlim(limits_int[0], limits_int[1])
-            else:
-                self.stim_select_axs[i].scatter(peaks_left, plot_ones, color="hotpink")
-                self.stim_select_axs[i].set_xlim(limits_int[0], limits_int[1])
-
-        self.stimuli.set_index("Stimulus_index", inplace=True)
 
     def get_stim_range_new(self):
         """
@@ -343,7 +257,7 @@ class Stimulus_Extractor:
         for i in range(self.nr_stim, len(self.begins)):
 
             limits_temp = np.array(
-                [self.begins[i] - 1000, self.ends[i] + 1000], dtype=int
+                [self.begins[i] - self.sampling_frequency, self.ends[i] + self.sampling_frequency], dtype=int
             )
 
             if limits_temp[0] < 0:
@@ -473,3 +387,42 @@ def find_ends(df):
         trigger_ends.append((triggers_sorted + min_int.reshape(-1, 1)).flatten())
     df["trigger_ends"] = trigger_ends
     return df
+
+
+def convert_time_string_to_frequency(time_str):
+    """
+    Convert a time string like "150ms" to a frequency (reciprocal of time in seconds).
+
+    Parameters:
+        time_str (str): The time string to convert.
+
+    Returns:
+        float: The frequency derived from the time string.
+    """
+    # Use a regular expression to separate the numeric and unit parts
+    match = re.match(r"(\d+)(\w+)", time_str)
+    if not match:
+        raise ValueError(f"Invalid time string: {time_str}")
+
+    # Extract parts
+    quantity, unit = match.groups()
+
+    # Convert quantity to float
+    quantity = float(quantity)
+
+    # Convert to seconds based on the unit
+    if unit == "ms":  # milliseconds
+        time_s = quantity / 1000
+    elif unit == "s":  # seconds
+        time_s = quantity
+    elif unit == "us":  # microseconds
+        time_s = quantity / 1_000_000
+    elif unit == "ns":  # nanoseconds
+        time_s = quantity / 1_000_000_000
+    else:
+        raise ValueError(f"Unrecognized unit: {unit}")
+
+    # Return the reciprocal of time as frequency
+    return 1 / time_s
+
+

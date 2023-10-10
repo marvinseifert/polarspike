@@ -43,6 +43,7 @@ class Recording:
     nr_cells: int = field(init=False)
 
     def __post_init__(self):
+
         self.nr_stimuli = len(self.dataframes["stimulus_df"])
         self.nr_cells = np.unique(self.dataframes["spikes_df"]["cell_index"]).shape[0]
 
@@ -278,6 +279,15 @@ class Recording:
             dfs.append(df)
             out.append(pd.concat(dfs))
         return out
+
+
+class Recording_Overview(Recording):
+    def __init__(self, stimulus_path, recording_path, name, sampling_freq):
+        dataframes = {"spikes_df": pd.DataFrame(), "stimulus_df": pd.DataFrame()}
+        self.stimulus_path = stimulus_path
+        super().__init__(recording_path, name, dataframes, sampling_freq)
+
+
 
 
 class Dataframe:
