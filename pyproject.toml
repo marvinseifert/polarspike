@@ -1,0 +1,31 @@
+[tool.poetry]
+name = "polarspike"
+version = "0.1.0"
+description = ""
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+datashader = "^0.15.2"
+h5py = "^3.9.0"
+jupyterlab = "^4.0.6"
+notebook = "^7.0.4"
+polars = "^0.19.3"
+plotly = "^5.17.0"
+ipywidgets = "^8.1.1"
+panel = "^1.2.3"
+sympy = "^1.12"
+matplotlib = "^3.8.0"
+pyarrow = "^13.0.0"
+holoviews = "^1.17.1"
+ipympl = "^0.9.3"
+spyking-circus = "^1.1.0"
+zstandard = "^0.21.0"
+tslearn = "^0.6.2"
+seaborn = "^0.13.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
