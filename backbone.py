@@ -42,28 +42,29 @@ class SelectFilesButton(widgets.Button):
     File selection Button
     This class creates a file selection Button which on click opens a Windows explorer window
     for file selection
-
     """
 
     out = widgets.Output()
 
-    def __init__(self, text):
+    def __init__(self, text, button_width='200px'):
         """
         Initialize the object
 
         Parameters
         ----------
         text: str: The text that should appear on the button
-
+        button_width: str: The width of the button (CSS width value as string, e.g., '150px')
         """
 
-        super(SelectFilesButton, self).__init__()
+        super().__init__()
         # Add the selected_files trait
         self.add_traits(files=traitlets.traitlets.List())
         # Create the button.
         self.description = "Select " + text
         self.icon = "square-o"
-        self.style.button_color = "orange"
+        self.style.button_color = "red"
+        # Set button width
+        self.layout = widgets.Layout(width=button_width)
         # Set on click behavior.
         self.on_click(self.select_files)
 
@@ -85,7 +86,7 @@ class SelectFilesButton(widgets.Button):
                 root.withdraw()
                 # Raise the root to the top of all windows.
                 root.call("wm", "attributes", ".", "-topmost", True)
-                # List of selected fileswill be set to b.value
+                # List of selected files will be set to b.value
                 b.files = filedialog.askopenfilename(multiple=True)
 
                 b.description = "File Selected"
@@ -93,6 +94,8 @@ class SelectFilesButton(widgets.Button):
                 b.style.button_color = "lightgreen"
             except:
                 pass
+
+
 
 
 def bisection(array, value):

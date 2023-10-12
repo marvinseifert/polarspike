@@ -28,7 +28,7 @@ class Stimulus_Extractor:
 
     """
 
-    def __init__(self, stimulus_file, freq=1, stream=1):
+    def __init__(self, stimulus_file, freq=1, stream=0):
         """
         Initialize function. Opens the stimulus file and extracts the important
         data for further analysis. It also initializes object attributes which
@@ -86,6 +86,7 @@ class Stimulus_Extractor:
                 self.channel.Time_s = pd.to_timedelta(self.channel.Time_s, unit="s")
                 self.channel.set_index("Time_s", inplace=True)
 
+
         self.switch = 0
         self.begins = []
         self.ends = []
@@ -108,21 +109,7 @@ class Stimulus_Extractor:
                         'stimulus_index': 'int32', 'stimulus_repeat_logic': 'int32',
                         'stimulus_repeat_sublogic': 'int32', 'sampling_freq': 'float'})
 
-    def plot_trigger_channel_new(self, dsf):
-        """
-        Plots trigger channel using plotly interactive plot and plotly widget.
-        This allows for interactive stimulus selection.
-
-        Parameters
-        ----------
-        dsf: str: example("200ms"). Downsample factor for downsampling the trigger
-        channel.
-
-        Returns
-        -------
-        self.f: The figure object of the plotly plot.
-
-        """
+    def downsample(self, dsf):
         dsf = int(self.sampling_frequency / convert_time_string_to_frequency(dsf))
         channel = self.channel
         channel = pl.from_pandas(channel)
@@ -131,113 +118,10 @@ class Stimulus_Extractor:
         grouped_df = df.group_by(['Group_Key'], maintain_order=True).agg(pl.col('Voltage').max().alias('Voltage'))
         grouped_df = grouped_df.with_columns((pl.col("Group_Key").mul(dsf)).alias('Frame'))
         channel = grouped_df.to_pandas()
-        channel["log"] = channel.Voltage > self.half_Voltage
+        print(len(channel))
+        return channel
 
-
-        convert_time_string_to_frequency
-        self.f = go.FigureWidget(
-            [
-                go.Scattergl(
-                    x=channel.Frame,
-                    y=channel.log,
-                    mode="lines+markers",
-                    name="Trigger signal",
-                )
-            ]
-        )
-        self.f.update_traces(marker=dict(size=2, line=dict(width=0)))
-
-        self.scatter = self.f.data[0]
-        colors = ["#1f77b4"] * len(channel)
-        self.scatter.marker.color = colors
-        self.scatter.marker.size = [2] * len(channel)
-        self.f.layout.hovermode = "closest"
-        self.f.update_xaxes(title_text="Frames")
-        self.f.update_yaxes(title_text="Trigger")
-        self.scatter.on_click(self.update_point)
-        self.f.layout.on_change(self.handle_zoom, "mapbox_zoom")
-        return self.f
-
-    def handle_zoom(layout, mapbox_zoom):
-        print("new mapbox_zoom:", mapbox_zoom)
-
-    # create our callback function
-    def update_point(self, trace, points, selector):
-        """
-        Function to highlight selected points in the trigger channel plot
-
-        Parameters
-        ----------
-        Not sure, copied from plotly interactive
-        TODO: Look what are the input arguments here
-
-        """
-
-        c = list(self.scatter.marker.color)
-        s = list(self.scatter.marker.size)
-
-        for i in points.point_inds:
-            if s[i] == 10:
-                if self.switch == 0:
-                    c[i] = "#1f77b4"
-                    s[i] = 2
-                    del self.ends[-1]
-                    self.switch = 1
-
-                else:
-                    c[i] = "#1f77b4"
-                    s[i] = 2
-                    del self.begins[-1]
-                    self.switch = 0
-
-            elif self.switch == 0:
-                c[i] = "#DFFF00"
-                s[i] = 10
-                self.begins.append(points.xs[0])
-                self.switch = 1
-            else:
-                c[i] = "#ff2d00"
-                s[i] = 10
-                self.ends.append(points.xs[0])
-                self.switch = 0
-
-            with self.f.batch_update():
-                self.scatter.marker.color = c
-                self.scatter.marker.size = s
-
-    def trigger_channel_for_selection(self, dsf):
-        """
-        Function that defines n number of stimuli and creates equal number of
-        subplots for the matplot plot, so the user can select one stimulus per
-        subplot. Deprecated.
-
-        """
-
-        if self.nr_stim_input.value == 0:
-            print("Set number of stimulus to 0, no stimuli can be selected")
-            return
-
-        channel = self.channel.resample(dsf).mean()
-        self.stim_select_fig, self.stim_select_axs = plt.subplots(
-            nrows=self.nr_stim_input.value,
-            ncols=1,
-            figsize=(9, self.nr_stim_input.value * 2),
-        )
-
-        if self.nr_stim_input.value > 1:
-            for i in range(self.nr_stim_input.value):
-                self.stim_select_axs[i].plot(channel.Frame, channel.Voltage)
-                self.stim_select_axs[i].spines["top"].set_visible(False)
-                self.stim_select_axs[i].spines["right"].set_visible(False)
-        else:
-            self.stim_select_axs.plot(channel.Frame, channel.Voltage)
-
-        plt.xlabel("Frames")
-        plt.ylabel("Voltage")
-        self.stim_select_fig.suptitle("Stimulus channel complete")
-
-
-    def get_stim_range_new(self):
+    def get_stim_range_new(self, begins, ends):
         """
         Function that calculates the stimulus range and find the trigger times
         based on which stimulus borders were selected by the user in the interactive
@@ -252,8 +136,10 @@ class Stimulus_Extractor:
         -------
         returns to self a dataframe containing the stimulus information
         """
-
-        print(self.nr_stim)
+        self.begins = begins
+        self.ends = ends
+        channel = self.channel.set_index("Frame")
+        print(self.begins, self.ends)
         for i in range(self.nr_stim, len(self.begins)):
 
             limits_temp = np.array(
@@ -265,7 +151,7 @@ class Stimulus_Extractor:
             if limits_temp[1] < 0:
                 limits_temp[1] = 0
             limits_int = limits_temp.astype(int)
-            channel_cut = self.channel[limits_int[0]: limits_int[1]]
+            channel_cut = channel[limits_int[0]: limits_int[1]]
             channel_log = channel_cut.Voltage > self.half_Voltage
             peaks = sg.find_peaks(channel_log, height=1, plateau_size=2)
 
@@ -280,8 +166,8 @@ class Stimulus_Extractor:
                 peaks_left[-1] + min_trigger_interval
             )  # Adds time after the last trigger, to get the whole stimulus
             # Failsafe: If last trigger was close to the end of the recording make last frame stimulus end
-            if len(self.channel) < stim_end:
-                stim_end = len(self.channel)
+            if len(channel) < stim_end:
+                stim_end = len(channel)
 
             peaks_left = np.append(peaks_left, peaks_left[-1] + min_trigger_interval)
             trigger_interval = np.diff(peaks_left)
@@ -300,15 +186,9 @@ class Stimulus_Extractor:
             df_temp["stimulus_repeat_sublogic"] = [0]
             df_temp["sampling_freq"] = self.sampling_frequency
 
+            self.stimuli = df_temp
 
-
-            self.stimuli = pd.concat([self.stimuli, df_temp], ignore_index=True)
-
-            self.f.add_trace(
-                go.Scattergl(x=peaks_left, y=plot_ones, name="Stimulus " + str(i))
-            )
             # Update the figure from stimulus selection with trigger points
-
         self.nr_stim = len(self.ends)
 
     def get_stim_start_end(self, limits):

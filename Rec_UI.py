@@ -6,38 +6,48 @@ import holoviews as hv
 import panel as pn
 import stimulus_trace
 import plotly.graph_objects as go
-import numpy as np
-import panel as pn
 import param
 from bokeh.plotting import figure
 from bokeh.models import ColumnDataSource
 import time
+from backbone import SelectFilesButton
+
 
 
 class Explorer:
-    def __init__(self, x, y):
-        self.stimulus_input = pn.widgets.FileInput(sizing_mode='stretch_width', accept=".brw, .h5")
-        self.recording_input = pn.widgets.FileInput(sizing_mode='stretch_width', accept=".brw, .dat")
-
+    def __init__(self):
+        self.stimulus_input = SelectFilesButton('Stimulus File')
+        self.recording_input = SelectFilesButton('Recording File')
+        self.stimulus_input.observe(self._on_stimulus_selected, names='files')
+        self.recording_input.observe(self._on_recording_selected, names='files')
+        self.stimulus = None
         self.text = """ ## Single Recording Overview.
-        This UI allows you to explore a single MEA recording fast and interactively.
+        This UI allows you to explore
+        a single MEA recording fast
+        and interactively.
 
         """
         self.load_button = pn.widgets.Button(name="Load Recording", button_type="primary", width=150)
         self.load_button.on_click(self.load_recording)
 
+        self.define_stimuli_button = pn.widgets.Button(name="Define Stimuli", button_type="primary", width=150)
+        self.define_stimuli_button.on_click(self.define_stimuli)
+
+
         # Creating an instance of PlotApp
-        self.plot_app = PlotApp(x, y)
+        self.plot_app = PlotApp()
 
         # Replacing the Plotly figure with the Bokeh plot from PlotApp
-        self.stim_figure = self.stim_figure = pn.panel(self.plot_app.plot)
-
+        self.stim_figure = self.stim_figure = pn.panel(self.plot_app.plot, width=1000, height=500)
+        self.frequency_input = pn.widgets.FloatInput(name='Recording Frequency', value=1, step=1e-1, start=0., end=50000.)
+        self.stimulus_df = pn.panel(None, width=1000, height=100)
         self.sidebar = pn.layout.WidgetBox(
             pn.pane.Markdown(self.text, margin=(0, 10)),
             "Stimulus File",
             self.stimulus_input,
             "Recording File",
             self.recording_input,
+            self.frequency_input,
             self.load_button,
             max_width=300,
             sizing_mode='stretch_width'
@@ -47,47 +57,99 @@ class Explorer:
             ('Stimulus', pn.Column(
                 pn.Row(
                     self.stim_figure,
-                    sizing_mode='stretch_both'
-                ))))
+                    self.define_stimuli_button,
+                    height=600
+                ),
+                pn.Row(self.stimulus_df, height=200)
+            )),
+            ("Spikes", pn.Column()),
+            ("Stimuli", pn.Column()),
+            height=600
+        )
 
     def run(self):
         app = pn.Row(
             pn.Column(self.sidebar, sizing_mode='fixed', width=300),
             pn.Spacer(width=20),  # Adjust width for desired spacing
             pn.Column(self.main, sizing_mode='stretch_width'),
-            sizing_mode='stretch_both'
+            width=1000, height=800
         )
-        return app.servable(title="Single Recording Overview")
+        return app
 
     def load_recording(self, event):
+        self.stimulus = stimulus_trace.Stimulus_Extractor(self.stimulus_file, self.frequency_input.value, 0)
+        channel = self.stimulus.downsample("500ms")
 
-        return
+        # Debugging: Print or log the loaded data to ensure it's what you expect
+        #print(channel)
+
+        self.plot_app.update_plot(channel["Frame"].to_numpy(), channel["Voltage"].to_numpy())
+
+        #print("Before update: ", self.stim_figure.object)  # Debug
+        self.stim_figure.object = self.plot_app.plot
+        #print("After update: ", self.stim_figure.object)  # Debug
+
+    def _on_stimulus_selected(self, change):
+        self.stimulus_file = change['new'][0] if change['new'] else ''
+        #print(f"File selected: {self.stimulus_file}")
+    def _on_recording_selected(self, change):
+        self.recording_file = change['new'][0] if change['new'] else ''
+        #print(f"File selected: {self.recording_file}")
+
+    def define_stimuli(self, event):
+        begins, ends = self.plot_app.get_frames()
+        stim_df = self.stimulus.get_stim_range_new(begins, ends)
+        self.stimulus_df.object = pn.widgets.Tabulator(stim_df, name='Stimuli', theme="simple", widths=150)
 
 
 class PlotApp(param.Parameterized):
+    plot = param.Parameter(precedence=-1)
     switch = param.Boolean(default=False, precedence=-1)
 
     def __init__(self, x=None, y=None):
         super().__init__()
         if x is None:
-            x = np.arange(100)
+            self.x = np.array([0])
         if y is None:
-            y = np.zeros(100)
-        self.begins = np.zeros(x.shape[0], dtype=bool)
-        self.ends = np.zeros(x.shape[0], dtype=bool)
-        self.source = ColumnDataSource(data=dict(x=x, y=y, color=['blue'] * x.shape[0], size=[5] * x.shape[0]))
-        self.plot = figure(tools='tap,pan,wheel_zoom,box_zoom,reset', width=1000, height=400, title='Click on a point...',
-                           output_backend="webgl")
-        self.plot.line('x', 'y', source=self.source, line_width=2, line_color='blue')
-        self.scatter_renderer = self.plot.circle('x', 'y', color='color', size='size', source=self.source,
-                                                 # Ensure non-selected points remain visible
-                                                 nonselection_alpha=1.0)
+            y = np.array([0])
 
-        self.plot_pane = pn.pane.Bokeh(self.plot)
-        self.source.selected.on_change('indices', self.callback)
-        self.app_layout = pn.Column(self.plot_pane)
+        # Initial state setup
+        self.begins = np.zeros(self.x.shape[0], dtype=bool)
+        self.ends = np.zeros(self.x.shape[0], dtype=bool)
         self.switch = True
         self.last_callback_time = time.time()
+
+        # Create initial data source
+        self.source = ColumnDataSource(data=dict(x=self.x, y=y, color=['blue'] * self.x.shape[0],
+                                                 size=[5] * self.x.shape[0]))
+        self.plot = figure(tools='tap,pan,wheel_zoom,box_zoom,reset', width=1200, height=500,
+                           title='Stimulus selection', output_backend="webgl")
+
+        # Add glyphs to the plot
+        self.plot.line('x', 'y', source=self.source, line_width=2, line_color='blue')
+        self.scatter_renderer = self.plot.circle('x', 'y', color='color', size='size', source=self.source,
+                                                 nonselection_alpha=1.0)
+
+    def update_plot(self, x, y):
+        """
+        Update the plot with new data.
+
+        Parameters
+        ----------
+        x : array-like
+            New x-data.
+        y : array-like
+            New y-data.
+        """
+        self.x = x
+        self.begins = np.zeros(self.x.shape[0], dtype=bool)
+        self.ends = np.zeros(self.x.shape[0], dtype=bool)
+        # Update data source
+        self.source.data = dict(x=self.x, y=y, color=['blue'] * self.x.shape[0], size=[5] * self.x.shape[0])
+        #print(x)
+        # Setup callback for selection changes
+        self.source.selected.on_change('indices', self.callback)
+        # Create a new figure object
 
     def callback(self, attr, old, new):
         current_time = time.time()
@@ -130,3 +192,6 @@ class PlotApp(param.Parameterized):
             self.source.data['color'] = colors
             self.source.data['size'] = sizes  # Added this line to update sizes in source
             self.source.selected.indices = []
+
+    def get_frames(self):
+        return self.x[self.begins], self.x[self.ends]
