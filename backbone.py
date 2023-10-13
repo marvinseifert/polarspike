@@ -46,7 +46,7 @@ class SelectFilesButton(widgets.Button):
 
     out = widgets.Output()
 
-    def __init__(self, text, button_width='200px'):
+    def __init__(self, text, button_width="200px"):
         """
         Initialize the object
 
@@ -67,9 +67,9 @@ class SelectFilesButton(widgets.Button):
         self.layout = widgets.Layout(width=button_width)
         # Set on click behavior.
         self.on_click(self.select_files)
+        self.loaded = False
 
-    @staticmethod
-    def select_files(b):
+    def select_files(self, b):
         """Generate instance of tkinter.filedialog.
 
         Parameters
@@ -92,10 +92,10 @@ class SelectFilesButton(widgets.Button):
                 b.description = "File Selected"
                 b.icon = "check-square-o"
                 b.style.button_color = "lightgreen"
-            except:
+                self.loaded = True
+            except FileNotFoundError:
+                self.loaded = False
                 pass
-
-
 
 
 def bisection(array, value):
@@ -217,7 +217,6 @@ def nr_rowcol_subplt(nr_plots):
         return out, nr_plots
 
     while len(p) > 2:
-
         if len(p) >= 4:
             p[0] = p[0] * p[-2]
             p[1] = p[1] * p[-1]

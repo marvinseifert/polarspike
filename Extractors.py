@@ -12,6 +12,7 @@ import pandas as pd
 
 # Super class for all extractors
 
+
 class Extractor:
     """
     Spike class
@@ -22,9 +23,10 @@ class Extractor:
     """
 
     spikes = {}
+    trigger = np.array([])
+    stimulus_names = []
 
     def __init__(self, file, stimulus_df=None):
-
         """
         Initialize function. Opens the .hdf5 file that contains results of the
         Herdingspikes2 spikesorting algorithm and assignes them to the object.
@@ -38,29 +40,34 @@ class Extractor:
 
         """
         if stimulus_df is not None:
-            self.trigger = stimulus_df[["begin_fr", "end_fr"]].to_numpy()
-            self.stimulus_names = stimulus_df["stimulus_name"].to_list()
-            self.spikes["sampling"] = stimulus_df.loc[0, "sampling_freq"].item()
+            self.add_stimulus_df(stimulus_df)
         self.file = Path(file)
 
-
+    def add_stimulus_df(self, stimulus_df):
+        self.trigger = stimulus_df[["begin_fr", "end_fr"]].to_numpy()
+        self.stimulus_names = stimulus_df["stimulus_name"].to_list()
+        self.spikes["sampling"] = stimulus_df.loc[0, "sampling_freq"].item()
 
     def to_arrow(self, batch_size=100000):
         nr_batches = int(np.ceil(self.spikes["times"].shape[0] / batch_size))
         print(f"nr of batches: {nr_batches}")
-        schema = pa.schema([pa.field('cell_index', pa.int64()), pa.field('times', pa.int64())])
+        schema = pa.schema(
+            [pa.field("cell_index", pa.int64()), pa.field("times", pa.int64())]
+        )
         for i in range(self.spikes["shapes"].shape[0]):
-            schema = schema.append(pa.field('w' + str(i), pa.float32()))
+            schema = schema.append(pa.field("w" + str(i), pa.float32()))
 
-        with pa.OSFile(str(self.file.with_suffix('.arrow')), 'wb') as sink:
+        with pa.OSFile(str(self.file.with_suffix(".arrow")), "wb") as sink:
             with pa.ipc.new_file(sink, schema) as writer:
                 for row in range(nr_batches):
                     start = row * batch_size
                     end = (row + 1) * batch_size
                     if end > self.spikes["times"].shape[0]:
                         end = self.spikes["times"].shape[0]
-                    data_list = [pa.array(self.spikes["cluster_id"][start:end]),
-                                                        pa.array(self.spikes["times"][start:end])]
+                    data_list = [
+                        pa.array(self.spikes["cluster_id"][start:end]),
+                        pa.array(self.spikes["times"][start:end]),
+                    ]
                     for i in range(self.spikes["shapes"].shape[0]):
                         data_list.append(pa.array(self.spikes["shapes"][i, start:end]))
 
@@ -80,13 +87,13 @@ class Extractor:
 
         """
         self.to_arrow()
-        with pa.memory_map(str(self.file.with_suffix('.arrow')), 'rb') as source:
+        with pa.memory_map(str(self.file.with_suffix(".arrow")), "rb") as source:
             loaded_array = pa.ipc.open_file(source).read_all()
         df = pl.from_arrow(loaded_array)
-        df.lazy().sink_parquet(str(self.file.with_suffix('.parquet')))
+        df.lazy().sink_parquet(str(self.file.with_suffix(".parquet")))
 
     def load(self, stimulus=True):
-        df = pl.scan_parquet(str(self.file.with_suffix('.parquet')))
+        df = pl.scan_parquet(str(self.file.with_suffix(".parquet")))
         df = df.select(pl.col("cell_index", "times"))
         if stimulus:
             return self.construct_df(df)
@@ -96,16 +103,32 @@ class Extractor:
     def construct_df(self, df, pandas=True):
         dfs = []
         for stimulus in range(self.trigger.shape[0]):
-            times = df.filter((pl.col("times") > self.trigger[stimulus, 0]) & (pl.col("times") <= self.trigger[stimulus, 1]))
-            times = times.with_columns(stimulus_name=pl.lit(self.stimulus_names[stimulus]))
+            times = df.filter(
+                (pl.col("times") > self.trigger[stimulus, 0])
+                & (pl.col("times") <= self.trigger[stimulus, 1])
+            )
+            times = times.with_columns(
+                stimulus_name=pl.lit(self.stimulus_names[stimulus])
+            )
             times = times.with_columns(stimulus_index=pl.lit(stimulus))
-            #print(times.dtypes, times)
-            dfs.append(times.group_by(pl.col("cell_index", "stimulus_name", "stimulus_index")).count().collect())
+            # print(times.dtypes, times)
+            dfs.append(
+                times.group_by(pl.col("cell_index", "stimulus_name", "stimulus_index"))
+                .count()
+                .collect()
+            )
         # Add the centres
-        centres_id = np.hstack([np.arange(0, self.spikes["nr_cells"]).reshape(-1, 1), self.spikes["centres"]])
+        centres_id = np.hstack(
+            [
+                np.arange(0, self.spikes["nr_cells"]).reshape(-1, 1),
+                self.spikes["centres"],
+            ]
+        )
 
-        df_centre = pl.from_numpy(data=centres_id,
-                                  schema=[("cell_index", int), ('centres_x', float), ('centres_y', float)])
+        df_centre = pl.from_numpy(
+            data=centres_id,
+            schema=[("cell_index", int), ("centres_x", float), ("centres_y", float)],
+        )
 
         df = pl.concat(dfs)
         df = df.sort("cell_index", descending=False)
@@ -118,7 +141,6 @@ class Extractor:
 
 
 class Extractor_HS2(Extractor):
-
     def __init__(self, file, stimulus_df=None):
         super().__init__(file, stimulus_df)
 
@@ -137,6 +159,10 @@ class Extractor_HS2(Extractor):
             )
             self.spikes["max_spikes"] = np.max(self.spikes["spike_freq"][1, :])
             self.spikes["shapes"] = np.array(f["/shapes"], dtype=float)
+
+    def get_spikes(self):
+        self.to_parquet()
+        return
 
 
 class Extractor_SPC(Extractor):
@@ -169,8 +195,10 @@ class Extractor_SPC(Extractor):
 
         self.get_locations(params)
 
-        df = pl.from_numpy(np.vstack([cell_idx, array_combined]).T, schema=["cell_index", "times"])
-        df.write_parquet(str(self.file.with_suffix('.parquet')))
+        df = pl.from_numpy(
+            np.vstack([cell_idx, array_combined]).T, schema=["cell_index", "times"]
+        )
+        df.write_parquet(str(self.file.with_suffix(".parquet")))
 
     def get_locations(self, params):
         probe = probes.read_probe(params)
@@ -180,4 +208,3 @@ class Extractor_SPC(Extractor):
         for idx, electrode in enumerate(electrodes):
             electrodes_store[idx, :] = probe["channel_groups"][1]["geometry"][electrode]
         self.spikes["centres"] = electrodes_store
-

@@ -19,6 +19,7 @@ import pickle
 import polars as pl
 import re
 
+
 class Stimulus_Extractor:
     """
     Stimulus trace class
@@ -54,7 +55,7 @@ class Stimulus_Extractor:
                 self.max_Voltage = self.channel.Voltage.max(axis=0)
                 self.min_Voltage = self.channel.Voltage.min(axis=0)
                 self.half_Voltage = (
-                        self.min_Voltage + (self.max_Voltage - self.min_Voltage) / 2
+                    self.min_Voltage + (self.max_Voltage - self.min_Voltage) / 2
                 )
                 self.Frames = range(0, len(self.channel.index), 1)
                 self.sampling_frequency = np.array(
@@ -68,14 +69,28 @@ class Stimulus_Extractor:
 
         if format == ".h5":
             with h5py.File(stimulus_file, "r") as f:
-                self.channel = pd.DataFrame(
-                    np.array(f["Data//Recording_0//AnalogStream//Stream_2//ChannelData"][:][stream]),
-                    columns=["Voltage"]
-                )
+                try:
+                    self.channel = pd.DataFrame(
+                        np.array(
+                            f["Data//Recording_0//AnalogStream//Stream_2//ChannelData"][
+                                :
+                            ][stream]
+                        ),
+                        columns=["Voltage"],
+                    )
+                except KeyError:
+                    self.channel = pd.DataFrame(
+                        np.asarray(
+                            f["Data//Recording_0//AnalogStream//Stream_0//ChannelData"][
+                                0, :
+                            ]
+                        ),
+                        columns=["Voltage"],
+                    )
                 self.max_Voltage = self.channel.Voltage.max(axis=0)
                 self.min_Voltage = self.channel.Voltage.min(axis=0)
                 self.half_Voltage = (
-                        self.min_Voltage + (self.max_Voltage - self.min_Voltage) / 2
+                    self.min_Voltage + (self.max_Voltage - self.min_Voltage) / 2
                 )
 
                 self.Frames = range(0, len(self.channel.index), 1)
@@ -86,37 +101,23 @@ class Stimulus_Extractor:
                 self.channel.Time_s = pd.to_timedelta(self.channel.Time_s, unit="s")
                 self.channel.set_index("Time_s", inplace=True)
 
-
         self.switch = 0
         self.begins = []
         self.ends = []
-        self.nr_stim = 0
-        self.stimuli = pd.DataFrame(
-            columns=[
-                "stimulus_name",
-                "begin_fr",
-                "end_fr",
-                "trigger_fr_relative",
-                "trigger_int",
-                "stimulus_index",
-                "stimulus_repeat_logic",
-                "stimulus_repeat_sublogic",
-                "sampling_freq"
-            ]
-        )
-        self.stimuli = self.stimuli.astype({'stimulus_name': 'str', 'begin_fr': 'int32', 'end_fr': 'int32',
-                        'trigger_fr_relative': 'object', 'trigger_int': 'object',
-                        'stimulus_index': 'int32', 'stimulus_repeat_logic': 'int32',
-                        'stimulus_repeat_sublogic': 'int32', 'sampling_freq': 'float'})
+        self.stimuli = pd.DataFrame()
 
     def downsample(self, dsf):
         dsf = int(self.sampling_frequency / convert_time_string_to_frequency(dsf))
         channel = self.channel
         channel = pl.from_pandas(channel)
         channel = channel.sort("Frame")
-        df = channel.with_columns((channel['Frame'] // dsf).alias('Group_Key'))
-        grouped_df = df.group_by(['Group_Key'], maintain_order=True).agg(pl.col('Voltage').max().alias('Voltage'))
-        grouped_df = grouped_df.with_columns((pl.col("Group_Key").mul(dsf)).alias('Frame'))
+        df = channel.with_columns((channel["Frame"] // dsf).alias("Group_Key"))
+        grouped_df = df.group_by(["Group_Key"], maintain_order=True).agg(
+            pl.col("Voltage").max().alias("Voltage")
+        )
+        grouped_df = grouped_df.with_columns(
+            (pl.col("Group_Key").mul(dsf)).alias("Frame")
+        )
         channel = grouped_df.to_pandas()
         print(len(channel))
         return channel
@@ -136,14 +137,17 @@ class Stimulus_Extractor:
         -------
         returns to self a dataframe containing the stimulus information
         """
+        self.stimuli = create_stim_df()
         self.begins = begins
         self.ends = ends
         channel = self.channel.set_index("Frame")
-        print(self.begins, self.ends)
-        for i in range(self.nr_stim, len(self.begins)):
-
+        for i in range(len(self.begins)):
             limits_temp = np.array(
-                [self.begins[i] - self.sampling_frequency, self.ends[i] + self.sampling_frequency], dtype=int
+                [
+                    self.begins[i] - self.sampling_frequency,
+                    self.ends[i] + self.sampling_frequency,
+                ],
+                dtype=int,
             )
 
             if limits_temp[0] < 0:
@@ -151,7 +155,7 @@ class Stimulus_Extractor:
             if limits_temp[1] < 0:
                 limits_temp[1] = 0
             limits_int = limits_temp.astype(int)
-            channel_cut = channel[limits_int[0]: limits_int[1]]
+            channel_cut = channel[limits_int[0] : limits_int[1]]
             channel_log = channel_cut.Voltage > self.half_Voltage
             peaks = sg.find_peaks(channel_log, height=1, plateau_size=2)
 
@@ -171,11 +175,8 @@ class Stimulus_Extractor:
 
             peaks_left = np.append(peaks_left, peaks_left[-1] + min_trigger_interval)
             trigger_interval = np.diff(peaks_left)
-            nr_trigger = len(peaks_left)
-            plot_ones = np.ones(nr_trigger, dtype=bool)
 
             df_temp = pd.DataFrame()
-
             df_temp["stimulus_name"] = ""
             df_temp["begin_fr"] = [stim_begin]
             df_temp["end_fr"] = [stim_end]
@@ -186,10 +187,9 @@ class Stimulus_Extractor:
             df_temp["stimulus_repeat_sublogic"] = [0]
             df_temp["sampling_freq"] = self.sampling_frequency
 
-            self.stimuli = df_temp
+            self.stimuli = pd.concat([self.stimuli, df_temp], ignore_index=True)
 
-            # Update the figure from stimulus selection with trigger points
-        self.nr_stim = len(self.ends)
+        return self.stimuli
 
     def get_stim_start_end(self, limits):
         """
@@ -205,7 +205,7 @@ class Stimulus_Extractor:
         channel: The cut out trigger channel for one stimulus
         """
         for i in range(0, self.nr_stim_input.value):
-            channel = self.channel.Voltage[limits[i, 0]: limits[i, 1]]
+            channel = self.channel.Voltage[limits[i, 0] : limits[i, 1]]
             return channel
 
     def get_changed_names(self):
@@ -253,17 +253,26 @@ class Stimulus_Extractor:
         if show_plot:
             self.f.show()
 
+
 def find_ends(df):
     trigger_ends = []
     for i in range(len(df)):
         if df.loc[i, "stimulus_repeat_logic"] == 0:
-            trigger_ends.append(df.loc[i, "trigger_fr_relative"][:-1] + df.loc[i, "trigger_int"])
+            trigger_ends.append(
+                df.loc[i, "trigger_fr_relative"][:-1] + df.loc[i, "trigger_int"]
+            )
             continue
-        shape = (df.loc[i, "stimulus_repeat_logic"] , int(df.loc[i, "trigger_int"].shape[0] /
-                                                                      df.loc[i, "stimulus_repeat_logic"]))
-        ints = df.loc[i, "trigger_int"][:np.multiply(shape[0], shape[1])].reshape(shape)
+        shape = (
+            df.loc[i, "stimulus_repeat_logic"],
+            int(df.loc[i, "trigger_int"].shape[0] / df.loc[i, "stimulus_repeat_logic"]),
+        )
+        ints = df.loc[i, "trigger_int"][: np.multiply(shape[0], shape[1])].reshape(
+            shape
+        )
         min_int = np.min(ints, axis=1)
-        triggers_sorted = df.loc[i, "trigger_fr_relative"][:np.multiply(shape[0], shape[1])].reshape(shape)
+        triggers_sorted = df.loc[i, "trigger_fr_relative"][
+            : np.multiply(shape[0], shape[1])
+        ].reshape(shape)
         trigger_ends.append((triggers_sorted + min_int.reshape(-1, 1)).flatten())
     df["trigger_ends"] = trigger_ends
     return df
@@ -306,3 +315,31 @@ def convert_time_string_to_frequency(time_str):
     return 1 / time_s
 
 
+def create_stim_df():
+    stimuli_df = pd.DataFrame(
+        columns=[
+            "stimulus_name",
+            "begin_fr",
+            "end_fr",
+            "trigger_fr_relative",
+            "trigger_int",
+            "stimulus_index",
+            "stimulus_repeat_logic",
+            "stimulus_repeat_sublogic",
+            "sampling_freq",
+        ]
+    )
+    stimuli_df = stimuli_df.astype(
+        {
+            "stimulus_name": "str",
+            "begin_fr": "int32",
+            "end_fr": "int32",
+            "trigger_fr_relative": "object",
+            "trigger_int": "object",
+            "stimulus_index": "int32",
+            "stimulus_repeat_logic": "int32",
+            "stimulus_repeat_sublogic": "int32",
+            "sampling_freq": "float",
+        }
+    )
+    return stimuli_df
