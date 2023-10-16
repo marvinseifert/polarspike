@@ -16,7 +16,8 @@ import Extractors
 import recording_overview
 import ipywidgets as widgets
 import single_cell_plots
-import plotly.express as px
+from pathlib import Path
+
 
 plt.style.use("dark_background")
 
@@ -36,12 +37,16 @@ class Explorer:
         """
         self.overview_df = None
         self.load_button = pn.widgets.Button(
-            name="Load Recording", button_type="primary", width=150
+            name="Load Recording", button_type="primary", width=200
         )
+        self.save_button = pn.widgets.Button(
+            name="Save to Overview", button_type="primary", width=200
+        )
+        self.save_button.on_click(self.save_to_overview)
         self.load_button.on_click(self.load_data)
 
         self.recording_name = pn.widgets.TextInput(
-            name="Recording Name", placeholder="Recording Name"
+            name="Recording Name", placeholder="Recording Name", width=200
         )
 
         self.define_stimuli_button = pn.widgets.Button(
@@ -58,12 +63,11 @@ class Explorer:
 
         self.recording = None
 
-        # Replacing the Plotly figure with the Bokeh plot from PlotApp
         self.stim_figure = self.stim_figure = pn.panel(
-            self.plot_app.plot, width=1000, height=500
+            self.plot_app.plot, width=1000, height=500,
         )
         self.frequency_input = pn.widgets.FloatInput(
-            name="Recording Frequency", value=1, step=1e-1, start=0.0, end=50000.0
+            name="Recording Frequency", value=1, step=1e-1, start=0.0, end=50000.0, width=200
         )
 
         self.spikes_fig = widgets.Output()
@@ -83,6 +87,8 @@ class Explorer:
         )
         self.stimulus_select = pn.widgets.Select(name="Select Stimulus", options=[])
         self.stimulus_select.param.watch(self.update_stimulus_tabulator, "value")
+
+        self.status = pn.indicators.Progress(name='Indeterminate Progress', active=False, width=200)
 
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=[0, 1], y=[0, 1]))
@@ -108,7 +114,10 @@ class Explorer:
             self.recording_name,
             self.frequency_input,
             self.load_button,
+            self.save_button,
+            self.status,
             max_width=300,
+            max_height=1000,
             sizing_mode="stretch_width",
         ).servable(area="sidebar")
 
@@ -120,11 +129,11 @@ class Explorer:
                         pn.Column(
                             pn.Row(
                                 self.stim_figure,
-                                height=600,
+                                height=600, width=1000,
                             ),
-                            pn.Row(self.stimulus_df, height=200),
+                            pn.Row(self.stimulus_df, height=200, width=1000),
                         )
-                    ),
+                    , height=800, width=1000),
                     pn.Column(
                         self.define_stimuli_button,
                         self.stimulus_spikes_button,
@@ -170,16 +179,22 @@ class Explorer:
             pn.Column(self.main, sizing_mode="stretch_width"),
             width=1000,
             height=1000,
+
         )
         return app
 
     def load_data(self, event):
         if self.stimulus_input.loaded:
+            self.status.active = True
             self.load_stimulus()
             self.stimulus_input.loaded = False
+            self.status.active = False
         if self.recording_input.loaded:
+            self.status.active = True
             self.load_recording()
             self.recording_input.loaded = False
+            self.status.active = False
+
 
     def _on_stimulus_selected(self, change):
         self.stimulus_file = change["new"][0] if change["new"] else ""
@@ -206,6 +221,7 @@ class Explorer:
             "spikes_df": self.recording.load(),
             "stimulus_df": self.stimulus_df.value,
         }
+        dataframes["spikes_df"]["filter"] = True
         self.overview_df = Overview.Recording(
             str(self.recording.file.with_suffix(".parquet")),
             self.recording_name.value,
@@ -240,7 +256,9 @@ class Explorer:
         elif file_format == ".hdf5":
             self.recording = Extractors.Extractor_HS2(self.recording_file)
             self.frequency_input.value = float(self.recording.spikes["sampling"])
-        self.recording.get_spikes()
+
+        if not self.recording.file.with_suffix(".parquet").exists():
+            self.recording.get_spikes()
         self.plot_spike_counts()
         self.plot_isi("times", self.isi_fig)
         self.plot_isi("cell_index", self.isi_clus_fig)
@@ -284,14 +302,27 @@ class Explorer:
         )
 
     def update_raster(self, event):
-        indices = event.row
-        cell_indices = [self.single_stimulus_df.value.loc[indices]["cell_index"]]
+        try:
+            indices = event.row
+            cell_indices = [self.single_stimulus_df.value.loc[indices]["cell_index"]]
 
-        plot_df = self.overview_df.get_spikes_triggered(
-            cell_indices, [self.stimulus_select.value], time="seconds"
-        )
-        raster_plot = single_cell_plots.whole_stimulus_plotly(plot_df)
-        self.single_cell_raster.object = raster_plot
+            plot_df = self.overview_df.get_spikes_triggered(
+                cell_indices, [self.stimulus_select.value], time="seconds"
+            )
+            raster_plot = single_cell_plots.whole_stimulus_plotly(plot_df)
+            self.single_cell_raster.object = raster_plot
+
+        except KeyError:
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=[0, 1], y=[0, 1]))
+            fig.update_layout(width=1200, height=500)
+            self.single_cell_raster.object = fig
+
+    def save_to_overview(self, event):
+        if self.overview_df is not None:
+            self.overview_df.save(Path(self.stimulus_file).parent / "overview")
+        else:
+            print("No overview to save")
 
 
 class PlotApp(param.Parameterized):
@@ -299,6 +330,7 @@ class PlotApp(param.Parameterized):
     switch = param.Boolean(default=False, precedence=-1)
 
     def __init__(self, x=None, y=None):
+
         super().__init__()
         if x is None:
             self.x = np.array([0])
@@ -317,7 +349,7 @@ class PlotApp(param.Parameterized):
                 x=self.x,
                 y=y,
                 color=["blue"] * self.x.shape[0],
-                size=[5] * self.x.shape[0],
+                size=[7] * self.x.shape[0],
             )
         )
         self.plot = figure(
@@ -326,6 +358,7 @@ class PlotApp(param.Parameterized):
             height=500,
             title="Stimulus selection",
             output_backend="webgl",
+
         )
 
         # Add glyphs to the plot
@@ -338,6 +371,12 @@ class PlotApp(param.Parameterized):
             source=self.source,
             nonselection_alpha=1.0,
         )
+        self.plot.xaxis.axis_label = 'Frame'
+        self.plot.yaxis.axis_label = 'Voltage'
+
+
+
+
 
     def update_plot(self, x, y):
         """
@@ -355,7 +394,7 @@ class PlotApp(param.Parameterized):
         self.ends = np.zeros(self.x.shape[0], dtype=bool)
         # Update data source
         self.source.data = dict(
-            x=self.x, y=y, color=["blue"] * self.x.shape[0], size=[5] * self.x.shape[0]
+            x=self.x, y=y, color=["blue"] * self.x.shape[0], size=[7] * self.x.shape[0]
         )
         # print(x)
         # Setup callback for selection changes
@@ -394,12 +433,12 @@ class PlotApp(param.Parameterized):
                 self.switch = True
             elif colors[idx] == "red" and self.switch:
                 colors[idx] = "blue"
-                sizes[idx] = 5  # Added this line to revert size
+                sizes[idx] = 7  # Added this line to revert size
                 self.ends[idx] = False
                 self.switch = False
             elif colors[idx] == "green" and not self.switch:
                 colors[idx] = "blue"
-                sizes[idx] = 5  # Added this line to revert size
+                sizes[idx] = 7  # Added this line to revert size
                 self.begins[idx] = False
                 self.switch = True
 

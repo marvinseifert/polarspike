@@ -66,6 +66,7 @@ class Stimulus_Extractor:
                 self.channel["Time_s"] = self.Time
                 self.channel.Time_s = pd.to_timedelta(self.channel.Time_s, unit="s")
                 self.channel.set_index("Time_s", inplace=True)
+                self.sampling_frequency = self.sampling_frequency[0]
 
         if format == ".h5":
             with h5py.File(stimulus_file, "r") as f:
