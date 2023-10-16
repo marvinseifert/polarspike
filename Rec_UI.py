@@ -35,6 +35,8 @@ class Explorer:
         and interactively.
 
         """
+
+        warnings = pn.widgets.StaticText(name="Warnings", value="No warnings")
         self.overview_df = None
         self.load_button = pn.widgets.Button(
             name="Load Recording", button_type="primary", width=200
@@ -64,10 +66,17 @@ class Explorer:
         self.recording = None
 
         self.stim_figure = self.stim_figure = pn.panel(
-            self.plot_app.plot, width=1000, height=500,
+            self.plot_app.plot,
+            width=1000,
+            height=500,
         )
         self.frequency_input = pn.widgets.FloatInput(
-            name="Recording Frequency", value=1, step=1e-1, start=0.0, end=50000.0, width=200
+            name="Recording Frequency",
+            value=10000.0,
+            step=1.0,
+            start=0.0,
+            end=50000.0,
+            width=200,
         )
 
         self.spikes_fig = widgets.Output()
@@ -88,7 +97,9 @@ class Explorer:
         self.stimulus_select = pn.widgets.Select(name="Select Stimulus", options=[])
         self.stimulus_select.param.watch(self.update_stimulus_tabulator, "value")
 
-        self.status = pn.indicators.Progress(name='Indeterminate Progress', active=False, width=200)
+        self.status = pn.indicators.Progress(
+            name="Indeterminate Progress", active=False, width=200
+        )
 
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=[0, 1], y=[0, 1]))
@@ -116,6 +127,7 @@ class Explorer:
             self.load_button,
             self.save_button,
             self.status,
+            warnings,
             max_width=300,
             max_height=1000,
             sizing_mode="stretch_width",
@@ -129,11 +141,14 @@ class Explorer:
                         pn.Column(
                             pn.Row(
                                 self.stim_figure,
-                                height=600, width=1000,
+                                height=600,
+                                width=1000,
                             ),
                             pn.Row(self.stimulus_df, height=200, width=1000),
-                        )
-                    , height=800, width=1000),
+                        ),
+                        height=800,
+                        width=1000,
+                    ),
                     pn.Column(
                         self.define_stimuli_button,
                         self.stimulus_spikes_button,
@@ -179,7 +194,6 @@ class Explorer:
             pn.Column(self.main, sizing_mode="stretch_width"),
             width=1000,
             height=1000,
-
         )
         return app
 
@@ -194,7 +208,6 @@ class Explorer:
             self.load_recording()
             self.recording_input.loaded = False
             self.status.active = False
-
 
     def _on_stimulus_selected(self, change):
         self.stimulus_file = change["new"][0] if change["new"] else ""
@@ -257,8 +270,7 @@ class Explorer:
             self.recording = Extractors.Extractor_HS2(self.recording_file)
             self.frequency_input.value = float(self.recording.spikes["sampling"])
 
-        if not self.recording.file.with_suffix(".parquet").exists():
-            self.recording.get_spikes()
+        self.recording.get_spikes()
         self.plot_spike_counts()
         self.plot_isi("times", self.isi_fig)
         self.plot_isi("cell_index", self.isi_clus_fig)
@@ -330,7 +342,6 @@ class PlotApp(param.Parameterized):
     switch = param.Boolean(default=False, precedence=-1)
 
     def __init__(self, x=None, y=None):
-
         super().__init__()
         if x is None:
             self.x = np.array([0])
@@ -358,7 +369,6 @@ class PlotApp(param.Parameterized):
             height=500,
             title="Stimulus selection",
             output_backend="webgl",
-
         )
 
         # Add glyphs to the plot
@@ -371,12 +381,8 @@ class PlotApp(param.Parameterized):
             source=self.source,
             nonselection_alpha=1.0,
         )
-        self.plot.xaxis.axis_label = 'Frame'
-        self.plot.yaxis.axis_label = 'Voltage'
-
-
-
-
+        self.plot.xaxis.axis_label = "Frame"
+        self.plot.yaxis.axis_label = "Voltage"
 
     def update_plot(self, x, y):
         """

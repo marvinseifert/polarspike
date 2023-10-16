@@ -258,7 +258,10 @@ class Stimulus_Extractor:
 def find_ends(df):
     trigger_ends = []
     for i in range(len(df)):
-        if df.loc[i, "stimulus_repeat_logic"] == 0:
+        if (
+            df.loc[i, "stimulus_repeat_logic"] == 0
+            or df.loc[i, "stimulus_repeat_logic"] >= df.loc[i, "trigger_int"].shape[0]
+        ):
             trigger_ends.append(
                 df.loc[i, "trigger_fr_relative"][:-1] + df.loc[i, "trigger_int"]
             )
