@@ -52,21 +52,9 @@ class Stimulus_Extractor:
                 self.channel = pd.DataFrame(
                     np.array([f["/3BData/Raw"]])[0, :], columns=["Voltage"]
                 )
-                self.max_Voltage = self.channel.Voltage.max(axis=0)
-                self.min_Voltage = self.channel.Voltage.min(axis=0)
-                self.half_Voltage = (
-                    self.min_Voltage + (self.max_Voltage - self.min_Voltage) / 2
-                )
-                self.Frames = range(0, len(self.channel.index), 1)
                 self.sampling_frequency = np.array(
                     f["/3BRecInfo/3BRecVars/SamplingRate"]
-                )
-                self.Time = self.Frames / self.sampling_frequency
-                self.channel["Frame"] = self.Frames
-                self.channel["Time_s"] = self.Time
-                self.channel.Time_s = pd.to_timedelta(self.channel.Time_s, unit="s")
-                self.channel.set_index("Time_s", inplace=True)
-                self.sampling_frequency = self.sampling_frequency[0]
+                )[0]
 
         if format == ".h5":
             with h5py.File(stimulus_file, "r") as f:
@@ -88,19 +76,23 @@ class Stimulus_Extractor:
                         ),
                         columns=["Voltage"],
                     )
-                self.max_Voltage = self.channel.Voltage.max(axis=0)
-                self.min_Voltage = self.channel.Voltage.min(axis=0)
-                self.half_Voltage = (
-                    self.min_Voltage + (self.max_Voltage - self.min_Voltage) / 2
-                )
-
-                self.Frames = range(0, len(self.channel.index), 1)
                 self.sampling_frequency = freq
-                self.Time = np.asarray(self.Frames) / self.sampling_frequency
-                self.channel["Frame"] = self.Frames
-                self.channel["Time_s"] = self.Time
-                self.channel.Time_s = pd.to_timedelta(self.channel.Time_s, unit="s")
-                self.channel.set_index("Time_s", inplace=True)
+
+        if format == ".dat":
+            self.channel = pd.DataFrame(
+                np.fromfile(stimulus_file, dtype=np.int16), columns=["Voltage"]
+            )
+            self.sampling_frequency = freq
+
+        self.max_Voltage = self.channel.Voltage.max(axis=0)
+        self.min_Voltage = self.channel.Voltage.min(axis=0)
+        self.half_Voltage = self.min_Voltage + (self.max_Voltage - self.min_Voltage) / 2
+        self.Frames = range(0, len(self.channel.index), 1)
+        self.Time = np.asarray(self.Frames) / self.sampling_frequency
+        self.channel["Frame"] = self.Frames
+        self.channel["Time_s"] = self.Time
+        self.channel.Time_s = pd.to_timedelta(self.channel.Time_s, unit="s")
+        self.channel.set_index("Time_s", inplace=True)
 
         self.switch = 0
         self.begins = []
@@ -165,7 +157,7 @@ class Stimulus_Extractor:
             stim_begin = int(peaks_left[0])
 
             trigger_interval = np.diff(peaks_left)
-            min_trigger_interval = np.min(trigger_interval)
+            min_trigger_interval = np.max(trigger_interval)
 
             stim_end = int(
                 peaks_left[-1] + min_trigger_interval
@@ -184,8 +176,8 @@ class Stimulus_Extractor:
             df_temp["trigger_fr_relative"] = [peaks_left - peaks_left[0]]
             df_temp["trigger_int"] = [trigger_interval]
             df_temp["stimulus_index"] = [i]
-            df_temp["stimulus_repeat_logic"] = [0]
-            df_temp["stimulus_repeat_sublogic"] = [0]
+            df_temp["stimulus_repeat_logic"] = [1]
+            df_temp["stimulus_repeat_sublogic"] = [1]
             df_temp["sampling_freq"] = self.sampling_frequency
 
             self.stimuli = pd.concat([self.stimuli, df_temp], ignore_index=True)
@@ -229,6 +221,7 @@ class Stimulus_Extractor:
         for stimulus in range(len(self.stimuli)):
             self.f.data[stimulus + 1].name = self.stimuli["stimulus_name"].loc[stimulus]
         self.stimuli = find_ends(self.stimuli)
+        self.stimuli = get_nr_repeats(self.stimuli)
 
     def load_from_saved(self, savefile, show_plot=False):
         """
@@ -273,12 +266,25 @@ def find_ends(df):
         ints = df.loc[i, "trigger_int"][: np.multiply(shape[0], shape[1])].reshape(
             shape
         )
-        min_int = np.min(ints, axis=1)
+
+        min_int = np.min(ints, axis=0)
+
         triggers_sorted = df.loc[i, "trigger_fr_relative"][
             : np.multiply(shape[0], shape[1])
         ].reshape(shape)
-        trigger_ends.append((triggers_sorted + min_int.reshape(-1, 1)).flatten())
+        trigger_ends.append((triggers_sorted + min_int).flatten())
     df["trigger_ends"] = trigger_ends
+    return df
+
+
+def get_nr_repeats(df):
+    repeats = []
+    for i in range(len(df)):
+        repeats.append(
+            df.loc[i, "trigger_fr_relative"][:-1].shape[0]
+            // df.loc[i, "stimulus_repeat_logic"]
+        )
+    df["nr_repeats"] = repeats
     return df
 
 

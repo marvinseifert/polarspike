@@ -17,6 +17,39 @@ import recording_overview
 import ipywidgets as widgets
 import single_cell_plots
 from pathlib import Path
+import colour_template
+import stimulus_spikes
+
+
+def stimulus_df():
+    uneditable_columns = [
+        "stimulus_index",
+        "begin_fr",
+        "end_fr",
+        "trigger_fr_relative",
+        "trigger_ends",
+        "trigger_int",
+        "sampling_freq",
+        "nr_repeats",
+    ]
+    editors = {col: {"type": "editable", "value": False} for col in uneditable_columns}
+
+    widget = pn.widgets.Tabulator(
+        pd.DataFrame(),
+        name="single stimulus",
+        editors=editors,
+        theme="simple",
+        widths=150,
+        width=900,
+        height=200,
+    )
+    widget.frozen_columns = [
+        "stimulus_name",
+        "stimulus_index",
+        "stimulus_repeat_logic",
+        "stimulus_repeat_sublogic",
+    ]
+    return widget
 
 
 plt.style.use("dark_background")
@@ -24,6 +57,7 @@ plt.style.use("dark_background")
 
 class Explorer:
     def __init__(self):
+        self.ct = colour_template.Colour_template()
         self.stimulus_input = SelectFilesButton("Stimulus File")
         self.recording_input = SelectFilesButton("Recording File")
         self.stimulus_input.observe(self._on_stimulus_selected, names="files")
@@ -86,14 +120,7 @@ class Explorer:
         self.spike_trains = widgets.Output()
         self.isi_clus_fig = widgets.Output()
 
-        self.stimulus_df = pn.widgets.Tabulator(
-            pd.DataFrame(),
-            name="Stimuli",
-            theme="simple",
-            widths=150,
-            width=1000,
-            height=200,
-        )
+        self.stimulus_df = stimulus_df()
         self.stimulus_select = pn.widgets.Select(name="Select Stimulus", options=[])
         self.stimulus_select.param.watch(self.update_stimulus_tabulator, "value")
 
@@ -103,7 +130,7 @@ class Explorer:
 
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=[0, 1], y=[0, 1]))
-        fig.update_layout(width=1200, height=500)
+        fig.update_layout(width=1200, height=700)
         self.single_cell_raster = pn.pane.Plotly(fig)
 
         self.single_stimulus_df = pn.widgets.Tabulator(
@@ -115,6 +142,14 @@ class Explorer:
             height=200,
         )
         self.single_stimulus_df.on_click(self.update_raster)
+
+        # Color
+        self.colour_selector = pn.widgets.Select(
+            name="Select colour set", options=self.ct.list_stimuli().tolist()
+        )
+
+        self.colour_selector.param.watch(self.on_colour_change, "value")
+        self.selected_color = pn.pane.IPyWidget(self.ct.pickstimcolour())
 
         self.sidebar = pn.layout.WidgetBox(
             pn.pane.Markdown(self.text, margin=(0, 10)),
@@ -176,15 +211,17 @@ class Explorer:
             ),
             (
                 "Stimuli",
-                pn.Column(
-                    pn.Row(
-                        pn.Column(self.stimulus_select),
-                        pn.Column(self.single_stimulus_df),
+                pn.Row(
+                    pn.Column(
+                        self.stimulus_select, self.colour_selector, self.selected_color
                     ),
-                    pn.Row(self.single_cell_raster, width=1000),
+                    pn.Column(
+                        pn.Row(self.single_stimulus_df, width=1000),
+                        pn.Row(self.single_cell_raster, width=1000),
+                    ),
                 ),
             ),
-            height=600,
+            height=800,
         )
 
     def run(self):
@@ -221,17 +258,13 @@ class Explorer:
         begins, ends = self.plot_app.get_frames()
         stim_df = self.stimulus.get_stim_range_new(begins, ends)
         self.stimulus_df.value = stim_df
-        self.stimulus_df.frozen_columns = [
-            "stimulus_name",
-            "stimulus_index",
-            "stimulus_repeat_logic",
-        ]
 
     def stimulus_spikes(self, event):
         self.stimulus_df.value = stimulus_trace.find_ends(self.stimulus_df.value)
+        self.stimulus_df.value = stimulus_trace.get_nr_repeats(self.stimulus_df.value)
         self.recording.add_stimulus_df(self.stimulus_df.value)
         dataframes = {
-            "spikes_df": self.recording.load(),
+            "spikes_df": self.recording.load(recording_name=self.recording_name.value),
             "stimulus_df": self.stimulus_df.value,
         }
         dataframes["spikes_df"]["filter"] = True
@@ -311,23 +344,30 @@ class Explorer:
 
         self.single_stimulus_df.value = self.overview_df.spikes_df.query(
             f"stimulus_index == {stimulus_id}"
-        )
+        ).reset_index(drop=True)
 
     def update_raster(self, event):
-        try:
-            indices = event.row
-            cell_indices = [self.single_stimulus_df.value.loc[indices]["cell_index"]]
+        indices = event.row
+        cell_indices = [self.single_stimulus_df.value.loc[indices]["cell_index"]]
 
-            plot_df = self.overview_df.get_spikes_triggered(
-                cell_indices, [self.stimulus_select.value], time="seconds"
-            )
+        plot_df = self.overview_df.get_spikes_triggered(
+            cell_indices, [self.stimulus_select.value], time="seconds"
+        )
+        if len(plot_df) != 0:
             raster_plot = single_cell_plots.whole_stimulus_plotly(plot_df)
+            # Add stimulus:
+            raster_plot = colour_template.add_stimulus_to_plotly(
+                raster_plot,
+                self.ct.colours,
+                stimulus_spikes.trigger_sublogic(
+                    self.overview_df.stimulus_df, self.stimulus_select.value
+                ),
+            )
             self.single_cell_raster.object = raster_plot
 
-        except KeyError:
+        else:
             fig = go.Figure()
             fig.add_trace(go.Scatter(x=[0, 1], y=[0, 1]))
-            fig.update_layout(width=1200, height=500)
             self.single_cell_raster.object = fig
 
     def save_to_overview(self, event):
@@ -335,6 +375,10 @@ class Explorer:
             self.overview_df.save(Path(self.stimulus_file).parent / "overview")
         else:
             print("No overview to save")
+
+    def on_colour_change(self, event):
+        self.ct.pick_stimulus(event.new)
+        self.selected_color.object = self.ct.pickstimcolour(event.new)
 
 
 class PlotApp(param.Parameterized):

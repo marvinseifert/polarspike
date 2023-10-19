@@ -1,0 +1,331 @@
+import numpy as np
+import pandas as pd
+from ipywidgets import widgets, interact
+import re
+import math
+from IPython.display import Markdown, display
+from plotly.subplots import make_subplots
+import plotly.graph_objects as go
+
+
+class Colour_template:
+    layout = {"sep": " ", "width": 4}
+
+    Save_button = widgets.Button(
+        value=False,
+        description="Save colours",
+        disabled=False,
+        button_style="",  # 'success', 'info', 'warning', 'danger' or ''
+    )
+
+    def __init__(self, df_file="stim_colour_df"):
+        self.plot_colour_dataframe = pd.read_pickle(df_file)
+
+        self.stimulus_select = widgets.RadioButtons(
+            options=list(self.plot_colour_dataframe.index),
+            layout={"width": "max-content"},
+            description="Colourset",
+            disabled=False,
+        )
+        self.colours = []
+        self.names = []
+        self.wavelengths = []
+        self.stimulus = None
+        self.picker = None
+        self.template = Interactive_template(self.Save_button)
+        self.Save_button.on_click(self.add_new_stimulus)
+
+    def pick_stimulus(self, name, sub_selection=None):
+        self.stimulus = name
+        self.colours = self.get_stimulus_colors(name, sub_selection)
+        self.names = self.get_stimulus_names(name, sub_selection)
+        self.wavelengths = self.get_stimulus_wavelengths(name, sub_selection)
+        return self.colour_to_markdown()
+
+    def colour_to_markdown(self):
+        display(
+            Markdown(
+                self.layout["sep"].join(
+                    f'<span style="font-family: monospace">{color} <span style="color: {color}">{chr(9608) * self.layout["width"]}</span></span>'
+                    for color in self.colours
+                )
+            )
+        )
+
+    def get_stimulus_colors(self, name, sub_selection=None):
+        colours = np.asarray(self.plot_colour_dataframe.loc[name]["Colours"])
+        if sub_selection is not None:
+            colours = colours[sub_selection[0] :: sub_selection[1]]
+
+        return colours
+
+    def get_stimulus_names(self, name, sub_selection=None):
+        names = np.asarray(self.plot_colour_dataframe.loc[name]["Description"])
+        if sub_selection is not None:
+            names = names[sub_selection[0] :: sub_selection[1]]
+
+        return names
+
+    def get_stimulus_wavelengths(self, name, sub_selection=None):
+        names = self.get_stimulus_names(name, sub_selection)
+        wavelengths = []
+        for name in names:
+            wavelengths.append(int(re.findall(r"\d+", name)[0]))
+        return wavelengths
+
+    def list_stimuli(self):
+        return self.plot_colour_dataframe.index.to_numpy()
+
+    def add_new_stimulus(self, button):
+        self.plot_colour_dataframe.loc[
+            self.template.name, "Colours"
+        ] = self.template.colours
+        self.plot_colour_dataframe.loc[
+            self.template.name, "Description"
+        ] = self.template.description
+        self.plot_colour_dataframe.to_pickle("stim_colour_df")
+
+    def interactive_stimulus(self):
+        interact(self.pickstimcolour, selected_stimulus=self.stimulus_select)
+
+    def pickstimcolour(self, selected_stimulus=None):
+        if not selected_stimulus:
+            self.stimulus = self.stimulus_select.value
+        else:
+            self.stimulus = selected_stimulus
+        words = []
+        nr_trigger = len(self.plot_colour_dataframe.loc[self.stimulus]["Colours"])
+
+        for trigger in range(nr_trigger):
+            selected_word = self.plot_colour_dataframe.loc[self.stimulus][
+                "Description"
+            ][trigger]
+            words.append(selected_word)
+
+        items = [
+            widgets.ColorPicker(
+                description=w,
+                value=self.plot_colour_dataframe.loc[self.stimulus]["Colours"][trigger],
+            )
+            for w, trigger in zip(words, range(nr_trigger))
+        ]
+        first_box_items = []
+        # second_box_items = []
+        # third_box_items = []
+        # fourth_box_items = []
+
+        a = 0
+        while True:
+            try:
+                first_box_items.append(items[a])
+                a = a + 1
+                # second_box_items.append(items[a])
+                # a = a + 1
+                # third_box_items.append(items[a])
+                # a = a + 1
+                # fourth_box_items.append(items[a])
+                # a = a + 1
+            except IndexError:
+                break
+
+        first_box = widgets.VBox(first_box_items)
+        # second_box = widgets.VBox(second_box_items)
+        # third_box = widgets.VBox(third_box_items)
+        # fourth_box = widgets.VBox(fourth_box_items)
+        self.picker = widgets.HBox([first_box])
+
+        return self.picker
+
+    def changed_selection(self):
+        a = 0
+        self.colours = []
+        nr_trigger = len(self.plot_colour_dataframe.loc[self.stimulus]["Colours"])
+        for trigger in range(math.ceil(nr_trigger)):
+            try:
+                self.colours.append(self.picker.children[0].children[trigger].value)
+                a = a + 1
+                # self.colours.append(self.picker.children[1].children[trigger].value)
+                # a = a + 1
+                # self.colours.append(self.picker.children[2].children[trigger].value)
+                # a = a + 1
+                # self.colours.append(self.picker.children[3].children[trigger].value)
+                # a = a + 1
+
+                self.names = self.plot_colour_dataframe.loc[self.stimulus][
+                    "Description"
+                ]
+            except IndexError:
+                break
+        return self.colour_to_markdown()
+
+    def create_stimcolour(self, name, nr_colours, description):
+        return self.template.create_stimcolour(name, nr_colours, description)
+
+
+class Interactive_template:
+    Pick_button = widgets.Button(
+        value=False,
+        description="Set colours",
+        disabled=False,
+        button_style="",  # 'success', 'info', 'warning', 'danger' or ''
+    )
+
+    def __init__(self, save_button):
+        self.name = ""
+        self.nr_colours = 0
+        self.description = []
+        self.new_colour_select_box = widgets.HBox()
+        self.Pick_button.on_click(self.get_colours)
+        self.Save_button = save_button
+        self.colours = []
+
+    def create_stimcolour(self, name, nr_colours, description):
+        self.name = name
+        self.nr_colours = nr_colours
+        self.description = description
+
+        items = [
+            widgets.ColorPicker(
+                description=w,
+                value="#000000",
+            )
+            for w, trigger in zip(self.description, range(self.nr_colours))
+        ]
+        first_box_items = []
+        second_box_items = []
+        third_box_items = []
+        fourth_box_items = []
+
+        a = 0
+        while True:
+            try:
+                first_box_items.append(items[a])
+                a = a + 1
+                second_box_items.append(items[a])
+                a = a + 1
+                third_box_items.append(items[a])
+                a = a + 1
+                fourth_box_items.append(items[a])
+                a = a + 1
+            except IndexError:
+                break
+
+        first_box = widgets.VBox(first_box_items)
+        second_box = widgets.VBox(second_box_items)
+        third_box = widgets.VBox(third_box_items)
+        fourth_box = widgets.VBox(fourth_box_items)
+        container = widgets.HBox([first_box, second_box, third_box, fourth_box])
+        self.new_colour_select_box = widgets.VBox(
+            [self.Pick_button, self.Save_button, container]
+        )
+
+        return self.new_colour_select_box
+
+    def get_colours(self, value):
+        self.colours = []
+
+        for trigger in range(math.ceil(self.nr_colours / 4)):
+            try:
+                self.colours.append(
+                    self.new_colour_select_box.children[2]
+                    .children[0]
+                    .children[trigger]
+                    .value
+                )
+                self.colours.append(
+                    self.new_colour_select_box.children[2]
+                    .children[1]
+                    .children[trigger]
+                    .value
+                )
+                self.colours.append(
+                    self.new_colour_select_box.children[2]
+                    .children[2]
+                    .children[trigger]
+                    .value
+                )
+                self.colours.append(
+                    self.new_colour_select_box.children[2]
+                    .children[3]
+                    .children[trigger]
+                    .value
+                )
+            except IndexError:
+                break
+            except TypeError:
+                print("Here")
+
+        return self.colours
+
+
+def add_stimulus_to_plotly(initial_fig, colours, flash_durations, names=None):
+    """
+    Adds a subplot with colored rectangles to an existing figure.
+
+    Parameters:
+        - initial_fig: The initial figure to which the subplot will be added.
+
+    Returns:
+        - A new figure with the original plot and the added rectangle subplot.
+    """
+
+    # Extract data and layout from the initial figure
+    initial_data = initial_fig.data
+    initial_layout = initial_fig.layout
+
+    # Rectangle dimensions
+
+    height = 1
+
+    # Create a new 2x1 subplot layout
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True)
+
+    # Add the extracted data to the first subplot
+    for trace in initial_data:
+        fig.add_trace(trace, row=1, col=1)
+
+    # Add the rectangles to the second subplot using shapes
+    x_start = 0
+    for i, (color, width) in enumerate(zip(colours, flash_durations)):
+        fig.add_shape(
+            go.layout.Shape(
+                type="rect",
+                x0=x_start,
+                y0=0,
+                x1=x_start + width,
+                y1=height,
+                fillcolor=color,
+                line=dict(width=0),
+            ),
+            row=2,
+            col=1,
+        )
+
+        if names is not None and len(names) == len(colours):
+            fig.add_annotation(
+                x=x_start + width / 2,
+                y=height / 2,
+                xref="x2",
+                yref="y2",
+                text=names[i],
+                showarrow=False,
+                font=dict(size=14),
+            )
+
+        x_start += width
+
+    # Merge the layouts
+    # fig.update_layout(initial_layout)
+
+    # Further update layout as needed
+    fig.update_layout(
+        xaxis=dict(showgrid=True, zeroline=True, showticklabels=True),
+        yaxis2=dict(
+            range=[0, height], showgrid=False, zeroline=False, showticklabels=False
+        ),
+    )
+    fig.update_xaxes(title_text="Time (s)")
+    fig.update_yaxes(title_text="Repeats")
+    fig.update_layout(template="simple_white")
+
+    return fig

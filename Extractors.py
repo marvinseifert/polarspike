@@ -92,15 +92,15 @@ class Extractor:
         df = pl.from_arrow(loaded_array)
         df.lazy().sink_parquet(str(self.file.with_suffix(".parquet")))
 
-    def load(self, stimulus=True):
+    def load(self, stimulus=True, recording_name=None, pandas=True):
         df = pl.scan_parquet(str(self.file.with_suffix(".parquet")))
         df = df.select(pl.col("cell_index", "times"))
         if stimulus:
-            return self.construct_df(df)
+            return self.construct_df(df, recording_name, pandas)
         if not stimulus:
             return df
 
-    def construct_df(self, df, pandas=True):
+    def construct_df(self, df, recording_name=None, pandas=True):
         dfs = []
         for stimulus in range(self.trigger.shape[0]):
             times = df.filter(
@@ -112,15 +112,30 @@ class Extractor:
             )
             times = times.with_columns(stimulus_index=pl.lit(stimulus))
             # print(times.dtypes, times)
-            dfs.append(
+            df_idx = pl.DataFrame(
+                data=self.spikes["cell_indices"],
+                schema=[("cell_index", pl.datatypes.Int64)],
+            )
+
+            df_temp = (
                 times.group_by(pl.col("cell_index", "stimulus_name", "stimulus_index"))
                 .count()
                 .collect()
             )
+
+            df_idx = df_idx.join(df_temp, on="cell_index", how="left")
+            # Fill missing values:
+            df_idx = df_idx.with_columns(
+                pl.col("stimulus_name").fill_null(self.stimulus_names[stimulus])
+            )
+            df_idx = df_idx.with_columns(pl.col("count").fill_null(0))
+            df_idx = df_idx.with_columns(pl.col("stimulus_index").fill_null(stimulus))
+            dfs.append(df_idx)
+
         # Add the centres
         centres_id = np.hstack(
             [
-                np.arange(0, self.spikes["nr_cells"]).reshape(-1, 1),
+                self.spikes["cell_indices"].reshape(-1, 1) - 1,
                 self.spikes["centres"],
             ]
         )
@@ -132,8 +147,14 @@ class Extractor:
 
         df = pl.concat(dfs)
         df = df.sort("cell_index", descending=False)
-        combined_df = df.join(df_centre, on="cell_index", how="inner")
+        combined_df = df.join(df_centre, on="cell_index", how="left")
         combined_df = combined_df.rename({"count": "nr_of_spikes"})
+
+        # Fill missing values
+
+        if recording_name:
+            combined_df = combined_df.with_columns(recording=pl.lit(recording_name))
+
         if pandas:
             return combined_df.to_pandas()
         else:
@@ -192,6 +213,9 @@ class Extractor_SPC(Extractor):
         cell_idx = np.repeat(cell_idx, nr_spikes)
 
         self.spikes["nr_cells"] = len(spikes.keys())
+        self.spikes["cell_indices"] = np.linspace(
+            1, self.spikes["nr_cells"], self.spikes["nr_cells"], dtype=int
+        )
 
         self.get_locations(params)
 
@@ -199,6 +223,7 @@ class Extractor_SPC(Extractor):
             np.vstack([cell_idx, array_combined]).T, schema=["cell_index", "times"]
         )
         df.write_parquet(str(self.file.with_suffix(".parquet")))
+        # os.chdir(current_dir)
 
     def get_locations(self, params):
         probe = probes.read_probe(params)
