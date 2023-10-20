@@ -223,7 +223,7 @@ class Extractor_SPC(Extractor):
             np.vstack([cell_idx, array_combined]).T, schema=["cell_index", "times"]
         )
         df.write_parquet(str(self.file.with_suffix(".parquet")))
-        # os.chdir(current_dir)
+        os.chdir(current_dir)
 
     def get_locations(self, params):
         probe = probes.read_probe(params)
