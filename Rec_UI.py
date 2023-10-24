@@ -276,7 +276,7 @@ class Explorer:
             self.frequency_input.value,
         )
         stimulus_names = self.overview_df.stimulus_df["stimulus_name"].tolist()
-        options_dict = {name: idx for idx, name in enumerate(stimulus_names)}
+        options_dict = {f"{name}_{idx}": idx for idx, name in enumerate(stimulus_names)}
         self.stimulus_select.options = options_dict
 
     def load_stimulus(self):
