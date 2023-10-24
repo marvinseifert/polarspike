@@ -123,6 +123,7 @@ class Explorer:
         self.stimulus_df = stimulus_df()
         self.stimulus_select = pn.widgets.Select(name="Select Stimulus", options=[])
         self.stimulus_select.param.watch(self.update_stimulus_tabulator, "value")
+        self.initial_stim_df = False
 
         self.status = pn.indicators.Progress(
             name="Indeterminate Progress", active=False, width=200
@@ -341,11 +342,28 @@ class Explorer:
             fig.show()
 
     def update_stimulus_tabulator(self, event):
+        if self.initial_stim_df:
+            self.merge_stimulus_df()
+        else:
+            self.initial_stim_df = True
+
         stimulus_id = self.stimulus_select.value
 
         self.single_stimulus_df.value = self.overview_df.spikes_df.query(
             f"stimulus_index == {stimulus_id}"
         ).reset_index(drop=True)
+
+    def merge_stimulus_df(self):
+        self.single_stimulus_df.value = self.single_stimulus_df.value.set_index(
+            ["cell_index", "stimulus_index"]
+        )
+        self.overview_df.dataframes["spikes_df"] = self.overview_df.dataframes[
+            "spikes_df"
+        ].set_index(["cell_index", "stimulus_index"])
+        self.overview_df.dataframes["spikes_df"].update(self.single_stimulus_df.value)
+        self.overview_df.dataframes["spikes_df"] = self.overview_df.dataframes[
+            "spikes_df"
+        ].reset_index(drop=False)
 
     def update_raster(self, event):
         indices = event.row
