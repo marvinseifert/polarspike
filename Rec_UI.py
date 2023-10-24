@@ -257,6 +257,7 @@ class Explorer:
     def define_stimuli(self, event):
         begins, ends = self.plot_app.get_frames()
         stim_df = self.stimulus.get_stim_range_new(begins, ends)
+        stim_df["recording"] = self.recording_name.value
         self.stimulus_df.value = stim_df
 
     def stimulus_spikes(self, event):

@@ -94,7 +94,10 @@ def trigger_sublogic(df, stimulus, time="seconds"):
     new_trigger_int = np.repeat(
         np.mean(
             np.reshape(
-                stim_df["trigger_int"].values[0],
+                stim_df["trigger_int"].values[0][
+                    : stim_df["nr_repeats"].values[0]  # Only get finished repeats
+                    * stim_df["stimulus_repeat_logic"].values[0]
+                ],
                 (
                     stim_df["nr_repeats"].values[0],
                     stim_df["stimulus_repeat_logic"].values[0],
