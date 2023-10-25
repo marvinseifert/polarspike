@@ -1,13 +1,8 @@
-import pandas as pd
+import Overview
 
-import Extractors
-
-stimulus_df = pd.read_pickle("stimulus_df")
-
-SC = Extractors.Extractor_SPC(
-    r"D:\zebrafish_02_10_2023\Phase_00\ks_sorted\alldata.dat", stimulus_df
-)
-
-
-SC.get_spikes()
-df = SC.load(recording_name="test")
+recordings = Overview.Recording_s(r"D:\combined_analysis", "test_analysis")
+overview_df = Overview.Recording.load(r"D:\zebrafish_19_10_2023\ks_sorted\overview")
+recordings.add_recording(overview_df)
+second_rec = Overview.Recording.load(r"D:\zebrafish_20_10_2023\ks_sorted\overview")
+recordings.add_recording(second_rec)
+df_test = recordings.get_spikes_triggered(["all"], [[10, 11, 12]], [["FFF"], ["FFF"]])

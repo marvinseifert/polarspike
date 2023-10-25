@@ -2,6 +2,7 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 
+
 def expo_chirp(start_time, end_time, start_freq, end_freq):
     """
 
@@ -35,7 +36,9 @@ def expo_chirp(start_time, end_time, start_freq, end_freq):
 
     # Generate x values
 
-    x = np.linspace(start_time, end_time, int((end_time - start_time) * points_per_second))
+    x = np.linspace(
+        start_time, end_time, int((end_time - start_time) * points_per_second)
+    )
 
     # Calculate b value for exponential
 
@@ -50,20 +53,31 @@ def expo_chirp(start_time, end_time, start_freq, end_freq):
 
 def plot(df, start_time, end_time, start_freq, end_freq):
     plt.ioff()
-    fig, axs = plt.subplots(2, 1, figsize=(15, 10),sharex=True, gridspec_kw=dict(height_ratios=[1, 2]
-                                                                ))
+    fig, axs = plt.subplots(
+        2, 1, figsize=(15, 10), sharex=True, gridspec_kw=dict(height_ratios=[1, 2])
+    )
 
-    axs[0] = sns.histplot(data=df, x="times_triggered", kde=True, bins=789, color="black", edgecolor='none',
-                          element="step", ax=axs[0])
+    axs[0] = sns.histplot(
+        data=df,
+        x="times_triggered",
+        kde=True,
+        bins=789,
+        color="black",
+        edgecolor="none",
+        element="step",
+        ax=axs[0],
+    )
 
-    axs[1] = sns.lineplot(x=expo_chirp(start_time, end_time, start_freq, end_freq)[0],
-                 y=expo_chirp(start_time, end_time, start_freq, end_freq)[1], ax=axs[1], color="black")
+    axs[1] = sns.lineplot(
+        x=expo_chirp(start_time, end_time, start_freq, end_freq)[0],
+        y=expo_chirp(start_time, end_time, start_freq, end_freq)[1],
+        ax=axs[1],
+        color="black",
+    )
     for ax in axs:
         ax.spines.right.set_visible(False)
         ax.spines.top.set_visible(False)
-        ax.spines['left'].set_position(('outward', 10))
-
-
+        ax.spines["left"].set_position(("outward", 10))
 
     axs[0].set_ylabel("Spike Count")
     axs[0].set_xlabel("Time in s")
@@ -71,6 +85,11 @@ def plot(df, start_time, end_time, start_freq, end_freq):
     axs[1].set_ylabel("Frequency")
     axs[1].set_xlabel("Time in s")
     axs[1].set_box_aspect(19 / 20)
-    axs[1].set_box_aspect(1/20)
+    axs[1].set_box_aspect(1 / 20)
     fig.tight_layout(pad=0.1)
     return fig, axs
+
+
+def plot_interactive(df, start_time, end_time, start_freq, end_freq):
+    fig, ax = plot(df, start_time, end_time, start_freq, end_freq)
+    return fig.show()
