@@ -8,11 +8,11 @@ def load_cells(cell_index, file, waveforms=False):
         df = df.select(pl.col("cell_index"), pl.col("times"))
 
     # Set up the filtering conditions
-    condition = pl.col("cell_index") == cell_index[0]
-    for value in cell_index[1:]:
-        condition |= pl.col("cell_index") == value
-
-    subset_df = df.filter(condition)
+    # condition = pl.col("cell_index") == cell_index[0]
+    # for value in cell_index[1:]:
+    #     condition |= pl.col("cell_index") == value
+    subset_df = df.filter(pl.col("cell_index").is_in(cell_index))
+    # subset_df = df.filter(condition)
     subset_df = subset_df.collect(streaming=True)
     return subset_df.sort("cell_index")
 

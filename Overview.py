@@ -390,7 +390,18 @@ class Recording_s(Recording):
     def add_recording(self, recording):
         self.recordings[recording.name] = recording
         self.nr_recordings += 1
+        self.create_combined_df()
+        self.nr_cells = self.nr_cells + recording.nr_cells
+        self.nr_stimuli = self.nr_stimuli + recording.nr_stimuli
 
+    def remove_recording(self, recording):
+        self.recordings.pop(recording.name)
+        self.nr_recordings -= 1
+        self.create_combined_df()
+        self.nr_cells = self.nr_cells - recording.nr_cells
+        self.nr_stimuli = self.nr_stimuli - recording.nr_stimuli
+
+    def create_combined_df(self):
         dfs = []
         for recording in self.recordings.values():
             dfs.append(recording.spikes_df)
@@ -400,10 +411,6 @@ class Recording_s(Recording):
         for recording in self.recordings.values():
             dfs.append(recording.stimulus_df)
         self.dataframes["stimulus_df"] = pd.concat(dfs).reset_index(drop=True)
-
-    def remove_recording(self, recording):
-        self.recordings.pop(recording.name)
-        self.nr_recordings -= 1
 
     # @property
     # def spikes_df(self):
@@ -530,6 +537,29 @@ class Recording_s(Recording):
                     )
 
         return recordings, cells, stimuli
+
+    def get_spikes_chunked(
+        self,
+        chunk_size,
+        chunk_position,
+        recordings,
+        cells,
+        stimuli,
+        time="seconds",
+        waveforms=False,
+        pandas=True,
+    ):
+        if recordings[0] == "all":
+            recordings = self.recordings.keys()
+
+        keys = list(recordings)
+        start_index = chunk_size * chunk_position
+        end_index = start_index + chunk_size
+        recordings = keys[start_index:end_index]
+        df = self.get_spikes_triggered(
+            recordings, cells, stimuli, time, waveforms, pandas
+        )
+        return df
 
 
 class Dataframe:

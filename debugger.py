@@ -1,8 +1,7 @@
 import Overview
 
-recordings = Overview.Recording_s(r"D:\combined_analysis", "test_analysis")
-overview_df = Overview.Recording.load(r"D:\zebrafish_19_10_2023\ks_sorted\overview")
-recordings.add_recording(overview_df)
-second_rec = Overview.Recording.load(r"D:\zebrafish_20_10_2023\ks_sorted\overview")
-recordings.add_recording(second_rec)
-df_test = recordings.get_spikes_triggered(["all"], ["all"], [["FFF"]])
+overview_df = Overview.Recording.load("D:\Chicken_03_08_21\Phase_01\overview")
+cells = []
+cells.extend(range(3240))
+spikes_df = overview_df.get_spikes_triggered(cells, [0], pandas=False)
+print(spikes_df.head)
