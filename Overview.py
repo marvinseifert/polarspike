@@ -391,25 +391,35 @@ class Recording_s(Recording):
         self.recordings[recording.name] = recording
         self.nr_recordings += 1
 
+        dfs = []
+        for recording in self.recordings.values():
+            dfs.append(recording.spikes_df)
+        self.dataframes["spikes_df"] = pd.concat(dfs).reset_index(drop=True)
+
+        dfs = []
+        for recording in self.recordings.values():
+            dfs.append(recording.stimulus_df)
+        self.dataframes["stimulus_df"] = pd.concat(dfs).reset_index(drop=True)
+
     def remove_recording(self, recording):
         self.recordings.pop(recording.name)
         self.nr_recordings -= 1
 
-    @property
-    def spikes_df(self):
-        """Returns the combined spikes_df of all recordings"""
-        dfs = []
-        for recording in self.recordings.values():
-            dfs.append(recording.spikes_df)
-        return pd.concat(dfs).reset_index(drop=True)
-
-    @property
-    def stimulus_df(self):
-        """Returns the combined stimulus_df of all recordings"""
-        dfs = []
-        for recording in self.recordings.values():
-            dfs.append(recording.stimulus_df)
-        return pd.concat(dfs).reset_index(drop=True)
+    # @property
+    # def spikes_df(self):
+    #     """Returns the combined spikes_df of all recordings"""
+    #     dfs = []
+    #     for recording in self.recordings.values():
+    #         dfs.append(recording.spikes_df)
+    #     return pd.concat(dfs).reset_index(drop=True)
+    #
+    # @property
+    # def stimulus_df(self):
+    #     """Returns the combined stimulus_df of all recordings"""
+    #     dfs = []
+    #     for recording in self.recordings.values():
+    #         dfs.append(recording.stimulus_df)
+    #     return pd.concat(dfs).reset_index(drop=True)
 
     # def get_spikes_triggered(
     #     self, recording, cells, stimuli, time="seconds", waveforms=False, pandas=True
@@ -478,15 +488,17 @@ class Recording_s(Recording):
             if cells[0] == "all":
                 cells = []
                 for rec in self.recordings.keys():
-                    cells.append([self.recordings[rec].nr_cells])
+                    c_l = []
+                    c_l.extend(range(self.recordings[rec].nr_cells))
+                    cells.append(c_l)
             elif len(cells) != len(recordings):
                 cells = [cells[0]] * len(recordings)
             if stimuli[0] == "all":
                 stimuli = []
                 for rec in self.recordings.keys():
-                    stimuli.append(
-                        [np.arange(self.recordings[rec].nr_stimuli, dtype=int)]
-                    )
+                    s_l = []
+                    s_l.extend(range(self.recordings[rec].nr_stimuli))
+                    stimuli.append(s_l)
             elif len(stimuli) != len(recordings):
                 stimuli = [stimuli[0]] * len(recordings)
 
@@ -494,8 +506,10 @@ class Recording_s(Recording):
             if len(recordings) > 1:
                 if cells[0] == "all":
                     cells = []
-                    for rec in recordings:
-                        cells.append([self.recordings[rec].nr_cells])
+                    for rec in self.recordings.keys():
+                        c_l = []
+                        c_l.extend(range(self.recordings[rec].nr_cells))
+                        cells.append(c_l)
                 elif len(cells) != len(recordings) and len(cells) == 1:
                     cells = [cells[0]] * len(recordings)
                 else:
@@ -504,10 +518,10 @@ class Recording_s(Recording):
                     )
                 if stimuli[0] == "all":
                     stimuli = []
-                    for rec in recordings:
-                        stimuli.append(
-                            [np.arange(self.recordings[rec].nr_stimuli, dtype=int)]
-                        )
+                    for rec in self.recordings.keys():
+                        s_l = []
+                        s_l.extend(range(self.recordings[rec].nr_stimuli))
+                        stimuli.append(s_l)
                 elif len(stimuli) != len(recordings) and len(stimuli) == 1:
                     stimuli = [stimuli[0]] * len(recordings)
                 else:
