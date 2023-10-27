@@ -19,6 +19,7 @@ import single_cell_plots
 from pathlib import Path
 import colour_template
 import stimulus_spikes
+import binarizer
 
 
 def stimulus_df():
@@ -93,7 +94,8 @@ class Explorer:
         )
         self.define_stimuli_button.on_click(self.define_stimuli)
         self.stimulus_spikes_button.on_click(self.stimulus_spikes)
-
+        self.calculate_qi_button = pn.widgets.Button(name="Calculate QI", width=150)
+        self.calculate_qi_button.on_click(self.calculate_qi)
         # Creating an instance of PlotApp
         self.plot_app = PlotApp()
 
@@ -217,7 +219,11 @@ class Explorer:
                         self.stimulus_select, self.colour_selector, self.selected_color
                     ),
                     pn.Column(
-                        pn.Row(self.single_stimulus_df, width=1000),
+                        pn.Row(
+                            self.single_stimulus_df,
+                            self.calculate_qi_button,
+                            width=1000,
+                        ),
                         pn.Row(self.single_cell_raster, width=1000),
                     ),
                 ),
@@ -378,7 +384,7 @@ class Explorer:
             raster_plot = colour_template.add_stimulus_to_plotly(
                 raster_plot,
                 self.ct.colours,
-                stimulus_spikes.trigger_sublogic(
+                stimulus_spikes.mean_trigger_times(
                     self.overview_df.stimulus_df, self.stimulus_select.value
                 ),
             )
@@ -398,6 +404,34 @@ class Explorer:
     def on_colour_change(self, event):
         self.ct.pick_stimulus(event.new)
         self.selected_color.object = self.ct.pickstimcolour(event.new)
+
+    def calculate_qi(self, event):
+        self.status.active = True
+        cell_ids = self.single_stimulus_df.value["cell_index"].unique().tolist()
+        spikes_df = self.overview_df.get_spikes_triggered(
+            cell_ids, [self.stimulus_select.value], time="seconds", pandas=False
+        )
+        # Update the cell indices, to account for cells without responses
+        cell_ids = spikes_df["cell_index"].unique().to_numpy()
+        qis = binarizer.calc_qis(
+            binarizer.timestamps_to_binary_multi(
+                spikes_df,
+                0.001,
+                np.sum(
+                    stimulus_spikes.mean_trigger_times(
+                        self.overview_df.stimulus_df, self.stimulus_select.value
+                    )
+                ),
+                self.overview_df.stimulus_df.loc[self.stimulus_select.value][
+                    "nr_repeats"
+                ],
+            )
+        )
+        df_temp = self.single_stimulus_df.value.set_index("cell_index")
+        df_temp["qi"] = 0
+        df_temp.loc[cell_ids, "qi"] = qis
+        self.single_stimulus_df.value = df_temp.reset_index(drop=False)
+        self.status.active = False
 
 
 class PlotApp(param.Parameterized):

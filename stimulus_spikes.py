@@ -89,7 +89,7 @@ def sub_trigger(trigger, rel_trigger, logic):
     return trigger_sub
 
 
-def trigger_sublogic(df, stimulus, time="seconds"):
+def mean_trigger_times(df, stimulus, time="seconds"):
     stim_df = df.query(f"stimulus_index=={stimulus}")
     new_trigger_int = np.repeat(
         np.mean(

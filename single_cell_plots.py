@@ -12,6 +12,9 @@ import matplotlib.ticker as ticker
 
 
 def whole_stimulus_plotly(df):
+    if type(df) is pl.DataFrame:
+        df = df.to_pandas()
+
     fig = go.Figure()
     fig.add_trace(
         go.Scatter(

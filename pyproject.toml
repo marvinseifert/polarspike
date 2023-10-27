@@ -27,6 +27,8 @@ seaborn = "^0.13.0"
 param = "^1.13.0"
 jupyter-bokeh = "^3.0.7"
 statsmodels = "^0.14.0"
+dask = "^2023.10.0"
+cupy-cuda11x = "^12.2.0"
 
 
 [build-system]
