@@ -132,6 +132,7 @@ def quality_index(repeats, bins, df):
     exs = signal.oaconvolve(array, gauswins, mode="valid", axes=1)
     return calc_tradqi(exs)
 
+
 # array = np.reshape(result["value"].to_numpy(), (5, 2401), order="C")
 #
 # gauswins = np.tile(kernel_template(width=0.0125 / 100)[::-1], (5, 1))

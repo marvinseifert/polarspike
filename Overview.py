@@ -67,11 +67,17 @@ class Recording:
         if any(isinstance(i, list) for i in stimuli):
             stimuli = stimuli[0]
 
-        if cells == "all":
-            cells = np.arange(self.nr_cells)
+        cells_temp = []
+        for cell in cells:
+            if cell == "all":
+                cells_temp.append(np.arange(self.nr_cells))
+            else:
+                cells_temp.append(cell)
+        cells = cells_temp
+
         dfs = []
-        for stimulus in stimuli:
-            df = self.get_triggered(cells, stimulus, time, waveforms)
+        for stimulus, cell in zip(stimuli, cells):
+            df = self.get_triggered(cell, stimulus, time, waveforms)
             df = df.with_columns(stimulus_index=pl.lit(f"{stimulus}"))
             dfs.append(df)
         df = pl.concat(dfs)
@@ -321,7 +327,9 @@ class Recording:
             how="left",
         )
 
-    def get_stimulus_subset(self, stimulus=None, name=None, dataframes=None):
+    def get_stimulus_subset(
+        self, stimulus=None, name=None, dataframes=None, fill_spikes=True
+    ):
         """Returns a subset of the dataframe that only contains the spikes that
         were recorded during the presentation of a specific stimulus.
 
@@ -362,7 +370,7 @@ class Recording:
                     .copy()
                 )
 
-            if dataframe == "spikes_df":
+            if dataframe == "spikes_df" and fill_spikes:
                 spikes, _ = self.get_spikes_as_numpy(
                     df["cell_index"].unique().tolist(),
                     df["stimulus_index"].unique().tolist(),
