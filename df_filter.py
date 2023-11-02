@@ -3,7 +3,6 @@ import polars as pl
 
 
 def find_stimuli(df, stimuli):
-
     if type(stimuli) == int:
         return get_stimulus_index(df, stimuli)
     elif type(stimuli) == list:
@@ -41,3 +40,18 @@ def get_stimulus_info(df):
     trigger_end = df[["trigger_ends"]].to_numpy()[0][0]
     stim_logic = df[["stimulus_repeat_logic"]].to_numpy()[0][0]
     return begin_end, trigger, trigger_end, stim_logic
+
+
+def stim_names_to_indices(stimuli, df):
+    # if any(isinstance(i, list) for i in stimuli):
+    #     stimuli_temp = []
+    #     for stimulus in stimuli:
+    #         stimuli_temp = stimuli_temp + stimulus
+    #     stimuli = stimuli_temp
+
+    stimuli_int = [index
+                   for stimulus in stimuli
+                   for index in (get_stimulus_name(df, stimulus)["stimulus_index"].tolist()
+                                 if isinstance(stimulus, str)
+                                 else [stimulus])]
+    return stimuli_int

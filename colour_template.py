@@ -55,14 +55,14 @@ class Colour_template:
     def get_stimulus_colors(self, name, sub_selection=None):
         colours = np.asarray(self.plot_colour_dataframe.loc[name]["Colours"])
         if sub_selection is not None:
-            colours = colours[sub_selection[0] :: sub_selection[1]]
+            colours = colours[sub_selection[0]:: sub_selection[1]]
 
         return colours
 
     def get_stimulus_names(self, name, sub_selection=None):
         names = np.asarray(self.plot_colour_dataframe.loc[name]["Description"])
         if sub_selection is not None:
-            names = names[sub_selection[0] :: sub_selection[1]]
+            names = names[sub_selection[0]:: sub_selection[1]]
 
         return names
 
@@ -160,6 +160,15 @@ class Colour_template:
 
     def create_stimcolour(self, name, nr_colours, description):
         return self.template.create_stimcolour(name, nr_colours, description)
+
+    def add_stimulus_to_plot(self, initial_fig, flash_durations, names=True):
+        if names:
+            names = self.names
+        else:
+            names = None
+
+        fig = add_stimulus_to_plotly(initial_fig, self.colours, flash_durations, names=names)
+        return fig
 
 
 class Interactive_template:
@@ -278,7 +287,7 @@ def add_stimulus_to_plotly(initial_fig, colours, flash_durations, names=None):
     height = 1
 
     # Create a new 2x1 subplot layout
-    fig = make_subplots(rows=2, cols=1, shared_xaxes=True)
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[1, 0.1])
 
     # Add the extracted data to the first subplot
     for trace in initial_data:
