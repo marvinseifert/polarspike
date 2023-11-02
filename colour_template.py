@@ -281,6 +281,7 @@ def add_stimulus_to_plotly(initial_fig, colours, flash_durations, names=None):
     # Extract data and layout from the initial figure
     initial_data = initial_fig.data
     initial_layout = initial_fig.layout
+    initial_y_label = initial_layout["yaxis"]["title"]["text"]
 
     # Rectangle dimensions
 
@@ -333,8 +334,10 @@ def add_stimulus_to_plotly(initial_fig, colours, flash_durations, names=None):
             range=[0, height], showgrid=False, zeroline=False, showticklabels=False
         ),
     )
-    fig.update_xaxes(title_text="Time (s)")
-    fig.update_yaxes(title_text="Repeats")
+    fig.update_xaxes(title_text="Time (s)", row=2)
+    fig.update_yaxes(title_text="Repeats", row=2)
+    fig.update_yaxes(title_text=initial_y_label, row=1)
+    fig.update_xaxes(title_text="", row=1)
     fig.update_layout(template="simple_white")
 
     return fig
