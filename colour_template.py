@@ -11,6 +11,7 @@ import matplotlib.patches as patches
 from mpl_toolkits.axes_grid1.axes_divider import HBoxDivider, VBoxDivider
 import mpl_toolkits.axes_grid1.axes_size as Size
 import matplotlib.gridspec as gridspec
+from matplotlib.colorbar import Colorbar
 
 
 class Colour_template:
@@ -172,8 +173,12 @@ class Colour_template:
         else:
             names = None
 
-        fig = add_stimulus_to_plotly(initial_fig, self.colours, flash_durations, names=names)
-        return fig
+        if type(initial_fig) == go.Figure:
+            fig = add_stimulus_to_plotly(initial_fig, self.colours, flash_durations, names=names)
+            return fig
+        elif type(initial_fig) == plt.Figure:
+            fig = add_stimulus_to_matplotlib(initial_fig, self.colours, flash_durations, names=names)
+            return fig
 
 
 class Interactive_template:
@@ -381,7 +386,21 @@ def add_stimulus_to_matplotlib(initial_fig, colours, flash_durations, names=None
     ax_stimulus = initial_fig.add_subplot(gs[n_original_subplots], sharex=original_axes[0])
     ax_stimulus.axis('off')  # Turn off the axis
 
-    original_axes, ax_stimulus = initial_fig.get_axes()  # Get the new axes
+    all_axs = initial_fig.get_axes()  # Get the new axes
+
+    new_ax = []
+    cbars = []
+
+    for ax in all_axs:
+        if ax.get_label() == "<colorbar>":
+            cbars.append(ax)
+        else:
+            new_ax.append(ax)
+
+    for idx, cbar in enumerate(cbars):
+        cbar.set_position([0.90 + idx / 50, 0.25 + idx / 50, 0.1, 0.1])
+
+    original_axes, ax_stimulus = new_ax
 
     # Set divider
     pad = 0.5
