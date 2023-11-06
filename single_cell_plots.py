@@ -112,6 +112,21 @@ def whole_stimulus(
         axs[0, 0].yaxis.set_ticks(np.arange(1, nr_cells * nr_repeats + 1, 2))
         axs[0, 0].set_yticklabels(np.repeat(unique_cells.to_numpy(), nr_repeats)[::2])
 
+    stim_ax = axs[0, 0].get_position()
+    cbar_ax = axs[0, 1].get_position()
+    axs[0, 1].set_position(
+        [stim_ax.x0 + stim_ax.width + 0.01, stim_ax.y0, cbar_ax.width, stim_ax.height]
+    )
+    stim_trace_pos = axs[1, 0].get_position()
+    axs[1, 0].set_position(
+        [stim_ax.x0, stim_ax.y0 - 0.1, stim_trace_pos.width, stim_trace_pos.height]
+    )
+    axs[1, 0].spines["top"].set_visible(False)
+    axs[1, 0].spines["right"].set_visible(False)
+    axs[1, 0].spines["bottom"].set_visible(False)
+    axs[1, 0].spines["left"].set_visible(False)
+    axs[1, 0].tick_params(axis="y", which="both", length=0)
+
     return fig, axs
 
 
