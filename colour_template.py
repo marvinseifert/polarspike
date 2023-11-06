@@ -61,14 +61,14 @@ class Colour_template:
     def get_stimulus_colors(self, name, sub_selection=None):
         colours = np.asarray(self.plot_colour_dataframe.loc[name]["Colours"])
         if sub_selection is not None:
-            colours = colours[sub_selection[0]:: sub_selection[1]]
+            colours = colours[sub_selection[0] :: sub_selection[1]]
 
         return colours
 
     def get_stimulus_names(self, name, sub_selection=None):
         names = np.asarray(self.plot_colour_dataframe.loc[name]["Description"])
         if sub_selection is not None:
-            names = names[sub_selection[0]:: sub_selection[1]]
+            names = names[sub_selection[0] :: sub_selection[1]]
 
         return names
 
@@ -174,10 +174,14 @@ class Colour_template:
             names = None
 
         if type(initial_fig) == go.Figure:
-            fig = add_stimulus_to_plotly(initial_fig, self.colours, flash_durations, names=names)
+            fig = add_stimulus_to_plotly(
+                initial_fig, self.colours, flash_durations, names=names
+            )
             return fig
         elif type(initial_fig) == plt.Figure:
-            fig = add_stimulus_to_matplotlib(initial_fig, self.colours, flash_durations, names=names)
+            fig = add_stimulus_to_matplotlib(
+                initial_fig, self.colours, flash_durations, names=names
+            )
             return fig
 
 
@@ -369,65 +373,38 @@ def add_stimulus_to_matplotlib(initial_fig, colours, flash_durations, names=None
     # Use constrained layout to handle the spacing automatically
     # initial_fig.set_constrained_layout(True)
 
-    # Get the original axes
-    original_axes = initial_fig.get_axes()
-    n_original_subplots = len(original_axes)
-
-    # Create a new GridSpec layout
-    gs = gridspec.GridSpec(n_original_subplots + 1, 1, figure=initial_fig,
-                           height_ratios=[1] * n_original_subplots + [0.1],
-                           width_ratios=[1])
-
-    # Move the original axes into the new GridSpec
-    for i, ax in enumerate(original_axes):
-        ax.set_subplotspec(gs[i])
-
     # Create the new subplot for the stimulus with shared x-axis
-    ax_stimulus = initial_fig.add_subplot(gs[n_original_subplots], sharex=original_axes[0])
-    ax_stimulus.axis('off')  # Turn off the axis
+    ax_stimulus = initial_fig.get_axes()[2]
+    original_axes = initial_fig.get_axes()[0]
+    original_axes.set_xlabel("")
+    org_pos = original_axes.get_position()
+    stim_pos = ax_stimulus.get_position()
 
-    all_axs = initial_fig.get_axes()  # Get the new axes
-
-    new_ax = []
-    cbars = []
-
-    for ax in all_axs:
-        if ax.get_label() == "<colorbar>":
-            cbars.append(ax)
-        else:
-            new_ax.append(ax)
-
-    for idx, cbar in enumerate(cbars):
-        cbar.set_position([0.90 + idx / 50, 0.25 + idx / 50, 0.1, 0.1])
-
-    original_axes, ax_stimulus = new_ax
-
-    # Set divider
-    pad = 0.5
-    divider = VBoxDivider(
-        initial_fig, 111,
-        horizontal=[Size.AxesX(original_axes), Size.Scaled(1), Size.AxesX(ax_stimulus)],
-        vertical=[Size.AxesY(ax_stimulus), Size.Fixed(pad), Size.AxesY(original_axes)])
-
-    ax_stimulus.set_axes_locator(divider.new_locator(0))
-    original_axes.set_axes_locator(divider.new_locator(2))
+    ax_stimulus.set_position([org_pos.x0, stim_pos.y0, org_pos.width, stim_pos.height])
 
     # Add rectangles to the new subplot
     x_position = 0
     for color, width in zip(colours, flash_durations):
-        rect = patches.Rectangle((x_position, 0), width, 1, linewidth=0, edgecolor='none', facecolor=color)
+        rect = patches.Rectangle(
+            (x_position, 0), width, 1, linewidth=0, edgecolor="none", facecolor=color
+        )
         ax_stimulus.add_patch(rect)
         x_position += width
 
     # Add text if names are provided
     if names is not None and len(names) == len(colours):
+        aspect = ax_stimulus.get_data_ratio()
         x_position = 0
         for i, width in enumerate(flash_durations):
-            ax_stimulus.text(x_position + width / 2, 0.5, names[i], ha='center', va='center', fontsize=14)
+            ax_stimulus.text(
+                x_position + width / 2,
+                0.5,
+                names[i],
+                ha="center",
+                va="center",
+                fontsize=12**2 * aspect,
+            )
             x_position += width
-
-    initial_fig.axes[1].set_xlim(0, x_position)  # Set the x-axis limits to match the rectangles
-    initial_fig.axes[1].set_ylim(0, 1)  # Set the y-axis limits to match the rectangle height
 
     # Adjust the layout
     # initial_fig.tight_layout()

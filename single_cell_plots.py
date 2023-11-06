@@ -38,100 +38,150 @@ def whole_stimulus_plotly(df):
 
 
 def whole_stimulus(
-        df, how="times_triggered", spaced=True, height=None, width=None, cmap="Greys", bin_size=0.05, norm="linear"
+    df,
+    how="times_triggered",
+    spaced=True,
+    height=None,
+    width=None,
+    cmap="Greys",
+    bin_size=0.05,
+    norm="linear",
 ):
+    # Store some information about the data
+    y_key = "repeat"
+    unique_cells = np.unique(df["cell_index"])
+    nr_repeats = df["repeat"].max() + 1
+    nr_cells = unique_cells.shape[0]  # In case of a single cell or a single color
+
     if height is None:
-        height = int(5 * np.unique(df["cell_index"]).shape[0])
+        if nr_cells > 3:
+            height = int(5 * nr_cells)
+        else:
+            height = 10
     if width is None:
         width = int(np.max(df[how]) / bin_size)
 
-    unique_cells = pd.Series(df["cell_index"].unique()).sort_values()
-    mapping = pd.Series(index=unique_cells, data=range(len(unique_cells)))
-
+    # Create a figure and axis to draw
+    fig, axs = plt.subplots(
+        2,
+        2,
+        figsize=(20, height),
+        width_ratios=[1, 0.01],
+        height_ratios=[1, 0.1],
+        sharex="col",
+    )
+    axs[1, 1].axis("off")
     # Map 'cell_index' to 'cell_index_linear' using the mapping
     df = df.copy()
-    y_key = "repeat"
     if spaced:
-        df["cell_index_linear"] = df["cell_index"].map(mapping)
-        # Assign a new unique index for each cell and repeat:
-        combined_indices = np.array(list(zip(df["cell_index_linear"], df["repeat"])))
-
-        _, inverse_indices = np.unique(combined_indices, axis=0, return_inverse=True)
-        df["cell_index_linear"] = inverse_indices + 1
-        print(np.unique(df["cell_index_linear"]))
-
+        # To space the cells, we need to map the combined repeats and cells indices to a linear range.
+        df, unique_cells = map_cells(df)
         y_key = "cell_index_linear"
 
-    nr_cells = np.unique(df["cell_index"]).shape[0]
-    nr_repeats = df["repeat"].max() + 1
-    if nr_cells < 3:
-        height = 10
-
+    # Switch data format to categorical
     df["cell_index"] = df["cell_index"].astype("category")
     df["cell_index"] = df["cell_index"].cat.as_ordered()
-    fig, ax = plt.subplots(figsize=(20, 1 * height))
 
     if spaced:
         plot_height = int(nr_cells * nr_repeats)
     else:
         plot_height = nr_repeats
 
-    if type(cmap) == str:
-        artist = dsshow(
-            df,
-            ds.Point(how, y_key),
-            plot_height=plot_height,
-            # color_key=cmap,
-            cmap=cmap,
-            plot_width=width,
-            height_scale=10,
-            norm=norm,
-            vmin=0,
-            ax=ax,
-        )
-        cbar = fig.colorbar(artist, ax=ax)
-        cbar.set_label(f"Nr of spikes, binsize={bin_size} s")
-        ax.set_ylabel("Repeat(s)")
-        # norm = Normalize(vmin=df[how].min(), vmax=df[how].max())
-        # # Create a color mapper with the chosen colormap
-        # sm = ScalarMappable(cmap=cmap, norm=norm)
-        # sm.set_array([])
-        # divider = make_axes_locatable(ax)
-        # cax = divider.append_axes("right", size="5%", pad=0.05)
-        # cbar = fig.colorbar(sm, cax=cax, anchor=(10, 0))
-        # cbar.set_label("Nr of spikes")
+    if type(cmap) is str:
+        draw_artist(df, fig, axs, how, y_key, cmap, norm, plot_height, width, bin_size)
 
     else:
         if len(cmap) != len(unique_cells):
             cmap = cmap * len(unique_cells)
         for cell, c in zip(unique_cells, cmap):
-            artist = dsshow(
-                df.query(f"cell_index == {cell}"),
-                ds.Point(how, y_key),
-                plot_height=plot_height,
-                # color_key=cmap,
-                cmap=c,
-                plot_width=width,
-                vmin=0,
-                norm=norm,
-                ax=ax,
+            df_temp = df.query(f"cell_index == {cell}")
+            draw_artist(
+                df_temp,
+                fig,
+                axs,
+                how,
+                y_key,
+                c,
+                norm,
+                plot_height,
+                width,
+                bin_size,
             )
-            cbar = fig.colorbar(artist, ax=ax, shrink=0.1)
-        cbar.set_label(f"Nr of spikes, binsize={bin_size} s")
-        ax.set_ylabel("Cell(s) - Repeat(s)")
-    # ax.set_aspect("auto")
 
-    # norm = mcolors.Normalize(vmin=df[how].min(), vmax=df[how].max())
-
-    # cbar = plt.colorbar(artist, ax=ax)
-
-    ax.set_xlabel("Time in seconds")
     if spaced:
-        ax.yaxis.set_ticks(np.arange(1, nr_cells * nr_repeats + 1, 2))
-        ax.set_yticklabels(np.repeat(unique_cells.to_numpy(), nr_repeats)[::2])
-    # ax.hlines(
-    # ax.yaxis.set_major_locator(ticker.NullLocator())
+        axs[0, 0].yaxis.set_ticks(np.arange(1, nr_cells * nr_repeats + 1, 2))
+        axs[0, 0].set_yticklabels(np.repeat(unique_cells.to_numpy(), nr_repeats)[::2])
 
-    ax.set_title("Stimulus Overview")
+    return fig, axs
 
-    return fig, ax
+
+def draw_artist(df, fig, axs, how, y_key, cmap, norm, plot_height, width, bin_size):
+    """Draws the artist on the figure and returns the figure and axis.
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        A DataFrame containing the times of spikes relative to the stimulus onset.
+    fig, ax : matplotlib.figure.Figure, matplotlib.axes.Axes
+        The figure and axis on which to draw the artist.
+    how : str
+        The column name of the DataFrame containing the spike times, valid are ('times_triggered', 'times_stimulus')
+    y_key : str
+        The column name of the DataFrame containing the cell indices.
+    cmap : str or list
+        The colormap to use for the plot.
+    norm : str
+        The normalization to use for the plot. Valid are ("linear", "eq_hist" "cbrt").
+    plot_height : int
+        The height of the plot in pixels used for drawing the heatmap.
+    width : int
+        The width of the plot in pixels used for drawing the heatmap.
+    bin_size : float
+        The bin size in seconds used for drawing the heatmap.
+    Returns
+    -------
+    fig, ax : matplotlib.figure.Figure, matplotlib.axes.Axes
+        The figure and axis on which the artist was drawn.
+    """
+
+    # Add the datashader artist to the figure
+    artist = dsshow(
+        df,
+        ds.Point(how, y_key),
+        plot_height=plot_height,
+        cmap=cmap,
+        plot_width=width,
+        vmin=0,
+        norm=norm,
+        ax=axs[0, 0],
+    )
+    cbar = fig.colorbar(artist, cax=axs[0, 1], shrink=0.1)
+
+    cbar.set_label(f"Nr of spikes, binsize={bin_size} s")
+    axs[0, 0].set_ylabel("Cell(s) - Repeat(s)")
+    axs[1, 0].set_xlabel("Time in seconds")
+
+
+def map_cells(df):
+    """Maps the cell indices to a linear range.
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        A DataFrame containing the times of spikes relative to the stimulus onset.
+    Returns
+    -------
+    df : pandas.DataFrame
+        The DataFrame with the cell indices mapped to a linear range.
+    unique_cells : pandas.Series
+        A Series containing the unique cell indices.
+
+    """
+    unique_cells = pd.Series(df["cell_index"].unique()).sort_values()
+    mapping = pd.Series(index=unique_cells, data=range(len(unique_cells)))
+    df["cell_index_linear"] = df["cell_index"].map(mapping)
+    # Assign a new unique index for each cell and repeat:
+    combined_indices = np.array(list(zip(df["cell_index_linear"], df["repeat"])))
+
+    _, inverse_indices = np.unique(combined_indices, axis=0, return_inverse=True)
+    df["cell_index_linear"] = inverse_indices + 1
+
+    return df, unique_cells
