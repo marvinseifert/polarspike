@@ -38,7 +38,7 @@ def whole_stimulus_plotly(df):
 
 
 def whole_stimulus(
-        df, how="times_triggered", spaced=True, height=None, width=None, cmap="Greys", bin_size=0.05
+        df, how="times_triggered", spaced=True, height=None, width=None, cmap="Greys", bin_size=0.05, norm="linear"
 ):
     if height is None:
         height = int(5 * np.unique(df["cell_index"]).shape[0])
@@ -84,13 +84,14 @@ def whole_stimulus(
             # color_key=cmap,
             cmap=cmap,
             plot_width=width,
-            height_scale=5,
-            norm="linear",
+            height_scale=10,
+            norm=norm,
             vmin=0,
             ax=ax,
         )
         cbar = fig.colorbar(artist, ax=ax)
         cbar.set_label(f"Nr of spikes, binsize={bin_size} s")
+        ax.set_ylabel("Repeat(s)")
         # norm = Normalize(vmin=df[how].min(), vmax=df[how].max())
         # # Create a color mapper with the chosen colormap
         # sm = ScalarMappable(cmap=cmap, norm=norm)
@@ -112,11 +113,12 @@ def whole_stimulus(
                 cmap=c,
                 plot_width=width,
                 vmin=0,
-                norm="linear",
+                norm=norm,
                 ax=ax,
             )
             cbar = fig.colorbar(artist, ax=ax, shrink=0.1)
         cbar.set_label(f"Nr of spikes, binsize={bin_size} s")
+        ax.set_ylabel("Cell(s) - Repeat(s)")
     # ax.set_aspect("auto")
 
     # norm = mcolors.Normalize(vmin=df[how].min(), vmax=df[how].max())
@@ -129,7 +131,7 @@ def whole_stimulus(
         ax.set_yticklabels(np.repeat(unique_cells.to_numpy(), nr_repeats)[::2])
     # ax.hlines(
     # ax.yaxis.set_major_locator(ticker.NullLocator())
-    ax.set_ylabel("Cell(s) - Repeat(s)")
-    ax.set_title("Recording Overview")
+
+    ax.set_title("Stimulus Overview")
 
     return fig, ax
