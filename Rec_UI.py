@@ -348,11 +348,6 @@ class Explorer:
             fig.show()
 
     def update_stimulus_tabulator(self, event):
-        if self.initial_stim_df:
-            self.merge_stimulus_df()
-        else:
-            self.initial_stim_df = True
-
         stimulus_id = self.stimulus_select.value
 
         self.single_stimulus_df.value = self.overview_df.spikes_df.query(
@@ -360,13 +355,16 @@ class Explorer:
         ).reset_index(drop=True)
 
     def merge_stimulus_df(self):
-        self.single_stimulus_df.value = self.single_stimulus_df.value.set_index(
+        df_temp = self.single_stimulus_df.value.set_index(
             ["cell_index", "stimulus_index"]
         )
         self.overview_df.dataframes["spikes_df"] = self.overview_df.dataframes[
             "spikes_df"
         ].set_index(["cell_index", "stimulus_index"])
-        self.overview_df.dataframes["spikes_df"].update(self.single_stimulus_df.value)
+        self.overview_df.dataframes["spikes_df"] = pd.concat(
+            [self.overview_df.dataframes["spikes_df"], df_temp["qi"]], axis=1
+        )
+
         self.overview_df.dataframes["spikes_df"] = self.overview_df.dataframes[
             "spikes_df"
         ].reset_index(drop=False)
@@ -376,7 +374,7 @@ class Explorer:
         cell_indices = [self.single_stimulus_df.value.loc[indices]["cell_index"]]
 
         plot_df = self.overview_df.get_spikes_triggered(
-            cell_indices, [self.stimulus_select.value], time="seconds"
+            [cell_indices], [[self.stimulus_select.value]], time="seconds"
         )
         if len(plot_df) != 0:
             raster_plot = single_cell_plots.whole_stimulus_plotly(plot_df)
@@ -409,7 +407,7 @@ class Explorer:
         self.status.active = True
         cell_ids = self.single_stimulus_df.value["cell_index"].unique().tolist()
         spikes_df = self.overview_df.get_spikes_triggered(
-            cell_ids, [self.stimulus_select.value], time="seconds", pandas=False
+            [cell_ids], [[self.stimulus_select.value]], time="seconds", pandas=False
         )
         # Update the cell indices, to account for cells without responses
         cell_ids = spikes_df["cell_index"].unique().to_numpy()
@@ -431,6 +429,8 @@ class Explorer:
         df_temp["qi"] = 0
         df_temp.loc[cell_ids, "qi"] = qis
         self.single_stimulus_df.value = df_temp.reset_index(drop=False)
+        # Add the QI to the overview object
+        self.merge_stimulus_df()
         self.status.active = False
 
 

@@ -27,19 +27,19 @@ def psth(df, bin_size=0.05, start=0, end=None):
     return psth, bins
 
 
-def psth_by_cell(df, bin_size=0.05, return_idx=False):
+def psth_by_cell(df, bin_size=0.05, return_idx=False, window_end=None):
     try:
         df = pl.from_pandas(df)
     except TypeError:
         pass
-
-    max_spike = df.max()["times_triggered"][0]
+    if window_end is None:
+        window_end = df.max()["times_triggered"][0]
     cell_spikes = (
         df.group_by("cell_index")
         .agg("times_triggered")[["cell_index", "times_triggered"]]
         .to_numpy()
     )
-    bins = np.arange(0, max_spike, bin_size)
+    bins = np.arange(0, window_end, bin_size)
     histograms = np.zeros((cell_spikes[:, 1].shape[0], bins.shape[0] - 1))
     for idx, spiketrain in enumerate(cell_spikes[:, 1]):
         histograms[idx], _ = np.histogram(spiketrain, bins=bins)
