@@ -8,27 +8,17 @@ Created on Thu Jul 15 11:23:06 2021
 import contextlib
 import pandas as pd
 import numpy as np
-import h5py
-import backbone
-from importlib import reload
-
-import matplotlib.pyplot as plt
-import math
 import multiprocessing as mp
 from functools import partial
 import traceback
 import pickle
-import plotly
-from ipywidgets import widgets
-import plotly.graph_objects as go
 import stimulus_spikes
 import polars as pl
-
 from grid import Table
 import df_filter
 from dataclasses import dataclass, field
-import multiprocessing.pool as mpp
 import cells_and_stimuli
+import stimulus_trace
 
 
 def spike_load_worker(args):
@@ -621,11 +611,62 @@ class Recording:
         self.dataframes[dataframe][series.name] = self.dataframes[dataframe][
             series.name
         ].astype(series_dtype)
-        self.dataframes[dataframe] = self.dataframes[dataframe].set_index(
-            series.index.name
-        )
+        if series.index.name is not None:
+            self.dataframes[dataframe] = self.dataframes[dataframe].set_index(
+                series.index.name
+            )
+        else:
+            self.dataframes[dataframe] = self.dataframes[dataframe].set_index(
+                series.index.names
+            )
         self.dataframes[dataframe].update(series)
         self.dataframes[dataframe] = self.dataframes[dataframe].reset_index(drop=False)
+
+    def split_triggers(
+        self, stimulus_df="stimulus_df", nr_splits=2, stimulus_indices=None
+    ):
+        """
+        Creates new (smaller, calculated) triggers for stimuli. It returns a new dataframe that contains the new triggers.
+        The new triggers are calculated by splitting the old triggers in half *nr_splits.
+        This can be useful if spikes from specific time intervals of the stimulus are of interest.
+
+        Parameters
+        ----------
+        stimulus_df : str
+            Name of the stimulus dataframe that shall be used.
+        nr_splits : int
+            Number of times the triggers shall be split.
+        stimulus_indices : list of integers
+            List of stimulus indices that shall be used to create the new triggers. If not specified, all stimuli are used.
+
+        Returns
+        -------
+        stimulus_df : pandas.DataFrame
+            A dataframe that contains the new triggers.
+
+        """
+        if stimulus_indices is not None:
+            stimulus_df = self.dataframes[stimulus_df].loc[stimulus_indices]
+        else:
+            stimulus_df = self.dataframes[stimulus_df]
+
+        nr_stimuli = len(stimulus_df)
+        repeat_logic = stimulus_df["stimulus_repeat_logic"].to_numpy()
+        old_triggers = np.vstack(stimulus_df["trigger_fr_relative"].to_numpy())
+        new_triggers, new_intervals = stimulus_trace.split_triggers(
+            old_triggers, nr_splits
+        )
+        stimulus_df["trigger_fr_relative"] = np.array_split(
+            new_triggers.flatten(), nr_stimuli, axis=0
+        )
+        stimulus_df["trigger_int"] = np.array_split(
+            new_intervals.flatten(), nr_stimuli, axis=0
+        )
+        stimulus_df["trigger_ends"] = np.array_split(
+            new_triggers[:, 1:].flatten(), nr_stimuli, axis=0
+        )
+        stimulus_df["stimulus_repeat_logic"] = repeat_logic * (2**nr_splits)
+        return stimulus_df
 
 
 class Recording_s(Recording):

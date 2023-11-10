@@ -112,23 +112,3 @@ def mean_trigger_times(df, stimulus, time="seconds"):
         new_trigger_int = new_trigger_int / stim_df["sampling_freq"].values[0]
 
     return new_trigger_int
-
-
-def split_triggers(old_triggers, nr_splits=1):
-    new_triggers = np.concatenate(
-        (old_triggers, old_triggers[:, :-1] + np.diff(old_triggers, axis=1) / 2),
-        axis=1,
-    ).astype(int)
-    new_triggers = np.sort(new_triggers, axis=1)
-    for _ in range(1, nr_splits):
-        old_triggers = new_triggers.copy()
-        new_triggers = np.concatenate(
-            (
-                old_triggers,
-                old_triggers[:, :-1] + np.diff(old_triggers, axis=1) / 2,
-            ),
-            axis=1,
-        ).astype(int)
-        new_triggers = np.sort(new_triggers, axis=1)
-    new_intervals = np.diff(new_triggers, axis=1)
-    return new_triggers, new_intervals
