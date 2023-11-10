@@ -142,7 +142,7 @@ class Recording:
         dfs = []
         # Loop over all stimuli and all cells and load the spikes (and waveforms):
         for stimulus, cell in zip(stimuli, cells):
-            df = self.get_triggered(cell, stimulus, time, waveforms)
+            df = self.get_triggered(cell, stimulus, time, waveforms, stimulus_df)
             df = df.with_columns(stimulus_index=pl.lit(stimulus[0]))
             dfs.append(df)
         df = pl.concat(dfs)  # Create one polars dataframe

@@ -27,7 +27,9 @@ def psth(df, bin_size=0.05, start=0, end=None):
     return psth, bins
 
 
-def psth_by_cell(df, bin_size=0.05, return_idx=False, window_end=None):
+def psth_by_index(
+    df, bin_size=0.05, index="cell_index", return_idx=False, window_end=None
+):
     try:
         df = pl.from_pandas(df)
     except TypeError:
@@ -35,9 +37,7 @@ def psth_by_cell(df, bin_size=0.05, return_idx=False, window_end=None):
     if window_end is None:
         window_end = df.max()["times_triggered"][0]
     cell_spikes = (
-        df.group_by("cell_index")
-        .agg("times_triggered")[["cell_index", "times_triggered"]]
-        .to_numpy()
+        df.group_by(index).agg("times_triggered")[[index, "times_triggered"]].to_numpy()
     )
     bins = np.arange(0, window_end, bin_size)
     histograms = np.zeros((cell_spikes[:, 1].shape[0], bins.shape[0] - 1))

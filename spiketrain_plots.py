@@ -3,16 +3,9 @@ import polars as pl
 import matplotlib.pyplot as plt
 from datashader.mpl_ext import dsshow
 import datashader as ds
-import matplotlib.colors as mcolors
-from matplotlib.cm import ScalarMappable
 import numpy as np
-from matplotlib import cm
 import pandas as pd
-import matplotlib.ticker as ticker
-from matplotlib.colors import Normalize
-from bokeh.models import LinearColorMapper
-from matplotlib.colorbar import ColorbarBase
-from mpl_toolkits.axes_grid1 import make_axes_locatable
+import histograms
 
 
 def whole_stimulus_plotly(df, stacked=False):
@@ -66,31 +59,41 @@ def whole_stimulus(
     unique_indices = np.unique(df[index])
     nr_repeats = df[y_key].max() + 1
     nr_unique = unique_indices.shape[0]  # In case of a single cell or a single color
+    max_time = np.max(df[how])
 
     if height is None:
         if nr_unique > 3:
             height = int(5 * nr_unique)
         else:
             height = 10
-    plot_width = int(np.max(df[how]) / bin_size)
+    plot_width = int(max_time / bin_size)
 
     # Create a figure and axis to draw
     fig, axs = plt.subplots(
-        2,
+        3,
         2,
         figsize=(width, height),
         width_ratios=[1, 0.01],
-        height_ratios=[1, 0.1],
+        height_ratios=[0.1, 1, 0.1],
         sharex="col",
     )
 
-    axs[1, 1].axis("off")
     # Map 'cell_index' to 'cell_index_linear' using the mapping
     df = df.copy()
     if stacked:
         # To space the cells, we need to map the combined repeats and cells indices to a linear range.
         df, unique_indices = map_index(df, index, y_key)
         y_key = "index_linear"
+    #     psth, bins = histograms.psth_by_index(
+    #         df, bin_size=bin_size, index=index, window_end=max_time
+    #     )
+    # else:
+    psth, bins = histograms.psth(df, bin_size=bin_size, start=0, end=max_time)
+    psth = psth / unique_indices.shape[0] * bin_size
+
+    # Plot the PSTH
+
+    axs[0, 0].plot(bins[:-1], psth, color="black", alpha=0.5)
 
     # Switch data format to categorical
     df["index"] = df[index].astype("category")
@@ -103,7 +106,16 @@ def whole_stimulus(
 
     if type(cmap) is str:
         draw_artist(
-            df, fig, axs, how, y_key, cmap, norm, plot_height, plot_width, bin_size
+            df,
+            fig,
+            axs,
+            how,
+            y_key,
+            cmap,
+            norm,
+            plot_height,
+            plot_width,
+            bin_size,
         )
 
     else:
@@ -126,32 +138,34 @@ def whole_stimulus(
             )
 
     if stacked:
-        axs[0, 0].yaxis.set_ticks(np.arange(1, nr_unique * nr_repeats + 1, 2))
-        axs[0, 0].set_yticklabels(np.repeat(unique_indices.to_numpy(), nr_repeats)[::2])
-
-    axs[0, 0].set_ylabel(f"{index} and repeat(s)")
-    axs[1, 0].set_xlabel("Time in s")
-
-    stim_ax = axs[0, 0].get_position()
-    cbar_ax = axs[0, 1].get_position()
+        axs[1, 0].yaxis.set_ticks(np.arange(1, nr_unique * nr_repeats + 1, 2))
+        axs[1, 0].set_yticklabels(np.repeat(unique_indices.to_numpy(), nr_repeats)[::2])
+    axs[0, 0].set_ylabel("Spikes / s")
+    axs[1, 0].set_ylabel(f"{index} and repeat(s)")
+    axs[2, 0].set_xlabel("Time in s")
+    axs[2, 1].axis("off")
+    axs[0, 1].axis("off")
+    axs[0, 0].spines[["right", "top"]].set_visible(False)
+    stim_ax = axs[1, 0].get_position()
+    cbar_ax = axs[1, 1].get_position()
     cbar_max_height = 0.1
     if stim_ax.height < cbar_max_height:
         cbar_max_height = stim_ax.height
 
-    axs[0, 1].set_position(
+    axs[1, 1].set_position(
         [stim_ax.x0 + stim_ax.width + 0.01, stim_ax.y0, cbar_ax.width, cbar_max_height]
     )
-    stim_trace_pos = axs[1, 0].get_position()
-    axs[1, 0].set_position(
+    stim_trace_pos = axs[2, 0].get_position()
+    axs[2, 0].set_position(
         [stim_ax.x0, stim_ax.y0 - 0.1, stim_ax.width, stim_trace_pos.height]
     )
-    axs[1, 0].spines["top"].set_visible(False)
-    axs[1, 0].spines["right"].set_visible(False)
-    axs[1, 0].spines["bottom"].set_visible(False)
-    axs[1, 0].spines["left"].set_visible(False)
-    axs[1, 0].tick_params(axis="y", which="both", length=0)
-    axs[1, 0].set_yticks([])
-    axs[0, 0].set_xlim(0, np.max(df[how]))
+    axs[2, 0].spines["top"].set_visible(False)
+    axs[2, 0].spines["right"].set_visible(False)
+    axs[2, 0].spines["bottom"].set_visible(False)
+    axs[2, 0].spines["left"].set_visible(False)
+    axs[2, 0].tick_params(axis="y", which="both", length=0)
+    axs[2, 0].set_yticks([])
+    axs[1, 0].set_xlim(0, np.max(df[how]))
     return fig, axs
 
 
@@ -163,7 +177,7 @@ def draw_artist(
     ----------
     df : pandas.DataFrame
         A DataFrame containing the times of spikes relative to the stimulus onset.
-    fig, ax : matplotlib.figure.Figure, matplotlib.axes.Axes
+    fig, axs : matplotlib.figure.Figure, matplotlib.axes.Axes
         The figure and axis on which to draw the artist.
     how : str
         The column name of the DataFrame containing the spike times, valid are ('times_triggered', 'times_stimulus')
@@ -194,10 +208,10 @@ def draw_artist(
         plot_width=plot_width,
         vmin=0,
         norm=norm,
-        ax=axs[0, 0],
+        ax=axs[1, 0],
         aspect="auto",
     )
-    cbar = fig.colorbar(artist, cax=axs[0, 1], shrink=0.1)
+    cbar = fig.colorbar(artist, cax=axs[1, 1], shrink=0.1)
 
     cbar.set_label(f"Nr of spikes, binsize={bin_size} s")
 

@@ -374,10 +374,14 @@ def add_stimulus_to_matplotlib(initial_fig, colours, flash_durations, names=None
     # initial_fig.set_constrained_layout(True)
 
     # Create the new subplot for the stimulus with shared x-axis
-    ax_stimulus = initial_fig.get_axes()[2]
-    original_axes = initial_fig.get_axes()[0]
-    original_axes.set_xlabel("")
-    org_pos = original_axes.get_position()
+    axs = np.asarray(initial_fig.get_axes()).reshape(
+        initial_fig.axes[0].get_subplotspec().get_gridspec().get_geometry()
+    )
+    ax_stimulus = axs[-1, 0]
+    original_axes = axs[:-1, 0]
+    # for ax in original_axes:
+    #     ax.set_xlabel("")
+    org_pos = original_axes[-1].get_position()
     stim_pos = ax_stimulus.get_position()
 
     ax_stimulus.set_position([org_pos.x0, stim_pos.y0, org_pos.width, stim_pos.height])
