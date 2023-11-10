@@ -14,7 +14,8 @@ def spike_counts_from_file(file_parquet, cmap="Oranges"):
     return plot_spike_counts(df, cmap=cmap)
 
 
-def isi_from_file(file_parquet, freq=1, x="times", cmap="Viridis", cutoff=18.0):
+def isi_from_file(file_parquet, freq=1, x="times", cmap="viridis", cutoff=0.001):
+    cutoff = (1 / freq) * cutoff
     df = pl.scan_parquet(file_parquet)
     df = df.select(pl.col("cell_index"), pl.col("times"))
     df = df.with_columns(pl.col("times").truediv(freq).alias("times"))
@@ -76,7 +77,7 @@ def plot_spike_counts(df, cmap):
     return fig, ax
 
 
-def plot_isi(df, x, cmap, cutoff=18.0):
+def plot_isi(df, x, cmap="viridis", cutoff=18.0):
     df = df.sort(["cell_index", "times"], descending=False)
     df = df.with_columns(pl.col("times").diff(null_behavior="ignore").alias("isi"))
     df = df.with_columns(pl.when(pl.col("isi") < 0).then(0).alias("diff"))
@@ -89,9 +90,7 @@ def plot_isi(df, x, cmap, cutoff=18.0):
 
     fig, ax = plt.subplots(figsize=(15, 10))
 
-    artist = dsshow(
-        plot_df, ds.Point(x, "log_isi"), norm="eq_hist", cmap="viridis", ax=ax
-    )
+    artist = dsshow(plot_df, ds.Point(x, "log_isi"), norm="eq_hist", cmap=cmap, ax=ax)
     ax.set_aspect("auto")
 
     ax.set_yticks(
@@ -112,7 +111,7 @@ def plot_isi(df, x, cmap, cutoff=18.0):
     norm = mcolors.LogNorm(vmin=plot_df["isi"].min(), vmax=plot_df["isi"].max())
 
     ax.legend()
-    sm = ScalarMappable(cmap="viridis", norm=norm)
+    sm = ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array(
         []
     )  # This line is needed to create the ScalarMappable object but the array is not used
@@ -166,7 +165,7 @@ def plot_spike_amplitudes(df, cmap):
 
     artist = dsshow(
         plot_df,
-        ds.Point("time in seconds", "voltage"),
+        ds.Point("times", "voltage"),
         plot_height=120,
         norm="eq_hist",
         cmap=cmap,

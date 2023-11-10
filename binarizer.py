@@ -49,6 +49,13 @@ def timestamps_to_binary_polars(df_timestamps, sample_rate, max_window):
         .select("cell_index", "value", "repeat", "index")
     )
 
+    # Fill dataframes with single spikes
+    if df_result["cell_index"].unique().max() is None:
+        df_result = df_result.with_columns(
+            cell_index=pl.lit(df_timestamps["cell_index"])
+        )
+        df_result = df_result.with_columns(repeat=pl.lit(df_timestamps["repeat"]))
+
     # If cell didn't spike in a repeat, fill with zeros
 
     return df_result
@@ -92,7 +99,9 @@ def apply_on_group(sample_rate, max_window, group_df):
 
 def timestamps_to_binary_multi(df, bin_size, max_window, max_repeat):
     max_window = np.ceil(max_window / bin_size + bin_size).astype(int)
-    # print(max_window)
+    df = reject_single_spikes(
+        df
+    )  # This filters cells with single spikes or spikes only in one repeat
     func = partial(apply_on_group, bin_size, max_window)
     results = df.group_by("cell_index", "repeat").map_groups(func)
 
@@ -121,12 +130,10 @@ def calc_qis(result_df):
     qis = np.zeros(len(result_df))
     for idx, cell in enumerate(result_df):
         qis[idx] = quality_index(repeats, bins_per_repeat, cell)
-
     return qis
 
 
 def quality_index(repeats, bins, df):
-    qi = []
     gauswins = np.tile(kernel_template(sampling_freq=1000)[::-1], (repeats, 1))
     array = binary_as_array(repeats, bins, df)
     exs = signal.oaconvolve(array, gauswins, mode="valid", axes=1)
@@ -172,3 +179,14 @@ def kernel_template(width=0.0100, sampling_freq=17852.767845719834):
 
     # initialize filtered signal vector
     return gauswin
+
+
+def reject_single_spikes(df):
+    unique_spikes = df.group_by("cell_index").count().filter(pl.col("count") == 1)
+    unique_repeat = df.group_by("repeat").count().filter(pl.col("count") == 1)
+    all_unique = np.concatenate(
+        [unique_spikes["cell_index"].to_numpy(), unique_repeat["repeat"].to_numpy()]
+    )
+    unique_cells = np.unique(all_unique)
+
+    return df.filter(pl.col("cell_index").is_in(unique_cells) == False)

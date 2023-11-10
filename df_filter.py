@@ -19,11 +19,15 @@ def find_stimuli(df, stimuli):
     elif type(stimuli) == str:
         return df.query(f"stimulus_name == '{stimuli}'")
     elif type(stimuli) == slice:
-        return df.query(f"stimulus_index >= {stimuli.start} & stimulus_index <= {stimuli.stop}")
+        return df.query(
+            f"stimulus_index >= {stimuli.start} & stimulus_index <= {stimuli.stop}"
+        )
     elif type(stimuli) == dict:
         for key in stimuli.keys():
             df_filtered = df.query(f"stimulus_name == '{key}'")
-            return df_filtered.query(f"stimulus_index >= {stimuli[key][0]} & stimulus_index <= {stimuli[key][1]}")
+            return df_filtered.query(
+                f"stimulus_index >= {stimuli[key][0]} & stimulus_index <= {stimuli[key][1]}"
+            )
 
 
 def get_stimulus_index(df, stimulus):
@@ -49,9 +53,13 @@ def stim_names_to_indices(stimuli, df):
     #         stimuli_temp = stimuli_temp + stimulus
     #     stimuli = stimuli_temp
 
-    stimuli_int = [index
-                   for stimulus in stimuli
-                   for index in (get_stimulus_name(df, stimulus)["stimulus_index"].tolist()
-                                 if isinstance(stimulus, str)
-                                 else [stimulus])]
+    stimuli_int = [
+        [index]
+        for stimulus in stimuli
+        for index in (
+            get_stimulus_name(df, stimulus[0])["stimulus_index"].tolist()
+            if isinstance(stimulus[0], str)
+            else stimulus
+        )
+    ]
     return stimuli_int

@@ -49,7 +49,7 @@ def load_triggered(
     dfs = []
     repeat = 0
     for stimulus, rel_t, sub_t in zip(
-        range(trigger_end.shape[0] - 1), rel_trigger[:-1], trigger_sub
+        range(trigger_end.shape[0]), rel_trigger, trigger_sub
     ):
         times = subset_df.filter(
             (pl.col("times_relative") > trigger_start[stimulus])

@@ -15,7 +15,7 @@ import backbone
 import Extractors
 import recording_overview
 import ipywidgets as widgets
-import single_cell_plots
+import spiketrain_plots
 from pathlib import Path
 import colour_template
 import stimulus_spikes
@@ -361,9 +361,12 @@ class Explorer:
         self.overview_df.dataframes["spikes_df"] = self.overview_df.dataframes[
             "spikes_df"
         ].set_index(["cell_index", "stimulus_index"])
-        self.overview_df.dataframes["spikes_df"] = pd.concat(
-            [self.overview_df.dataframes["spikes_df"], df_temp["qi"]], axis=1
-        )
+        if "qi" in self.overview_df.dataframes["spikes_df"].columns:
+            self.overview_df.dataframes["spikes_df"].update(df_temp)
+        else:
+            self.overview_df.dataframes["spikes_df"] = pd.concat(
+                [self.overview_df.dataframes["spikes_df"], df_temp["qi"]], axis=1
+            )
 
         self.overview_df.dataframes["spikes_df"] = self.overview_df.dataframes[
             "spikes_df"
@@ -410,21 +413,19 @@ class Explorer:
             [cell_ids], [[self.stimulus_select.value]], time="seconds", pandas=False
         )
         # Update the cell indices, to account for cells without responses
-        cell_ids = spikes_df["cell_index"].unique().to_numpy()
-        qis = binarizer.calc_qis(
-            binarizer.timestamps_to_binary_multi(
-                spikes_df,
-                0.001,
-                np.sum(
-                    stimulus_spikes.mean_trigger_times(
-                        self.overview_df.stimulus_df, self.stimulus_select.value
-                    )
-                ),
-                self.overview_df.stimulus_df.loc[self.stimulus_select.value][
-                    "nr_repeats"
-                ],
-            )
+        binary_df = binarizer.timestamps_to_binary_multi(
+            spikes_df,
+            0.001,
+            np.sum(
+                stimulus_spikes.mean_trigger_times(
+                    self.overview_df.stimulus_df, self.stimulus_select.value
+                )
+            ),
+            self.overview_df.stimulus_df.loc[self.stimulus_select.value]["nr_repeats"],
         )
+        qis = binarizer.calc_qis(binary_df)
+        cell_ids = binary_df["cell_index"].unique().to_numpy()
+
         df_temp = self.single_stimulus_df.value.set_index("cell_index")
         df_temp["qi"] = 0
         df_temp.loc[cell_ids, "qi"] = qis

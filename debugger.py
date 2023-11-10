@@ -2,17 +2,21 @@ import Overview
 import stimulus_spikes
 import binarizer
 import numpy as np
-import single_cell_plots
+import spiketrain_plots
 import colour_template
 
+
+recordings = Overview.Recording_s(r"D:\combined_analysis", "chicken")
+recordings.add_recording(
+    Overview.Recording.load("D:\Chicken_19_08_21\Phase_00\overview")
+)
+recordings.add_recording(
+    Overview.Recording.load("D:\Chicken_19_08_21\Phase_01\overview")
+)
+spikes_df = recordings.get_spikes_triggered([["all"]], [[10], [100]], [[0]])
+fig, ax = single_cell_plots.whole_stimulus(
+    spikes_df, stacked=True, index="cell_index", height=10, norm="linear", bin_size=0.05
+)
 CT = colour_template.Colour_template()
 CT.pick_stimulus("FFF_6")
-
-overview_df = Overview.Recording.load(r"D:\zebrafish_26_10_23\ks_sorted\overview")
-
-spikes_df = overview_df.get_spikes_triggered([[10, 12]], [[5]])
-fig, ax = single_cell_plots.whole_stimulus(
-    spikes_df, spaced=True, height=10, cmap="Greys"
-)
-fig = colour_template.add_stimulus_to_matplotlib(fig, CT.colours, [2] * 12)
-fig.show()
+fig = CT.add_stimulus_to_plot(fig, [2] * 12)
