@@ -82,11 +82,10 @@ class Recording:
 
     def single_recording_assertion(self):
         assert (
-            self.dataframes["spikes_df"]["recording"].unique().shape[0] == 1,
-            "Dataframe contains multiple recordings, " "use Recording_s class instead",
-        )
+            self.dataframes["spikes_df"]["recording"].unique().shape[0] == 1
+        ), "Dataframe contains multiple recordings use Recording_s class instead"
 
-    def get_spikes_triggered(
+    def get_spikes_triggered(  # Function works on single recording only
         self,
         cells,
         stimuli,
@@ -154,7 +153,7 @@ class Recording:
         else:
             return df
 
-    def get_triggered(
+    def get_triggered(  # Function works on single recording only
         self,
         cells,
         stimulus,
@@ -219,7 +218,7 @@ class Recording:
             )
         return df
 
-    def get_spikes_as_numpy(
+    def get_spikes_as_numpy(  # Function works with single recording only
         self,
         cells,
         stimulus,
@@ -361,7 +360,7 @@ class Recording:
         """
         return self.views[df_name].tabulator.value
 
-    def find_stim_indices(self, stimulus_names):
+    def find_stim_indices(self, stimulus_names, recording=None):
         """Returns the stimulus indices that correspond to the stimulus names.
 
         Parameters
@@ -374,13 +373,15 @@ class Recording:
             List of stimulus indices that correspond to the stimulus names.
 
         """
+        if recording is None:
+            recording = self.name
         stim_indices = []
         for stimulus in stimulus_names:
             if type(stimulus) is str:
                 stim_indices.append(
-                    self.stimulus_df.query(f"stimulus_name=='{stimulus}'")[
-                        "stimulus_index"
-                    ].to_list()
+                    self.stimulus_df.query(
+                        f"stimulus_name=='{stimulus}' & recording == {recording}"
+                    )["stimulus_index"].to_list()
                 )
             else:
                 stim_indices.append(stimulus)
@@ -454,7 +455,7 @@ class Recording:
         ----------
         filter_name : str
             The name the new introduced filter shall have in
-        filter_value : str
+        filter_values : str
             The value the new introduced filter shall have in the new column.
         all_stimuli : boolean
             If the filter shall be applied to all stimuli, independent of the stimuli in the view.
@@ -481,23 +482,34 @@ class Recording:
                 "second value is the value that is assigned to the rest of the dataframe"
             )
 
+        original_df = (
+            self.dataframes[dataframe].copy().set_index(["recording", "cell_index"])
+        )
+        original_df[filter_name] = filter_values[1]
+
         if not all_stimuli:
-            df_temp = self.views[view_name].tabulator.value
+            df_temp = self.views[view_name].tabulator.value.set_index(
+                ["recording", "cell_index"]
+            )
             df_temp[filter_name] = filter_values[0]
 
         else:
-            cells = (
-                self.views[view_name].tabulator.value["cell_index"].unique().tolist()
-            )
             pl_df = pl.from_pandas(self.dataframes[dataframe])
-            mask = pl_df.select(
-                [pl.col("cell_index").is_in(cells).alias("mask")]
-            ).to_numpy()
-            df_temp = self.dataframes[dataframe].loc[mask].copy()
-            df_temp[filter_name] = filter_values[0]
 
-        self.dataframes[dataframe][filter_name] = filter_values[1]
-        self.dataframes[dataframe].update(df_temp)
+            rec_split_dfs = pl_df.partition_by("recording")
+
+            for df in rec_split_dfs:
+                cells = df["cell_index"].unique().to_numpy()
+
+                mask = df.select(
+                    [pl.col("cell_index").is_in(cells).alias("mask")]
+                ).to_numpy()
+
+                df_temp = original_df.loc[mask].copy()
+                df_temp[filter_name] = filter_values[0]
+                original_df.update(df_temp)
+
+        self.dataframes[dataframe] = original_df.reset_index(drop=False)
 
     def get_stimulus_subset(self, stimulus=None, name=None, dataframes=None):
         """Returns a subset of the dataframe that only contains the spikes that
