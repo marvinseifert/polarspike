@@ -241,3 +241,6 @@ def map_index(df, index="cell_index", y_key="repeat"):
     df["index_linear"] = inverse_indices + 1
 
     return df, unique_index
+
+
+# def plot_vertical(df, )
