@@ -30,15 +30,17 @@ def spike_load_worker(args):
 
 
 def version_control(obj):
-    obj.parquet_path = obj.path
-    del obj.path
+    try:
+        obj.parquet_path = obj.path
+        del obj.path
+    except AttributeError:
+        return obj
     return obj
 
 
 @dataclass
 class Recording:
     parquet_path: str  # Path, pointing to the parquet file which stores the spiketimestamps
-    name: str  # Recording name
     dataframes: dict = field(
         default_factory=lambda: {}, init=True
     )  # Dictionary that stores the dataframes
@@ -53,6 +55,7 @@ class Recording:
     )  # If a class instance was saved, the path to the saved file is stored here.
     nr_stimuli: int = field(init=False)  # Nr of stimuli in the recording
     nr_cells: int = field(init=False)  # Nr of cells in the recording
+    name: str = field(init=False)  # Name of the recording
 
     def __post_init__(self):
         """
@@ -69,9 +72,19 @@ class Recording:
             self.nr_cells = np.unique(self.dataframes["spikes_df"]["cell_index"]).shape[
                 0
             ]
+            # Check if a single recording was added:
+            self.single_recording_assertion()
+            # Define the name of the recording:
+            self.name = self.dataframes["spikes_df"]["recording"].unique()[0]
         else:
             self.nr_stimuli = 0
             self.nr_cells = 0
+
+    def single_recording_assertion(self):
+        assert (
+            self.dataframes["spikes_df"]["recording"].unique().shape[0] == 1,
+            "Dataframe contains multiple recordings, " "use Recording_s class instead",
+        )
 
     def get_spikes_triggered(
         self,
@@ -363,11 +376,14 @@ class Recording:
         """
         stim_indices = []
         for stimulus in stimulus_names:
-            stim_indices.append(
-                self.stimulus_df.query(f"stimulus_name=='{stimulus}'")[
-                    "stimulus_index"
-                ].to_list()
-            )
+            if type(stimulus) is str:
+                stim_indices.append(
+                    self.stimulus_df.query(f"stimulus_name=='{stimulus}'")[
+                        "stimulus_index"
+                    ].to_list()
+                )
+            else:
+                stim_indices.append(stimulus)
         stim_indices = [[item] for sublist in stim_indices for item in sublist]
         return stim_indices
 
@@ -693,6 +709,19 @@ class Recording_s(Recording):
         self.nr_cells = self.nr_cells - recording.nr_cells
         self.nr_stimuli = self.nr_stimuli - recording.nr_stimuli
 
+    @classmethod
+    def load_from_single(cls, analysis_path, analysis_name, recording_path):
+        obj = Recording.load(recording_path)
+        obj = version_control(obj)
+        recordings = Recording_s(analysis_path, analysis_name)
+        recordings.add_recording(obj)
+        return recordings
+
+    def add_from_saved(self, recording_path):
+        obj = Recording.load(recording_path)
+        obj = version_control(obj)
+        self.add_recording(obj)
+
     def create_combined_df(self):
         dfs = []
         for recording in self.recordings.values():
@@ -788,7 +817,9 @@ class Recording_s(Recording):
         else:
             return df
 
-    def organize_recording_parameters(self, recordings, cells, stimuli):
+    def organize_recording_parameters(
+        self, recordings, cells, stimuli, cell_df="spikes_df", stimulus_df="stimulus_df"
+    ):
         recordings_temp = []
         for recording in recordings:
             if recording[0] == "all":
@@ -807,11 +838,13 @@ class Recording_s(Recording):
         cells_temp = []
 
         for recording, stimulus, cell in zip(recordings, stimuli, cells):
-            stimulus_new, cell_new = cells_and_stimuli.sort(
-                [stimulus], [cell], self.recordings[recording[0]].nr_cells
+            temp_cell_df = self.dataframes[cell_df].query(f"recording == {recording}")
+            unique_cells = temp_cell_df["cell_index"].unique()
+            stimulus_new, cells_new = cells_and_stimuli.sort(
+                [stimulus], [cell], unique_cells
             )
             stimuli_temp.append(stimulus_new)
-            cells_temp.append(cell_new)
+            cells_temp.append(cells_new)
         cells = cells_temp
         stimuli = stimuli_temp
 
@@ -839,3 +872,8 @@ class Recording_s(Recording):
             recordings, cells, stimuli, time, waveforms, pandas
         )
         return df
+
+    def get_stimuli(self, recording, stimuli, stimulus_df="stimulus_df"):
+        return self.dataframes[stimulus_df].query(
+            f"recording == {recording} & stimulus_index == {stimuli}"
+        )

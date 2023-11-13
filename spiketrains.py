@@ -107,3 +107,28 @@ def align_on_condition(df, condition, con_star_times, times="times_triggered"):
         return df
     else:
         return df.to_pandas()
+
+
+def unique_by_condition(df, column, condition):
+    """
+    Returns the unique values of a column split by the values of another column.
+
+    Parameters
+    ----------
+    df : polars.DataFrame or pandas.DataFrame
+        A DataFrame containing the spike trains
+    column : str
+        The column name of the DataFrame containing the values to calculate the unique values of.
+    condition : str
+        The column name of the DataFrame containing the condition values.
+    """
+    return_polars = True
+    if type(df) is not pl.DataFrame:
+        return_polars = False
+        df = pl.from_pandas(df)
+
+    df = df.groupby(condition).agg(pl.col(column).n_unique().alias(column))
+    if return_polars:
+        return df
+    else:
+        return df.to_pandas()

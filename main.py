@@ -11,12 +11,10 @@ plt.style.use("dark_background")
 import Extractors
 
 if __name__ == "__main__":
-    CT = colour_template.Colour_template()
-    CT.pick_stimulus("FFF_6")
-    recording = Overview.Recording.load(r"D:\zebrafish_26_10_23\ks_sorted\overview")
-    flash_durations = stimulus_spikes.mean_trigger_times(recording.stimulus_df, [0, 5])
-    spikes_df = recording.get_spikes_triggered([["all"]], [["FFF"]])
-    fig, ax = spiketrain_plots.whole_stimulus(
-        spikes_df, stacked=True, height=10, index="stimulus_index"
+    recordings = Overview.Recording_s.load_from_single(
+        r"D:\combined_analysis",
+        "test_analysis",
+        r"D:\zebrafish_26_10_23\ks_sorted\overview",
     )
-    fig = CT.add_stimulus_to_plot(fig, flash_durations, names=False)
+    recordings.add_from_saved("D:\Chicken_19_08_21\Phase_01\overview")
+    recordings.get_spikes_triggered([["all"]], [["all"]], [[0], [0]])

@@ -6,6 +6,7 @@ import datashader as ds
 import numpy as np
 import pandas as pd
 import histograms
+import spiketrains
 
 
 def whole_stimulus_plotly(df, stacked=False):
