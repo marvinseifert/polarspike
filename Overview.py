@@ -291,6 +291,61 @@ class Recording:
         data[spiky_cells[:, 0].astype(int)] = spiky_cells[:, 1]
         return data, spiky_cells[:, 0]
 
+    def get_stimulus_subset(self, stimulus=None, name=None, dataframes=None):
+        """Returns a subset of the dataframe that only contains the spikes that
+        were recorded during the presentation of a specific stimulus.
+
+        Parameters
+        ----------
+        stimulus : int
+            Index of the stimulus that shall be used to create the subset.
+        name : str
+            Name of the subset that is created. If not specified, the name of the stimulus is used.
+        dataframes : str
+            Name of the dataframe that is used to create the subset.
+
+        Returns
+        -------
+        subset : pandas.Dataframe
+            Subset of the dataframe that only contains the spikes that were recorded during the presentation of a
+            specific stimulus.
+
+        """
+        if dataframes is None:
+            dataframes = ["spikes_df", "stimulus_df"]
+        out = []
+
+        for dataframe in dataframes:
+            dfs = []
+            if name:
+                df = (
+                    self.dataframes[dataframe]
+                    .loc[self.dataframes[dataframe]["stimulus_name"] == name]
+                    .copy()
+                )
+                if stimulus:
+                    df = df.loc[df["stimulus_index"] == stimulus]
+            else:
+                df = (
+                    self.dataframes[dataframe]
+                    .loc[self.dataframes[dataframe]["stimulus_index"] == stimulus]
+                    .copy()
+                )
+
+            if dataframe == "spikes_df":
+                spikes, _ = self.get_spikes_as_numpy(
+                    df["cell_index"].unique().tolist(),
+                    df["stimulus_index"].unique().tolist(),
+                    time="frames",
+                    waveforms=False,
+                )
+                df = df.set_index(["cell_index"])
+                df["spikes"] = spikes
+            df = df.reset_index()
+            dfs.append(df)
+            out.append(pd.concat(dfs))
+        return out
+
     def show_df(self, name="spikes_df", level=False, condition=False, viewname=None):
         """Main function to interactively view the dataframes.
 
@@ -360,7 +415,9 @@ class Recording:
         """
         return self.views[df_name].tabulator.value
 
-    def find_stim_indices(self, stimulus_names, recording=None):
+    def find_stim_indices(
+        self, stimulus_names, stimulus_df="stimulus_df", recording=None
+    ):
         """Returns the stimulus indices that correspond to the stimulus names.
 
         Parameters
@@ -378,10 +435,14 @@ class Recording:
         stim_indices = []
         for stimulus in stimulus_names:
             if type(stimulus) is str:
+                temp_df = (
+                    self.dataframes[stimulus_df]
+                    .copy()
+                    .set_index(["recording", "stimulus_name"])
+                    .sort_index()
+                )
                 stim_indices.append(
-                    self.stimulus_df.query(
-                        f"stimulus_name=='{stimulus}' & recording == {recording}"
-                    )["stimulus_index"].to_list()
+                    temp_df.loc[(recording, stimulus), :]["stimulus_index"].to_list()
                 )
             else:
                 stim_indices.append(stimulus)
@@ -511,61 +572,6 @@ class Recording:
 
         self.dataframes[dataframe] = original_df.reset_index(drop=False)
 
-    def get_stimulus_subset(self, stimulus=None, name=None, dataframes=None):
-        """Returns a subset of the dataframe that only contains the spikes that
-        were recorded during the presentation of a specific stimulus.
-
-        Parameters
-        ----------
-        stimulus : int
-            Index of the stimulus that shall be used to create the subset.
-        name : str
-            Name of the subset that is created. If not specified, the name of the stimulus is used.
-        dataframes : str
-            Name of the dataframe that is used to create the subset.
-
-        Returns
-        -------
-        subset : pandas.Dataframe
-            Subset of the dataframe that only contains the spikes that were recorded during the presentation of a
-            specific stimulus.
-
-        """
-        if dataframes is None:
-            dataframes = ["spikes_df", "stimulus_df"]
-        out = []
-
-        for dataframe in dataframes:
-            dfs = []
-            if name:
-                df = (
-                    self.dataframes[dataframe]
-                    .loc[self.dataframes[dataframe]["stimulus_name"] == name]
-                    .copy()
-                )
-                if stimulus:
-                    df = df.loc[df["stimulus_index"] == stimulus]
-            else:
-                df = (
-                    self.dataframes[dataframe]
-                    .loc[self.dataframes[dataframe]["stimulus_index"] == stimulus]
-                    .copy()
-                )
-
-            if dataframe == "spikes_df":
-                spikes, _ = self.get_spikes_as_numpy(
-                    df["cell_index"].unique().tolist(),
-                    df["stimulus_index"].unique().tolist(),
-                    time="frames",
-                    waveforms=False,
-                )
-                df = df.set_index(["cell_index"])
-                df["spikes"] = spikes
-            df = df.reset_index()
-            dfs.append(df)
-            out.append(pd.concat(dfs))
-        return out
-
     def extract_df_subset(
         self,
         cell_index=None,
@@ -592,6 +598,7 @@ class Recording:
 
 
         """
+
         if cell_index is None:
             cell_index = self.dataframes[dataframe]["cell_index"].unique().tolist()
         if stimulus_index is None:
@@ -651,7 +658,11 @@ class Recording:
         self.dataframes[dataframe] = self.dataframes[dataframe].reset_index(drop=False)
 
     def split_triggers(
-        self, stimulus_df="stimulus_df", nr_splits=2, stimulus_indices=None
+        self,
+        stimulus_df="stimulus_df",
+        nr_splits=2,
+        stimulus_indices=None,
+        recordings=None,
     ):
         """
         Creates new (smaller, calculated) triggers for stimuli. It returns a new dataframe that contains the new triggers.
@@ -673,6 +684,7 @@ class Recording:
             A dataframe that contains the new triggers.
 
         """
+
         if stimulus_indices is not None:
             stimulus_df = self.dataframes[stimulus_df].loc[stimulus_indices]
         else:
@@ -701,9 +713,9 @@ class Recording_s(Recording):
     def __init__(self, analysis_path, analysis_name):
         super().__init__(
             analysis_path,
-            analysis_name,
             dataframes={"spikes_df": None, "stimulus_df": None},
         )
+        self.name = analysis_name
         self.recordings = {}
         self.nr_recordings = 0
 
@@ -829,6 +841,20 @@ class Recording_s(Recording):
         else:
             return df
 
+    def get_spikes_from_dict(
+        self, filter_dict, time="seconds", waveforms=False, pandas=True
+    ):
+        recordings = []
+        cells = []
+        stimuli = []
+        for key, value in filter_dict.items():
+            recordings.append([key])
+            cells.append(value["cells"])
+            stimuli.append(value["stimuli"])
+        return self.get_spikes_triggered(
+            recordings, cells, stimuli, time, waveforms, pandas
+        )
+
     def organize_recording_parameters(
         self, recordings, cells, stimuli, cell_df="spikes_df", stimulus_df="stimulus_df"
     ):
@@ -849,11 +875,14 @@ class Recording_s(Recording):
         stimuli_temp = []
         cells_temp = []
 
-        for recording, stimulus, cell in zip(recordings, stimuli, cells):
+        for idx, recording in enumerate(recordings):
             temp_cell_df = self.dataframes[cell_df].query(f"recording == {recording}")
             unique_cells = temp_cell_df["cell_index"].unique()
+            stimulus = stimuli[idx]
+            cell = cells[idx]
+
             stimulus_new, cells_new = cells_and_stimuli.sort(
-                [stimulus], [cell], unique_cells
+                stimulus, cell, unique_cells
             )
             stimuli_temp.append(stimulus_new)
             cells_temp.append(cells_new)
@@ -889,3 +918,13 @@ class Recording_s(Recording):
         return self.dataframes[stimulus_df].query(
             f"recording == {recording} & stimulus_index == {stimuli}"
         )
+
+    def find_stim_indices(self, recordings, stimulus_names, stimulus_df="stimulus_df"):
+        if recordings[0] == "all":
+            recordings = self.recordings.keys()
+        indices = []
+        for recording in recordings:
+            indices.append(
+                super().find_stim_indices(stimulus_names, stimulus_df, recording)
+            )
+        return indices
