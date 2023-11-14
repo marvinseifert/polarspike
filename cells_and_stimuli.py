@@ -5,7 +5,7 @@ def sort(stimuli, cells, all_cells):
     nr_stimuli = len(stimuli)
     if len(cells) != len(stimuli):
         if len(cells) == 1:
-            if cells[0] == "all":
+            if type(cells[0]) is str and cells[0] == "all":
                 cells = all_cells
             cells = cells * nr_stimuli
         else:

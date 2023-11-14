@@ -6,6 +6,8 @@ import Overview
 import spiketrain_plots
 import colour_template
 import stimulus_spikes
+import binarizer
+import numpy as np
 
 plt.style.use("dark_background")
 import Extractors
@@ -17,7 +19,6 @@ if __name__ == "__main__":
         r"D:\zebrafish_26_10_23\ks_sorted\overview",
     )
     recordings.add_from_saved("D:\Chicken_19_08_21\Phase_01\overview")
-    recordings.get_spikes_triggered([["all"]], [[["all"]]], [[[0], [5]], [[0]]])
-    # spikes_df = recordings.get_spikes_triggered(
-    #     [["all"]], [["all"]], recordings.find_stim_indices(["all"], ["FFF"])
-    # )
+    recordings.get_spikes_triggered(
+        [["all"]], [[[1, 2, 3]], [[1, 2, 3]]], [[[0]], [[0]]]
+    )

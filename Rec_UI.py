@@ -278,7 +278,6 @@ class Explorer:
         dataframes["spikes_df"]["filter"] = True
         self.overview_df = Overview.Recording(
             str(self.recording.file.with_suffix(".parquet")),
-            self.recording_name.value,
             dataframes,
             self.frequency_input.value,
         )
@@ -380,7 +379,7 @@ class Explorer:
             [cell_indices], [[self.stimulus_select.value]], time="seconds"
         )
         if len(plot_df) != 0:
-            raster_plot = single_cell_plots.whole_stimulus_plotly(plot_df)
+            raster_plot = spiketrain_plots.whole_stimulus_plotly(plot_df)
             # Add stimulus:
             raster_plot = colour_template.add_stimulus_to_plotly(
                 raster_plot,
