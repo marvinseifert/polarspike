@@ -376,7 +376,7 @@ class Explorer:
         cell_indices = [self.single_stimulus_df.value.loc[indices]["cell_index"]]
 
         plot_df = self.overview_df.get_spikes_triggered(
-            [cell_indices], [[self.stimulus_select.value]], time="seconds"
+            [[self.stimulus_select.value]], [cell_indices], time="seconds"
         )
         if len(plot_df) != 0:
             raster_plot = spiketrain_plots.whole_stimulus_plotly(plot_df)
@@ -409,7 +409,7 @@ class Explorer:
         self.status.active = True
         cell_ids = self.single_stimulus_df.value["cell_index"].unique().tolist()
         spikes_df = self.overview_df.get_spikes_triggered(
-            [cell_ids], [[self.stimulus_select.value]], time="seconds", pandas=False
+            [[self.stimulus_select.value]], [cell_ids], time="seconds", pandas=False
         )
         # Update the cell indices, to account for cells without responses
         binary_df = binarizer.timestamps_to_binary_multi(

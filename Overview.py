@@ -19,12 +19,15 @@ import df_filter
 from dataclasses import dataclass, field
 import cells_and_stimuli
 import stimulus_trace
+import recordings_stimuli_cells
 
 
 def spike_load_worker(args):
-    path, cells, stimuli, time, waveforms = args
+    path, stimuli, cells, time, waveforms, stimulus_df = args
     obj = Recording.load(path)
-    df = obj.get_spikes_triggered(cells, stimuli, time, waveforms, pandas=False)
+    df = obj.get_spikes_triggered(
+        stimuli, cells, time, waveforms, stimulus_df=stimulus_df, pandas=False
+    )
     df = df.with_columns(recording=pl.lit(obj.name))
     return df
 
@@ -87,8 +90,8 @@ class Recording:
 
     def get_spikes_triggered(  # Function works on single recording only
         self,
-        cells,
         stimuli,
+        cells,
         time="seconds",
         waveforms=False,
         pandas=True,
@@ -103,14 +106,14 @@ class Recording:
 
         Parameters
         ----------
-        cells : list of lists
-            List of lists that contains the cell indices that shall be loaded. The first list contains the cell indices
-            of the first stimulus, the second list contains the cell indices of the second stimulus and so on.
-            If a single list is provided, the same cells are used for all stimuli.
         stimuli : list of lists of strings or integers
             List of lists that contains the stimulus indices, or names that shall be loaded. The first list contains the stimulus
             indices of the first stimulus, the second list contains the stimulus indices of the second stimulus and so
             on. If a single list is provided, the same stimuli are used for all cells.
+        cells : list of lists
+            List of lists that contains the cell indices that shall be loaded. The first list contains the cell indices
+            of the first stimulus, the second list contains the cell indices of the second stimulus and so on.
+            If a single list is provided, the same cells are used for all stimuli.
         time : str
             Defines the time unit of the returned dataframe. Can be "seconds" or "frames".
         waveforms : boolean
@@ -792,32 +795,44 @@ class Recording_s(Recording):
     #         return df
 
     def get_spikes_triggered(
-        self, recordings, cells, stimuli, time="seconds", waveforms=False, pandas=True
+        self,
+        recordings,
+        stimuli,
+        cells,
+        time="seconds",
+        waveforms=False,
+        pandas=True,
+        cell_df="spikes_df",
+        stimulus_df="stimulus_df",
     ):
         nr_cpus = mp.cpu_count()
         if nr_cpus > len(recordings):
             nr_cpus = len(recordings)
 
-        recordings, cells, stimuli = self.organize_recording_parameters(
-            recordings, cells, stimuli
+        recordings, stimuli, cells = self.organize_recording_parameters(
+            recordings, stimuli, cells
         )
-
-        # Identify the stimulus indices in the recordings if stimulus name was provided.
-
-        stimuli_temp = []
-        for idx, rec, stimulus in zip(range(len(recordings)), recordings, stimuli):
-            stimulus_rec_temp = []
-            for stim_rec in stimulus:
-                if type(stim_rec[0]) is str:
-                    stimulus_rec_temp.append(
-                        self.recordings[rec[0]].find_stim_indices(stim_rec)
+        # Need to call it again, as the first call fills in the "all" stimuli,
+        # and we need to fill in the cell indices accordingly:
+        recordings, stimuli, cells = self.organize_recording_parameters(
+            recordings, stimuli, cells
+        )
+        # Now we have lists of list matching the recordings, cells and stimuli. But, we still need to fill in
+        # the "all" cells:
+        new_cells = []
+        for recording, cell_list in zip(recordings, cells):
+            stim_cells_new = []
+            for stim_cell_list in cell_list:
+                if stim_cell_list[0] == "all":
+                    stim_cells_new.append(
+                        self.dataframes[cell_df]["cell_index"].unique().tolist()
                     )
                 else:
-                    stimulus_rec_temp.append(stim_rec)
+                    stim_cells_new.append(stim_cell_list[0])
+            new_cells.append(stim_cells_new)
+        cells = new_cells
 
-            stimuli_temp.append(stimulus_rec_temp)
-
-        stimuli = stimuli_temp
+        # Identify the stimulus indices in the recordings if stimulus name was provided.
 
         with mp.Pool(nr_cpus) as pool:
             # Pass all required arguments to the worker function
@@ -826,12 +841,13 @@ class Recording_s(Recording):
                 [
                     (
                         self.recordings[rec[0]].load_path,
-                        c,
-                        s,
+                        stimulus_list,
+                        cell_list,
                         time,
                         waveforms,
+                        stimulus_df,
                     )
-                    for rec, c, s in zip(recordings, cells, stimuli)
+                    for rec, stimulus_list, cell_list in zip(recordings, stimuli, cells)
                 ],
             )
 
@@ -856,40 +872,33 @@ class Recording_s(Recording):
         )
 
     def organize_recording_parameters(
-        self, recordings, cells, stimuli, cell_df="spikes_df", stimulus_df="stimulus_df"
+        self, recordings, stimuli, cells, cell_df="spikes_df", stimulus_df="stimulus_df"
     ):
-        recordings_temp = []
-        for recording in recordings:
-            if recording[0] == "all":
-                for key in self.recordings.keys():
-                    recordings_temp.append([key])
-            else:
-                recordings_temp.append([recording])
-        recordings = recordings_temp
+        # Get the input in the correct format:
+        # Check if the nr of recordings is equal to the nr of stimuli and cells:
+        # If either list is a single list, use the same stimuli and cells for all recordings.
 
-        if len(cells) != len(recordings):
-            cells = cells * len(recordings)
-        if len(stimuli) != len(recordings):
-            stimuli = stimuli * len(recordings)
-
-        stimuli_temp = []
-        cells_temp = []
-
-        for idx, recording in enumerate(recordings):
-            temp_cell_df = self.dataframes[cell_df].query(f"recording == {recording}")
-            unique_cells = temp_cell_df["cell_index"].unique()
-            stimulus = stimuli[idx]
-            cell = cells[idx]
-
-            stimulus_new, cells_new = cells_and_stimuli.sort(
-                stimulus, cell, unique_cells
-            )
-            stimuli_temp.append(stimulus_new)
-            cells_temp.append(cells_new)
-        cells = cells_temp
-        stimuli = stimuli_temp
-
-        return recordings, cells, stimuli
+        all_recordings = [[recording] for recording in self.recordings.keys()]
+        input_new = recordings_stimuli_cells.sort(
+            [recordings, stimuli, cells], all_recordings
+        )
+        recordings, stimuli, cells = input_new
+        new_stimuli = []
+        for recording, stimulus in zip(recordings, stimuli):
+            sub_stim_list = []
+            all_stimuli = [
+                [item]
+                for item in self.dataframes[stimulus_df].query(
+                    "recording == @recording"
+                )["stimulus_index"]
+            ]
+            for sub_stim in stimulus:
+                if sub_stim[0] == "all":
+                    sub_stim_list.append(all_stimuli)
+                else:
+                    sub_stim_list.append(sub_stim)
+            new_stimuli.append(sub_stim_list)
+        return recordings, new_stimuli, cells
 
     def get_spikes_chunked(
         self,

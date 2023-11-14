@@ -19,6 +19,6 @@ if __name__ == "__main__":
         r"D:\zebrafish_26_10_23\ks_sorted\overview",
     )
     recordings.add_from_saved("D:\Chicken_19_08_21\Phase_01\overview")
-    recordings.get_spikes_triggered(
-        [["all"]], [[[1, 2, 3]], [[1, 2, 3]]], [[[0]], [[0]]]
-    )
+    recordings.add_from_saved("D:\Chicken_21_08_21\Phase_00\overview")
+    recordings.add_from_saved("D:\Chicken_14_08_21\Phase_00\overview")
+    output = recordings.get_spikes_triggered([["all"]], [[[0], [1]]], [[["all"]]])
