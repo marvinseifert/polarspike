@@ -23,10 +23,16 @@ import recordings_stimuli_cells
 
 
 def spike_load_worker(args):
-    path, stimuli, cells, time, waveforms, stimulus_df = args
+    path, stimuli, cells, time, waveforms, cell_df, stimulus_df = args
     obj = Recording.load(path)
     df = obj.get_spikes_triggered(
-        stimuli, cells, time, waveforms, stimulus_df=stimulus_df, pandas=False
+        stimuli[0],
+        cells[0],
+        time,
+        waveforms,
+        stimulus_df=stimulus_df,
+        cell_df=cell_df,
+        pandas=False,
     )
     df = df.with_columns(recording=pl.lit(obj.name))
     return df
@@ -188,7 +194,7 @@ class Recording:
             A dataframe that contains the spikes (and waveforms) that were recorded during the presentation of a specific
         """
         # Get the stimulus information for the specific stimulus:
-        sub_df = df_filter.find_stimuli(self.dataframes[stimulus_df], stimulus)
+        sub_df = df_filter.find_stimuli(self.dataframes[stimulus_df], stimulus[0])
         # Extract the necessary information from the stimulus dataframe:
         begin_end, trigger, trigger_end, stim_logic = df_filter.get_stimulus_info(
             sub_df
@@ -293,6 +299,39 @@ class Recording:
         # Fill the empty cells with empty arrays:
         data[spiky_cells[:, 0].astype(int)] = spiky_cells[:, 1]
         return data, spiky_cells[:, 0]
+
+    def organize_recording_parameters(
+        self, recordings, stimuli, cells, stimulus_df="stimulus_df", all_recordings=None
+    ):
+        # Get the input in the correct format:
+        # Check if the nr of recordings is equal to the nr of stimuli and cells:
+        # If either list is a single list, use the same stimuli and cells for all recordings.
+
+        input_new = recordings_stimuli_cells.sort(
+            [recordings, stimuli, cells], all_recordings
+        )
+        recordings, stimuli, cells = input_new
+        new_stimuli = []
+        new_cells = []
+        for recording, stimulus, cell in zip(recordings, stimuli, cells):
+            sub_stim_list = []
+            sub_cell_list = []
+            all_stimuli = [
+                [item]
+                for item in self.dataframes[stimulus_df].query(
+                    "recording == @recording"
+                )["stimulus_index"]
+            ]
+            for sub_stim in stimulus:
+                if sub_stim[0] == "all":
+                    sub_stim_list.append(all_stimuli)
+                    sub_cell_list.append(cell * len(all_stimuli))
+                else:
+                    sub_stim_list.append(sub_stim)
+                    sub_cell_list.append(cell * len(sub_stim))
+            new_stimuli.append(sub_stim_list)
+            new_cells.append(sub_cell_list)
+        return recordings, new_stimuli, new_cells
 
     def get_stimulus_subset(self, stimulus=None, name=None, dataframes=None):
         """Returns a subset of the dataframe that only contains the spikes that
@@ -721,18 +760,21 @@ class Recording_s(Recording):
         self.name = analysis_name
         self.recordings = {}
         self.nr_recordings = 0
+        self.analysis = {}
 
     def add_recording(self, recording):
         self.recordings[recording.name] = recording
         self.nr_recordings += 1
-        self.create_combined_df()
+        self.create_combined_dfs()
+        self.create_secondary_dfs()
         self.nr_cells = self.nr_cells + recording.nr_cells
         self.nr_stimuli = self.nr_stimuli + recording.nr_stimuli
 
     def remove_recording(self, recording):
         self.recordings.pop(recording.name)
         self.nr_recordings -= 1
-        self.create_combined_df()
+        self.create_combined_dfs()
+        self.create_secondary_dfs()
         self.nr_cells = self.nr_cells - recording.nr_cells
         self.nr_stimuli = self.nr_stimuli - recording.nr_stimuli
 
@@ -749,7 +791,7 @@ class Recording_s(Recording):
         obj = version_control(obj)
         self.add_recording(obj)
 
-    def create_combined_df(self):
+    def create_combined_dfs(self):
         dfs = []
         for recording in self.recordings.values():
             dfs.append(recording.spikes_df)
@@ -759,6 +801,19 @@ class Recording_s(Recording):
         for recording in self.recordings.values():
             dfs.append(recording.stimulus_df)
         self.dataframes["stimulus_df"] = pd.concat(dfs).reset_index(drop=True)
+
+    def create_secondary_dfs(self):
+        for recording in self.recordings.values():
+            dfs = list(recording.dataframes.keys())
+            dfs.remove("spikes_df")
+            dfs.remove("stimulus_df")
+            for df in dfs:
+                if df not in self.dataframes.keys():
+                    self.dataframes[df] = recording.dataframes[df]
+                else:
+                    self.dataframes[df] = pd.concat(
+                        [self.dataframes[df], recording.dataframes[df]]
+                    ).reset_index(drop=True)
 
     # @property
     # def spikes_df(self):
@@ -793,6 +848,84 @@ class Recording_s(Recording):
     #         return df.to_pandas()
     #     else:
     #         return df
+    def get_spikes_df(
+        self,
+        cell_df="spikes_df",
+        stimulus_df="stimulus_df",
+        time="seconds",
+        waveforms=False,
+        pandas=True,
+    ):
+        """
+        Returns all spikes from all recordings and all stimuli in the choosen "cell_df" and "stimulus_df".
+        This is equal to calling get_spikes_triggered with recordings = "all", cells = "all" and stimuli = "all",
+        pointing at the same dataframes.
+
+        Parameters
+        ----------
+        cell_df : str
+            Name of the cell dataframe that shall be used.
+        stimulus_df : str
+            Name of the stimulus dataframe that shall be used.
+        time : str
+            Defines the time unit of the returned dataframe. Can be "seconds" or "frames".
+        waveforms : boolean
+            If the waveforms shall be loaded as well. Only possible if the parquet file contains the waveforms.
+        pandas : boolean
+            If the returned dataframe shall be a pandas dataframe or a polars dataframe.
+
+        """
+
+        # Create the inputs to the get_spikes_triggered function:
+        input_df = pl.from_pandas(
+            self.dataframes[cell_df][["recording", "stimulus_index", "cell_index"]]
+        )
+        recordings = [
+            [rec] for rec in input_df.unique("recording")["recording"].to_list()
+        ]
+        input_df = input_df.partition_by("recording")
+        input_list = []
+        for df in input_df:
+            rec_input = []
+            rec_input.append(df.unique("recording")["recording"].to_list())
+            stim_list = [
+                [stim_id]
+                for stim_id in df.unique("stimulus_index")["stimulus_index"].to_list()
+            ]
+            rec_input.append([stim_list])
+            stim_df = df.partition_by("stimulus_index")
+            cell_list = [[df["cell_index"].to_list()] for df in stim_df]
+            rec_input.append(cell_list)
+            input_list.append(rec_input)
+
+        self.synchronize_dataframes()
+        nr_cpus = mp.cpu_count()
+        if nr_cpus > len(recordings):
+            nr_cpus = len(recordings)
+
+        with mp.Pool(nr_cpus) as pool:
+            # Pass all required arguments to the worker function
+            dfs = pool.map(
+                spike_load_worker,
+                [
+                    (
+                        self.recordings[rec_input[0][0]].load_path,
+                        rec_input[1],
+                        rec_input[2],
+                        time,
+                        waveforms,
+                        cell_df,
+                        stimulus_df,
+                    )
+                    for rec_input in input_list
+                ],
+            )
+
+        df = pl.concat(dfs)
+        if pandas:
+            return df.to_pandas()
+        else:
+            return df
 
     def get_spikes_triggered(
         self,
@@ -805,30 +938,35 @@ class Recording_s(Recording):
         cell_df="spikes_df",
         stimulus_df="stimulus_df",
     ):
+        self.synchronize_dataframes()
         nr_cpus = mp.cpu_count()
         if nr_cpus > len(recordings):
             nr_cpus = len(recordings)
 
+        all_recordings = [[recording] for recording in self.recordings.keys()]
         recordings, stimuli, cells = self.organize_recording_parameters(
-            recordings, stimuli, cells
+            recordings, stimuli, cells, stimulus_df, all_recordings
         )
-        # Need to call it again, as the first call fills in the "all" stimuli,
-        # and we need to fill in the cell indices accordingly:
-        recordings, stimuli, cells = self.organize_recording_parameters(
-            recordings, stimuli, cells
-        )
+
         # Now we have lists of list matching the recordings, cells and stimuli. But, we still need to fill in
         # the "all" cells:
         new_cells = []
         for recording, cell_list in zip(recordings, cells):
             stim_cells_new = []
             for stim_cell_list in cell_list:
-                if stim_cell_list[0] == "all":
-                    stim_cells_new.append(
-                        self.dataframes[cell_df]["cell_index"].unique().tolist()
-                    )
-                else:
-                    stim_cells_new.append(stim_cell_list[0])
+                cell_sub_list = []
+                for cell in stim_cell_list:
+                    if cell[0] == "all":
+                        cell_sub_list.append(
+                            self.dataframes[cell_df]
+                            .query("recording == @recording")["cell_index"]
+                            .unique()
+                            .tolist()
+                        )
+
+                    else:
+                        cell_sub_list.append(stim_cell_list[0])
+                stim_cells_new.append(cell_sub_list)
             new_cells.append(stim_cells_new)
         cells = new_cells
 
@@ -845,6 +983,7 @@ class Recording_s(Recording):
                         cell_list,
                         time,
                         waveforms,
+                        cell_df,
                         stimulus_df,
                     )
                     for rec, stimulus_list, cell_list in zip(recordings, stimuli, cells)
@@ -870,35 +1009,6 @@ class Recording_s(Recording):
         return self.get_spikes_triggered(
             recordings, cells, stimuli, time, waveforms, pandas
         )
-
-    def organize_recording_parameters(
-        self, recordings, stimuli, cells, cell_df="spikes_df", stimulus_df="stimulus_df"
-    ):
-        # Get the input in the correct format:
-        # Check if the nr of recordings is equal to the nr of stimuli and cells:
-        # If either list is a single list, use the same stimuli and cells for all recordings.
-
-        all_recordings = [[recording] for recording in self.recordings.keys()]
-        input_new = recordings_stimuli_cells.sort(
-            [recordings, stimuli, cells], all_recordings
-        )
-        recordings, stimuli, cells = input_new
-        new_stimuli = []
-        for recording, stimulus in zip(recordings, stimuli):
-            sub_stim_list = []
-            all_stimuli = [
-                [item]
-                for item in self.dataframes[stimulus_df].query(
-                    "recording == @recording"
-                )["stimulus_index"]
-            ]
-            for sub_stim in stimulus:
-                if sub_stim[0] == "all":
-                    sub_stim_list.append(all_stimuli)
-                else:
-                    sub_stim_list.append(sub_stim)
-            new_stimuli.append(sub_stim_list)
-        return recordings, new_stimuli, cells
 
     def get_spikes_chunked(
         self,
@@ -937,3 +1047,15 @@ class Recording_s(Recording):
                 super().find_stim_indices(stimulus_names, stimulus_df, recording)
             )
         return indices
+
+    def synchronize_dataframes(self):
+        """
+        This function synchronizes the dataframes of all recordings according to changes made to the
+        dataframes of the recording_s object.
+
+        """
+        for df_name in self.dataframes:
+            for recording in self.recordings.values():
+                df_temp = self.dataframes[df_name].query("recording == @recording.name")
+                self.recordings[recording.name].dataframes[df_name] = df_temp
+                self.recordings[recording.name].save(recording.load_path)

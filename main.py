@@ -21,4 +21,7 @@ if __name__ == "__main__":
     recordings.add_from_saved("D:\Chicken_19_08_21\Phase_01\overview")
     recordings.add_from_saved("D:\Chicken_21_08_21\Phase_00\overview")
     recordings.add_from_saved("D:\Chicken_14_08_21\Phase_00\overview")
-    output = recordings.get_spikes_triggered([["all"]], [[[0], [1]]], [[["all"]]])
+    recordings.dataframes["test"] = recordings.dataframes["spikes_df"].query(
+        "stimulus_name=='FFF'"
+    )
+    recordings.get_spikes_df("test")
