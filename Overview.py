@@ -763,6 +763,19 @@ class Recording_s(Recording):
         self.analysis = {}
 
     def add_recording(self, recording):
+        """
+        Adds a recording to the Recording_s object. The recording is added to the recordings dictionary and the
+        dataframes are updated.
+
+        Parameters
+        ----------
+        recording : Recording object
+            The recording that shall be added to the Recording_s object.
+
+        Returns
+        -------
+        self : updated Recording_s object
+        """
         self.recordings[recording.name] = recording
         self.nr_recordings += 1
         self.create_combined_dfs()
@@ -771,6 +784,17 @@ class Recording_s(Recording):
         self.nr_stimuli = self.nr_stimuli + recording.nr_stimuli
 
     def remove_recording(self, recording):
+        """
+        Removes a recording from the Recording_s object. The recording is removed from the recordings dictionary and the
+        dataframes are updated.
+
+        Parameters
+        ----------
+        recording : str
+            Name of the recording that shall be removed from the Recording_s object.
+        """
+        recording = self.recordings[recording]
+        self.synchronize_dataframes()
         self.recordings.pop(recording.name)
         self.nr_recordings -= 1
         self.create_combined_dfs()
@@ -780,6 +804,23 @@ class Recording_s(Recording):
 
     @classmethod
     def load_from_single(cls, analysis_path, analysis_name, recording_path):
+        """
+        Loads a single recording and creates a Recording_s object.
+
+        Parameters
+        ----------
+        analysis_path : str
+            Path to the analysis folder (standard save folder).
+        analysis_name : str
+            Name of the analysis.
+        recording_path : str
+            Path to the recording that shall be loaded.
+
+        Returns
+        -------
+        recordings : Recording_s object
+            The Recording_s object that contains the loaded recording.
+        """
         obj = Recording.load(recording_path)
         obj = version_control(obj)
         recordings = Recording_s(analysis_path, analysis_name)
@@ -787,11 +828,23 @@ class Recording_s(Recording):
         return recordings
 
     def add_from_saved(self, recording_path):
+        """
+        Adds a recording to the Recording_s object from a saved recording file.
+
+        Parameters
+        ----------
+        recording_path : str
+            Path to the recording that shall be loaded.
+        """
         obj = Recording.load(recording_path)
         obj = version_control(obj)
         self.add_recording(obj)
 
     def create_combined_dfs(self):
+        """
+        Creates the combined spikes_df and stimulus_df from all recordings.
+
+        """
         dfs = []
         for recording in self.recordings.values():
             dfs.append(recording.spikes_df)
@@ -803,6 +856,10 @@ class Recording_s(Recording):
         self.dataframes["stimulus_df"] = pd.concat(dfs).reset_index(drop=True)
 
     def create_secondary_dfs(self):
+        """
+        Creates the secondary dataframes from all recordings.
+
+        """
         for recording in self.recordings.values():
             dfs = list(recording.dataframes.keys())
             dfs.remove("spikes_df")
@@ -815,39 +872,6 @@ class Recording_s(Recording):
                         [self.dataframes[df], recording.dataframes[df]]
                     ).reset_index(drop=True)
 
-    # @property
-    # def spikes_df(self):
-    #     """Returns the combined spikes_df of all recordings"""
-    #     dfs = []
-    #     for recording in self.recordings.values():
-    #         dfs.append(recording.spikes_df)
-    #     return pd.concat(dfs).reset_index(drop=True)
-    #
-    # @property
-    # def stimulus_df(self):
-    #     """Returns the combined stimulus_df of all recordings"""
-    #     dfs = []
-    #     for recording in self.recordings.values():
-    #         dfs.append(recording.stimulus_df)
-    #     return pd.concat(dfs).reset_index(drop=True)
-
-    # def get_spikes_triggered(
-    #     self, recording, cells, stimuli, time="seconds", waveforms=False, pandas=True
-    # ):
-    #     df = []
-    #     for recording, cells_r, stimuli_r in zip(
-    #         self.recordings.keys(), cells, stimuli
-    #     ):
-    #         temp_df = self.recordings[recording].get_spikes_triggered(
-    #             cells_r, stimuli_r, time, waveforms, pandas=False
-    #         )
-    #         temp_df = temp_df.with_columns(recording=pl.lit(recording))
-    #         df.append(temp_df)
-    #     df = pl.concat(df)
-    #     if pandas:
-    #         return df.to_pandas()
-    #     else:
-    #         return df
     def get_spikes_df(
         self,
         cell_df="spikes_df",
@@ -996,20 +1020,6 @@ class Recording_s(Recording):
         else:
             return df
 
-    def get_spikes_from_dict(
-        self, filter_dict, time="seconds", waveforms=False, pandas=True
-    ):
-        recordings = []
-        cells = []
-        stimuli = []
-        for key, value in filter_dict.items():
-            recordings.append([key])
-            cells.append(value["cells"])
-            stimuli.append(value["stimuli"])
-        return self.get_spikes_triggered(
-            recordings, cells, stimuli, time, waveforms, pandas
-        )
-
     def get_spikes_chunked(
         self,
         chunk_size,
@@ -1039,14 +1049,16 @@ class Recording_s(Recording):
         )
 
     def find_stim_indices(self, recordings, stimulus_names, stimulus_df="stimulus_df"):
+        self.synchronize_dataframes()
         if recordings[0] == "all":
             recordings = self.recordings.keys()
         indices = []
+
         for recording in recordings:
             indices.append(
                 super().find_stim_indices(stimulus_names, stimulus_df, recording)
             )
-        return indices
+        return indices, [[rec] for rec in recordings]
 
     def synchronize_dataframes(self):
         """
