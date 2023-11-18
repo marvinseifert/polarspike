@@ -213,8 +213,8 @@ class Extractor_SPC(Extractor):
         cell_idx = np.repeat(cell_idx, nr_spikes)
 
         self.spikes["nr_cells"] = len(spikes.keys())
-        self.spikes["cell_indices"] = np.linspace(
-            1, self.spikes["nr_cells"], self.spikes["nr_cells"], dtype=int
+        self.spikes["cell_indices"] = np.arange(
+            0, self.spikes["nr_cells"], 1, dtype=int
         )
 
         self.get_locations(params)

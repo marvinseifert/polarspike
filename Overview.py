@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 import cells_and_stimuli
 import stimulus_trace
 import recordings_stimuli_cells
+from threading import Thread
+import warnings
 
 
 def spike_load_worker(args):
@@ -43,7 +45,16 @@ def version_control(obj):
         obj.parquet_path = obj.path
         del obj.path
     except AttributeError:
-        return obj
+        pass
+
+    try:
+        for df in obj.dataframes.values():
+            df["recording"] = df["recording"].astype(str)
+            df["stimulus_name"] = df["stimulus_name"].astype(str)
+            df["stimulus_index"] = df["stimulus_index"].astype(pd.UInt16Dtype())
+    except KeyError:
+        pass
+
     return obj
 
 
@@ -491,6 +502,18 @@ class Recording:
         stim_indices = [[item] for sublist in stim_indices for item in sublist]
         return stim_indices
 
+    def delete_df(self, df_name):
+        """Deletes a dataframe from the recording object.
+
+        Parameters
+        ----------
+        df_name : str
+            Name of the dataframe that shall be deleted.
+        """
+        assert df_name != "spikes_df", "Cannot delete spikes_df"
+        assert df_name != "stimulus_df", "Cannot delete stimulus_df"
+        del self.dataframes[df_name]
+
     @property
     def spikes_df(self):
         """Returns the spikes_df dataframe. Shortcut version
@@ -518,6 +541,11 @@ class Recording:
 
         """
         with open(filename, "wb") as f:
+            pickle.dump(self, f)
+
+    def save_save(self):
+        """ """
+        with open(self.load_path, "wb") as f:
             pickle.dump(self, f)
 
     @classmethod
@@ -901,9 +929,15 @@ class Recording_s(Recording):
         """
 
         # Create the inputs to the get_spikes_triggered function:
-        input_df = pl.from_pandas(
-            self.dataframes[cell_df][["recording", "stimulus_index", "cell_index"]]
-        )
+        try:
+            input_df = pl.from_pandas(
+                self.dataframes[cell_df][["recording", "stimulus_index", "cell_index"]]
+            )
+        except KeyError:
+            warnings.warn(
+                "The cell dataframe does not contain the required columns. Accidentally provided a stimulus dataframe?"
+            )
+            return
         recordings = [
             [rec] for rec in input_df.unique("recording")["recording"].to_list()
         ]
@@ -1066,8 +1100,29 @@ class Recording_s(Recording):
         dataframes of the recording_s object.
 
         """
+
         for df_name in self.dataframes:
             for recording in self.recordings.values():
                 df_temp = self.dataframes[df_name].query("recording == @recording.name")
                 self.recordings[recording.name].dataframes[df_name] = df_temp
-                self.recordings[recording.name].save(recording.load_path)
+                # Need to save the changes in an uninterruptible way:
+                save_thread = Thread(
+                    target=self.recordings[recording.name].save_save,
+                )
+                save_thread.start()
+                save_thread.join()
+
+    def delete_df(self, df_name):
+        """
+        Deletes a dataframe from the recording_s object.
+
+        Parameters
+        ----------
+        df_name : str
+            Name of the dataframe that shall be deleted.
+        """
+        assert df_name != "spikes_df", "Cannot delete spikes_df"
+        assert df_name != "stimulus_df", "Cannot delete stimulus_df"
+        for recording in self.recordings.values():
+            recording.delete_df(df_name)
+            recording.save(recording.load_path)
