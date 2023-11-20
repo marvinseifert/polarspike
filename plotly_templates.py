@@ -42,6 +42,7 @@ pio.templates["scatter_template_black"] = go.layout.Template(
             tickfont=dict(family="Arial", color="white"),
             titlefont=dict(family="Arial", color="white"),
             showgrid=False,
+            title=dict(standoff=1)
         ),
         yaxis=dict(
             showline=True,
@@ -51,6 +52,7 @@ pio.templates["scatter_template_black"] = go.layout.Template(
             tickfont=dict(family="Arial", color="white"),
             titlefont=dict(family="Arial", color="white"),
             showgrid=False,
+            title=dict(standoff=1)
         ),
         plot_bgcolor="rgba(0, 0, 0, 255)",
         paper_bgcolor="rgba(0, 0, 0, 255)",

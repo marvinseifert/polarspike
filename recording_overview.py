@@ -67,9 +67,9 @@ def plot_spike_counts(df, cmap):
     ax.set_aspect("auto")
 
     ax.set_yticks(
-        np.log10([10**i for i in range(max_spike_count)])
+        np.log10([10 ** i for i in range(max_spike_count)])
     )  # Replace with the desired ticks in the original scale
-    ax.set_yticklabels([10**i for i in range(max_spike_count)])
+    ax.set_yticklabels([10 ** i for i in range(max_spike_count)])
 
     ax.set_xlabel("Cell Index")
     ax.set_ylabel("Number of Spikes")
@@ -94,9 +94,9 @@ def plot_isi(df, x, cmap="viridis", cutoff=18.0):
     ax.set_aspect("auto")
 
     ax.set_yticks(
-        np.log10([10**i for i in range(max_isi)])
+        np.log10([10 ** i for i in range(max_isi)])
     )  # Replace with the desired ticks in the original scale
-    ax.set_yticklabels([10**i for i in range(max_isi)])
+    ax.set_yticklabels([10 ** i for i in range(max_isi)])
 
     ax.hlines(
         np.log10(cutoff),
@@ -193,3 +193,31 @@ def empty_spike_counts_figure():
     ax.set_ylabel("Number of Spikes")
     ax.set_title("Recording Overview")
     return fig, ax
+
+
+def add_stimulus_df(fig, df):
+    colours = ["green", "orange"]
+    nr_stimuli = len(df)
+    if nr_stimuli > len(colours):
+        colours = colours * (nr_stimuli // len(colours) + 1)
+    for i, row in df.iterrows():
+        fig.axes[0].axvspan(
+            row["begin_fr"] / row["sampling_freq"], row["end_fr"] / row["sampling_freq"], facecolor=colours[i],
+            linestyle="dashed", alpha=0.2,
+            zorder=0
+        )
+        midpoint = (row["begin_fr"] + row["end_fr"]) / 2
+        fig.axes[0].text(
+            midpoint / row["sampling_freq"],
+            5,
+            row["stimulus_name"],
+            rotation=90,
+            verticalalignment="bottom",
+            horizontalalignment="center",
+            fontsize=10,
+            zorder=1,
+            color="red",
+            backgroundcolor="white",
+        )
+
+    return fig
