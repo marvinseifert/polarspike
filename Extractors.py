@@ -15,7 +15,7 @@ import pandas as pd
 
 class Extractor:
     """
-    Spike class
+    Extractor class
 
     This class stores methods to read the .hdf5 file which is the output of the spikesorting algorithm Herdingspikes2
     It allows for loading either all the spikes in the file or just a subset either based on number of cells or with a
@@ -33,7 +33,9 @@ class Extractor:
 
         Parameters
         ----------
-        file: str: The location of the hdf5 results file
+        file: str
+            The location of the hdf5 results file
+        
 
         Returns
         -------
@@ -42,6 +44,7 @@ class Extractor:
         if stimulus_df is not None:
             self.add_stimulus_df(stimulus_df)
         self.file = Path(file)
+        self.file_parquet = self.file.with_suffix(".parquet")
 
     def add_stimulus_df(self, stimulus_df):
         self.trigger = stimulus_df[["begin_fr", "end_fr"]].to_numpy()
@@ -213,8 +216,8 @@ class Extractor_SPC(Extractor):
         cell_idx = np.repeat(cell_idx, nr_spikes)
 
         self.spikes["nr_cells"] = len(spikes.keys())
-        self.spikes["cell_indices"] = np.arange(
-            0, self.spikes["nr_cells"], 1, dtype=int
+        self.spikes["cell_indices"] = np.linspace(
+            0, self.spikes["nr_cells"], self.spikes["nr_cells"], dtype=int
         )
 
         self.get_locations(params)
@@ -233,3 +236,67 @@ class Extractor_SPC(Extractor):
         for idx, electrode in enumerate(electrodes):
             electrodes_store[idx, :] = probe["channel_groups"][1]["geometry"][electrode]
         self.spikes["centres"] = electrodes_store
+
+
+class Extractor_KS(Extractor):
+    spikes = {}
+
+    def __init__(self, file, stimulus_df=None):
+        super().__init__(file, stimulus_df)
+
+    def get_spikes(self):
+        working_dir = self.file.parents[0]
+        self.spikes["times"] = np.load(self.file).flatten().astype(np.dtypes.Int64DType)
+        cell_idx = np.load(working_dir / "spike_clusters.npy")
+        cell_idx = cell_idx.astype(np.dtypes.Int64DType)
+        self.spikes["cell_indices"] = np.unique(cell_idx)
+        df = pl.from_numpy(
+            np.vstack([cell_idx, self.spikes["times"]]).T, schema=["cell_index", "times"]
+        )
+        df.write_parquet(str(self.file.with_suffix(".parquet")))
+
+    def construct_df(self, df, recording_name=None, pandas=True):
+        dfs = []
+        for stimulus in range(self.trigger.shape[0]):
+            times = df.filter(
+                (pl.col("times") > self.trigger[stimulus, 0])
+                & (pl.col("times") <= self.trigger[stimulus, 1])
+            )
+            times = times.with_columns(
+                stimulus_name=pl.lit(self.stimulus_names[stimulus])
+            )
+            times = times.with_columns(stimulus_index=pl.lit(stimulus))
+            # print(times.dtypes, times)
+            df_idx = pl.DataFrame(
+                data=self.spikes["cell_indices"],
+                schema=[("cell_index", pl.datatypes.Int64)],
+            )
+
+            df_temp = (
+                times.group_by(pl.col("cell_index", "stimulus_name", "stimulus_index"))
+                .count()
+                .collect()
+            )
+
+            df_idx = df_idx.join(df_temp, on="cell_index", how="left")
+            # Fill missing values:
+            df_idx = df_idx.with_columns(
+                pl.col("stimulus_name").fill_null(self.stimulus_names[stimulus])
+            )
+            df_idx = df_idx.with_columns(pl.col("count").fill_null(0))
+            df_idx = df_idx.with_columns(pl.col("stimulus_index").fill_null(stimulus))
+            dfs.append(df_idx)
+
+        df = pl.concat(dfs)
+        df = df.sort("cell_index", descending=False)
+        df = df.rename({"count": "nr_of_spikes"})
+
+        # Fill missing values
+
+        if recording_name:
+            df = df.with_columns(recording=pl.lit(recording_name))
+
+        if pandas:
+            return df.to_pandas()
+        else:
+            return df

@@ -31,7 +31,7 @@ def compute_vector_magnitude_direction(observations):
     y_total = sum(y_components)
 
     # Calculate the magnitude and direction of the resulting vector
-    magnitude = math.sqrt(x_total**2 + y_total**2)
+    magnitude = math.sqrt(x_total ** 2 + y_total ** 2)
     direction = math.degrees(math.atan2(y_total, x_total))
 
     return magnitude, direction
@@ -93,10 +93,16 @@ def add_arrows_to_matplotlib(initial_fig, degrees, arrow_spacing, names=None):
     """
     # Get the original axes
 
-    ax_stimulus = initial_fig.get_axes()[2]
-    original_axes = initial_fig.get_axes()[0]
-    org_pos = original_axes.get_position()
+    axs = np.asarray(initial_fig.get_axes()).reshape(
+        initial_fig.axes[0].get_subplotspec().get_gridspec().get_geometry()
+    )
+    ax_stimulus = axs[-1, 0]
+    original_axes = axs[:-1, 0]
+    # for ax in original_axes:
+    #     ax.set_xlabel("")
+    org_pos = original_axes[-1].get_position()
     stim_pos = ax_stimulus.get_position()
+
     # original_axes.set_xlabel("Time (s)")
     ax_stimulus.spines["top"].set_visible(True)
     ax_stimulus.spines["right"].set_visible(True)
@@ -104,7 +110,7 @@ def add_arrows_to_matplotlib(initial_fig, degrees, arrow_spacing, names=None):
     ax_stimulus.spines["left"].set_visible(True)
     # The x_positions are the cumulative sum of the spacings, indicating where along the x-axis the arrows should be
     x_positions = (
-        np.cumsum(arrow_spacing) - np.asarray(arrow_spacing) / 2
+            np.cumsum(arrow_spacing) - np.asarray(arrow_spacing) / 2
     )  # subtract half, to put arrow into the middle
 
     # Add arrows to the new subplot
