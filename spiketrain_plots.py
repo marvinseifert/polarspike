@@ -45,16 +45,16 @@ def whole_stimulus_plotly(df, stacked=False):
 
 
 def whole_stimulus(
-    df,
-    how="times_triggered",
-    index="cell_index",
-    stacked=True,
-    height=10,
-    width=10,
-    cmap="Greys",
-    bin_size=0.05,
-    norm="linear",
-    y_key="repeat",
+        df,
+        how="times_triggered",
+        index="cell_index",
+        stacked=True,
+        height=10,
+        width=10,
+        cmap="Greys",
+        bin_size=0.05,
+        norm="linear",
+        y_key="repeat",
 ):
     # Store some information about the data
     unique_indices = np.unique(df[index])
@@ -94,7 +94,7 @@ def whole_stimulus(
 
     # Plot the PSTH
 
-    axs[0, 0].plot(bins[:-1], psth, color="black", alpha=0.5)
+    axs[0, 0].plot(bins[1:], psth, color="black", alpha=0.5)
 
     # Switch data format to categorical
     df["index"] = df[index].astype("category")
@@ -171,7 +171,7 @@ def whole_stimulus(
 
 
 def draw_artist(
-    df, fig, axs, how, y_key, cmap, norm, plot_height, plot_width, bin_size
+        df, fig, axs, how, y_key, cmap, norm, plot_height, plot_width, bin_size
 ):
     """Draws the artist on the figure and returns the figure and axis.
     Parameters
@@ -242,6 +242,5 @@ def map_index(df, index="cell_index", y_key="repeat"):
     df["index_linear"] = inverse_indices + 1
 
     return df, unique_index
-
 
 # def plot_vertical(df, )

@@ -195,7 +195,7 @@ def empty_spike_counts_figure():
     return fig, ax
 
 
-def add_stimulus_df(fig, df):
+def add_stimulus_df(fig, df, annotate=True, label_anker=5):
     colours = ["green", "orange"]
     nr_stimuli = len(df)
     if nr_stimuli > len(colours):
@@ -207,17 +207,18 @@ def add_stimulus_df(fig, df):
             zorder=0
         )
         midpoint = (row["begin_fr"] + row["end_fr"]) / 2
-        fig.axes[0].text(
-            midpoint / row["sampling_freq"],
-            5,
-            row["stimulus_name"],
-            rotation=90,
-            verticalalignment="bottom",
-            horizontalalignment="center",
-            fontsize=10,
-            zorder=1,
-            color="red",
-            backgroundcolor="white",
-        )
+        if annotate:
+            fig.axes[0].text(
+                midpoint / row["sampling_freq"],
+                label_anker,
+                row["stimulus_name"],
+                rotation=90,
+                verticalalignment="bottom",
+                horizontalalignment="center",
+                fontsize=10,
+                zorder=1,
+                color="red",
+                backgroundcolor="white",
+            )
 
     return fig
