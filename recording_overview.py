@@ -203,7 +203,7 @@ def add_stimulus_df(fig, df, annotate=True, label_anker=5):
     for i, row in df.iterrows():
         fig.axes[0].axvspan(
             row["begin_fr"] / row["sampling_freq"], row["end_fr"] / row["sampling_freq"], facecolor=colours[i],
-            linestyle="dashed", alpha=0.2,
+            linestyle="dashed", alpha=0.1,
             zorder=0
         )
         midpoint = (row["begin_fr"] + row["end_fr"]) / 2
