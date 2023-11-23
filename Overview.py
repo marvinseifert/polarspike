@@ -240,8 +240,8 @@ class Recording:
 
     def get_spikes_as_numpy(  # Function works with single recording only
             self,
-            cells,
             stimulus,
+            cells,
             time="seconds",
             waveforms=False,
             relative=True,
@@ -310,6 +310,70 @@ class Recording:
         # Fill the empty cells with empty arrays:
         data[spiky_cells[:, 0].astype(int)] = spiky_cells[:, 1]
         return data, spiky_cells[:, 0]
+
+    def get_spikes_df(
+            self,
+            cell_df="spikes_df",
+            stimulus_df="stimulus_df",
+            time="seconds",
+            waveforms=False,
+            pandas=True,
+    ):
+        """
+        Returns all spikes from all recordings and all stimuli in the choosen "cell_df" and "stimulus_df".
+        This is equal to calling get_spikes_triggered with recordings = "all", cells = "all" and stimuli = "all",
+        pointing at the same dataframes.
+
+        Parameters
+        ----------
+        cell_df : str
+            Name of the cell dataframe that shall be used.
+        stimulus_df : str
+            Name of the stimulus dataframe that shall be used.
+        time : str
+            Defines the time unit of the returned dataframe. Can be "seconds" or "frames".
+        waveforms : boolean
+            If the waveforms shall be loaded as well. Only possible if the parquet file contains the waveforms.
+        pandas : boolean
+            If the returned dataframe shall be a pandas dataframe or a polars dataframe.
+
+        """
+
+        # Create the inputs to the get_spikes_triggered function:
+
+        try:
+            input_df = pl.from_pandas(
+                self.dataframes[cell_df][["recording", "stimulus_index", "cell_index"]]
+            )
+        except KeyError:
+            warnings.warn(
+                "The cell dataframe does not contain the required columns. Accidentally provided a stimulus dataframe?"
+            )
+            return
+        assert (len(input_df) > 0), "The cell dataframe is empty"
+
+        stim_list = [
+            [stim_id]
+            for stim_id in input_df.unique("stimulus_index")["stimulus_index"].to_list()
+        ]
+
+        stim_df = input_df.partition_by("stimulus_index")
+        cell_list = [df["cell_index"].to_list() for df in stim_df]
+
+        spikes_df = self.get_spikes_triggered(
+            stim_list,
+            cell_list,
+            time,
+            waveforms,
+            pandas,
+            stimulus_df=stimulus_df,
+            cell_df=cell_df,
+        )
+
+        if pandas:
+            return spikes_df
+        else:
+            return pl.from_pandas(spikes_df)
 
     def organize_recording_parameters(
             self, recordings, stimuli, cells, stimulus_df="stimulus_df", all_recordings=None

@@ -151,6 +151,7 @@ def plot_spiketrains(df, cmap, height=None, width=None):
     sm.set_array([])
 
     cbar = plt.colorbar(sm, ax=ax)
+    cbar.set_label("nr spikes")
 
     ax.set_xlabel("time in seconds")
     ax.set_ylabel("cell_index")
