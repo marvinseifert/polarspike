@@ -78,6 +78,7 @@ class Recording:
     nr_stimuli: int = field(init=False)  # Nr of stimuli in the recording
     nr_cells: int = field(init=False)  # Nr of cells in the recording
     name: str = field(init=False)  # Name of the recording
+    analysis: dict = field(default_factory=lambda: {}, init=False)
 
     def __post_init__(self):
         """
