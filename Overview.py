@@ -379,10 +379,7 @@ class Recording:
             cell_df=cell_df,
         )
 
-        if pandas:
-            return df
-        else:
-            return pl.from_pandas(df)
+        return df
 
     def organize_recording_parameters(
         self, recordings, stimuli, cells, stimulus_df="stimulus_df", all_recordings=None
