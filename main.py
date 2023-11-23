@@ -15,7 +15,10 @@ import Extractors
 
 if __name__ == "__main__":
     recording = Overview.Recording.load(r"D:\Zebrafish_14_11_23\ks_sorted\overview")
-    recording.dataframes["fff_stimulus"] = (
-        recording.stimulus_df.query("stimulus_name=='FFF'").copy().reset_index()
+    recording.dataframes["fff_analysis"] = recording.spikes_df.query(
+        "stimulus_name=='FFF'"
     )
-    spikes_df = recording.get_spikes_df(stimulus_df="fff_stimulus")
+    recording.dataframes["fff_analysis"] = recording.dataframes["fff_analysis"].loc[
+        recording.dataframes["fff_analysis"]["nr_of_spikes"] > 20
+    ]
+    spikes_df = recording.get_spikes_df("fff_analysis")

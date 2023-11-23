@@ -90,6 +90,9 @@ def sub_trigger(trigger, rel_trigger, logic):
 
 
 def mean_trigger_times(df, stimulus, time="seconds"):
+    if type(stimulus[0]) is str and stimulus[0] == "all":
+        stimulus = df["stimulus_index"].unique().tolist()
+
     stim_df = df.query(f"stimulus_index=={stimulus}")
     new_trigger_int = np.repeat(
         np.mean(

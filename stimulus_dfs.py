@@ -78,6 +78,10 @@ def split_triggers(old_triggers, nr_splits=1):
 
 
 def add_triggers(df, stimulus_id, new_trigger, new_logic, new_sublogic):
+    if type(stimulus_id[0]) is str and stimulus_id[0] == "all":
+        stimulus_id = np.arange(len(df)).tolist()
+    else:
+        stimulus_id = df.set_index("stimulus_index").loc[stimulus_id]
     df = df.copy()
     trigger = df["trigger_fr_relative"].to_numpy()
     trigger[stimulus_id] = new_trigger

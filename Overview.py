@@ -352,10 +352,13 @@ class Recording:
             )
             return
 
+        stimuli = input_df["stimulus_index"].unique().to_list()
+
         stim_list = [
             [stim_id]
             for stim_id in pl.from_pandas(self.dataframes[stimulus_df])
-            .unique("stimulus_index")["stimulus_index"]
+            .unique("stimulus_index")
+            .filter(pl.col("stimulus_index").is_in(stimuli))["stimulus_index"]
             .to_list()
         ]
         input_df = input_df.filter(
