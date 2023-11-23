@@ -11,11 +11,7 @@ import backbone
 import h5py
 import pandas as pd
 import numpy as np
-from ipywidgets import widgets
-import matplotlib.pyplot as plt
 import scipy.signal as sg
-import plotly.graph_objects as go
-import pickle
 import polars as pl
 import re
 
@@ -250,41 +246,34 @@ class Stimulus_Extractor:
 
 def find_ends(df):
     trigger_ends = []
-    for i in range(len(df)):
-        if (
-            df.loc[i, "stimulus_repeat_logic"] == 0
-            or df.loc[i, "stimulus_repeat_logic"] >= df.loc[i, "trigger_int"].shape[0]
-        ):
-            trigger_ends.append(
-                df.loc[i, "trigger_fr_relative"][:-1] + df.loc[i, "trigger_int"]
+
+    for row in df.itertuples():
+        stimulus_repeat_logic = row.stimulus_repeat_logic
+        trigger_int = row.trigger_int
+        trigger_fr_relative = row.trigger_fr_relative
+
+        if stimulus_repeat_logic == 0 or stimulus_repeat_logic >= trigger_int.shape[0]:
+            trigger_ends.append(trigger_fr_relative[:-1] + trigger_int)
+        else:
+            shape = (
+                stimulus_repeat_logic,
+                int(trigger_int.shape[0] / stimulus_repeat_logic),
             )
-            continue
-        shape = (
-            df.loc[i, "stimulus_repeat_logic"],
-            int(df.loc[i, "trigger_int"].shape[0] / df.loc[i, "stimulus_repeat_logic"]),
-        )
-        ints = df.loc[i, "trigger_int"][: np.multiply(shape[0], shape[1])].reshape(
-            shape
-        )
+            ints = trigger_int[: np.multiply(*shape)].reshape(shape)
+            min_int = np.min(ints, axis=0)
 
-        min_int = np.min(ints, axis=0)
+            triggers_sorted = trigger_fr_relative[: np.multiply(*shape)].reshape(shape)
+            trigger_ends.append((triggers_sorted + min_int).flatten())
 
-        triggers_sorted = df.loc[i, "trigger_fr_relative"][
-            : np.multiply(shape[0], shape[1])
-        ].reshape(shape)
-        trigger_ends.append((triggers_sorted + min_int).flatten())
     df["trigger_ends"] = trigger_ends
     return df
 
 
 def get_nr_repeats(df):
     repeats = []
-    for i in range(len(df)):
-        repeats.append(
-            df.loc[i, "trigger_fr_relative"][:-1].shape[0]
-            // df.loc[i, "stimulus_repeat_logic"]
-        )
-    df["nr_repeats"] = repeats
+    nr_triggers = np.asarray([len(x) - 1 for x in df["trigger_fr_relative"]])
+    nr_repeats = nr_triggers // df["stimulus_repeat_logic"]
+    df["nr_repeats"] = nr_repeats
     return df
 
 
@@ -353,23 +342,3 @@ def create_stim_df():
         }
     )
     return stimuli_df
-
-
-def split_triggers(old_triggers, nr_splits=1):
-    new_triggers = np.concatenate(
-        (old_triggers, old_triggers[:, :-1] + np.diff(old_triggers, axis=1) / 2),
-        axis=1,
-    ).astype(int)
-    new_triggers = np.sort(new_triggers, axis=1)
-    for _ in range(1, nr_splits):
-        old_triggers = new_triggers.copy()
-        new_triggers = np.concatenate(
-            (
-                old_triggers,
-                old_triggers[:, :-1] + np.diff(old_triggers, axis=1) / 2,
-            ),
-            axis=1,
-        ).astype(int)
-        new_triggers = np.sort(new_triggers, axis=1)
-    new_intervals = np.diff(new_triggers, axis=1)
-    return new_triggers, new_intervals

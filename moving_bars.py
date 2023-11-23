@@ -4,6 +4,7 @@ import math
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import matplotlib.patches as mpatches
+import pingouin
 
 
 def compute_vector_magnitude_direction(observations):
@@ -31,7 +32,7 @@ def compute_vector_magnitude_direction(observations):
     y_total = sum(y_components)
 
     # Calculate the magnitude and direction of the resulting vector
-    magnitude = math.sqrt(x_total ** 2 + y_total ** 2)
+    magnitude = math.sqrt(x_total**2 + y_total**2)
     direction = math.degrees(math.atan2(y_total, x_total))
 
     return magnitude, direction
@@ -92,17 +93,15 @@ def add_arrows_to_matplotlib(initial_fig, degrees, arrow_spacing, names=None):
         - The modified figure with the original plot and the added arrow subplot.
     """
     # Get the original axes
-
     axs = np.asarray(initial_fig.get_axes()).reshape(
         initial_fig.axes[0].get_subplotspec().get_gridspec().get_geometry()
     )
     ax_stimulus = axs[-1, 0]
     original_axes = axs[:-1, 0]
-    # for ax in original_axes:
-    #     ax.set_xlabel("")
+
     org_pos = original_axes[-1].get_position()
     stim_pos = ax_stimulus.get_position()
-
+    ax_stimulus.set_position([org_pos.x0, stim_pos.y0, org_pos.width, stim_pos.height])
     # original_axes.set_xlabel("Time (s)")
     ax_stimulus.spines["top"].set_visible(True)
     ax_stimulus.spines["right"].set_visible(True)
@@ -110,7 +109,7 @@ def add_arrows_to_matplotlib(initial_fig, degrees, arrow_spacing, names=None):
     ax_stimulus.spines["left"].set_visible(True)
     # The x_positions are the cumulative sum of the spacings, indicating where along the x-axis the arrows should be
     x_positions = (
-            np.cumsum(arrow_spacing) - np.asarray(arrow_spacing) / 2
+        np.cumsum(arrow_spacing) - np.asarray(arrow_spacing) / 2
     )  # subtract half, to put arrow into the middle
 
     # Add arrows to the new subplot
@@ -143,3 +142,35 @@ def add_arrows_to_matplotlib(initial_fig, degrees, arrow_spacing, names=None):
             ax_stimulus.text(x_pos, 0.3, name, ha="center", va="center", fontsize=14)
 
     return initial_fig
+
+
+class Moving_stats:
+    directions = np.array([0, 180, 270, 90, 315, 225, 45, 135])
+    step_size = 45.0
+
+    def calc_circ_stats(self, df):
+        directions = np.repeat(self.directions, 400)
+        trigger = df["trigger"].to_numpy()
+        directions_spikes = directions[trigger]
+        direction_counts = np.unique(directions_spikes, return_counts=True)
+        mean_deg = np.rad2deg(
+            pingouin.circ_mean(np.deg2rad(direction_counts[0]), direction_counts[1])
+        )
+        if mean_deg < 0:
+            mean_deg = 360 + mean_deg
+        z_val, p_val = pingouin.circ_rayleigh(
+            np.deg2rad(direction_counts[0]),
+            direction_counts[1],
+            np.deg2rad(self.step_size),
+        )
+
+        return_df = pl.DataFrame(
+            data={
+                "cell_index": [df["cell_index"][0]],
+                "mean_deg": [mean_deg],
+                "z_val": [z_val],
+                "p_val": [p_val],
+                "sum_spikes": [np.sum(direction_counts[1])],
+            }
+        )
+        return return_df

@@ -12,6 +12,8 @@ import multiprocessing as mp
 from functools import partial
 import traceback
 import pickle
+
+import stimulus_dfs
 import stimulus_spikes
 import polars as pl
 from grid import Table
@@ -102,18 +104,18 @@ class Recording:
 
     def single_recording_assertion(self):
         assert (
-                self.dataframes["spikes_df"]["recording"].unique().shape[0] == 1
+            self.dataframes["spikes_df"]["recording"].unique().shape[0] == 1
         ), "Dataframe contains multiple recordings use Recording_s class instead"
 
     def get_spikes_triggered(  # Function works on single recording only
-            self,
-            stimuli,
-            cells,
-            time="seconds",
-            waveforms=False,
-            pandas=True,
-            stimulus_df="stimulus_df",
-            cell_df="spikes_df",
+        self,
+        stimuli,
+        cells,
+        time="seconds",
+        waveforms=False,
+        pandas=True,
+        stimulus_df="stimulus_df",
+        cell_df="spikes_df",
     ):
         """
         This function returns a dataframe that contains the spikes that were recorded during the presentation
@@ -174,12 +176,12 @@ class Recording:
             return df
 
     def get_triggered(  # Function works on single recording only
-            self,
-            cells,
-            stimulus,
-            time="seconds",
-            waveforms=False,
-            stimulus_df="stimulus_df",
+        self,
+        cells,
+        stimulus,
+        time="seconds",
+        waveforms=False,
+        stimulus_df="stimulus_df",
     ):
         """
 
@@ -239,14 +241,14 @@ class Recording:
         return df
 
     def get_spikes_as_numpy(  # Function works with single recording only
-            self,
-            stimulus,
-            cells,
-            time="seconds",
-            waveforms=False,
-            relative=True,
-            stimulus_df="stimulus_df",
-            cell_df="spikes_df",
+        self,
+        cells,
+        stimulus,
+        time="seconds",
+        waveforms=False,
+        relative=True,
+        stimulus_df="stimulus_df",
+        cell_df="spikes_df",
     ):
         """
         This function returns the spikes that were recorded during the presentation of a specific stimulus as a numpy array.
@@ -312,12 +314,12 @@ class Recording:
         return data, spiky_cells[:, 0]
 
     def get_spikes_df(
-            self,
-            cell_df="spikes_df",
-            stimulus_df="stimulus_df",
-            time="seconds",
-            waveforms=False,
-            pandas=True,
+        self,
+        cell_df="spikes_df",
+        stimulus_df="stimulus_df",
+        time="seconds",
+        waveforms=False,
+        pandas=True,
     ):
         """
         Returns all spikes from all recordings and all stimuli in the choosen "cell_df" and "stimulus_df".
@@ -340,7 +342,6 @@ class Recording:
         """
 
         # Create the inputs to the get_spikes_triggered function:
-
         try:
             input_df = pl.from_pandas(
                 self.dataframes[cell_df][["recording", "stimulus_index", "cell_index"]]
@@ -350,33 +351,38 @@ class Recording:
                 "The cell dataframe does not contain the required columns. Accidentally provided a stimulus dataframe?"
             )
             return
-        assert (len(input_df) > 0), "The cell dataframe is empty"
 
         stim_list = [
             [stim_id]
-            for stim_id in input_df.unique("stimulus_index")["stimulus_index"].to_list()
+            for stim_id in pl.from_pandas(self.dataframes[stimulus_df])
+            .unique("stimulus_index")["stimulus_index"]
+            .to_list()
         ]
-
+        input_df = input_df.filter(
+            pl.col("stimulus_index").is_in(np.asarray(stim_list).flatten().tolist())
+        )
         stim_df = input_df.partition_by("stimulus_index")
         cell_list = [df["cell_index"].to_list() for df in stim_df]
 
-        spikes_df = self.get_spikes_triggered(
+        # Call the get_spikes_triggered function:
+
+        df = self.get_spikes_triggered(
             stim_list,
             cell_list,
-            time,
-            waveforms,
-            pandas,
+            time=time,
+            waveforms=waveforms,
+            pandas=pandas,
             stimulus_df=stimulus_df,
             cell_df=cell_df,
         )
 
         if pandas:
-            return spikes_df
+            return df
         else:
-            return pl.from_pandas(spikes_df)
+            return pl.from_pandas(df)
 
     def organize_recording_parameters(
-            self, recordings, stimuli, cells, stimulus_df="stimulus_df", all_recordings=None
+        self, recordings, stimuli, cells, stimulus_df="stimulus_df", all_recordings=None
     ):
         # Get the input in the correct format:
         # Check if the nr of recordings is equal to the nr of stimuli and cells:
@@ -508,7 +514,7 @@ class Recording:
                     self.dataframes[name][
                         self.dataframes[name].index.show_level_values(level)
                         == condition
-                        ]
+                    ]
                 )
         else:
             view = Table(self.dataframes[name])
@@ -533,7 +539,7 @@ class Recording:
         return self.views[df_name].tabulator.value
 
     def find_stim_indices(
-            self, stimulus_names, stimulus_df="stimulus_df", recording=None
+        self, stimulus_names, stimulus_df="stimulus_df", recording=None
     ):
         """Returns the stimulus indices that correspond to the stimulus names.
 
@@ -636,12 +642,12 @@ class Recording:
             return obj
 
     def use_view_as_filter(
-            self,
-            filter_name="filter",
-            filter_values="1,0",
-            all_stimuli=True,
-            view_name="spikes_df",
-            dataframe="spikes_df",
+        self,
+        filter_name="filter",
+        filter_values="1,0",
+        all_stimuli=True,
+        view_name="spikes_df",
+        dataframe="spikes_df",
     ):
         """Use the current self.df_view (which is a sub-frame from the complete
         dataframe) as a filter for the complete dataframe. This function will add a new column to the complete dataframe)
@@ -707,12 +713,12 @@ class Recording:
         self.dataframes[dataframe] = original_df.reset_index(drop=False)
 
     def extract_df_subset(
-            self,
-            cell_index=None,
-            stimulus_index=None,
-            stimulus_name=None,
-            recording=None,
-            dataframe="spikes_df",
+        self,
+        cell_index=None,
+        stimulus_index=None,
+        stimulus_name=None,
+        recording=None,
+        dataframe="spikes_df",
     ):
         """
         Returns a subset of the dataframe depending on the filter parameters.
@@ -792,11 +798,11 @@ class Recording:
         self.dataframes[dataframe] = self.dataframes[dataframe].reset_index(drop=False)
 
     def split_triggers(
-            self,
-            stimulus_df="stimulus_df",
-            nr_splits=2,
-            stimulus_indices=None,
-            recordings=None,
+        self,
+        stimulus_df="stimulus_df",
+        nr_splits=2,
+        stimulus_indices=None,
+        recordings=None,
     ):
         """
         Creates new (smaller, calculated) triggers for stimuli. It returns a new dataframe that contains the new triggers.
@@ -827,7 +833,7 @@ class Recording:
         nr_stimuli = len(stimulus_df)
         repeat_logic = stimulus_df["stimulus_repeat_logic"].to_numpy()
         old_triggers = np.vstack(stimulus_df["trigger_fr_relative"].to_numpy())
-        new_triggers, new_intervals = stimulus_trace.split_triggers(
+        new_triggers, new_intervals = stimulus_dfs.split_triggers(
             old_triggers, nr_splits
         )
         stimulus_df["trigger_fr_relative"] = np.array_split(
@@ -839,7 +845,7 @@ class Recording:
         stimulus_df["trigger_ends"] = np.array_split(
             new_triggers[:, 1:].flatten(), nr_stimuli, axis=0
         )
-        stimulus_df["stimulus_repeat_logic"] = repeat_logic * (2 ** nr_splits)
+        stimulus_df["stimulus_repeat_logic"] = repeat_logic * (2**nr_splits)
         return stimulus_df
 
 
@@ -965,12 +971,12 @@ class Recording_s(Recording):
                     ).reset_index(drop=True)
 
     def get_spikes_df(
-            self,
-            cell_df="spikes_df",
-            stimulus_df="stimulus_df",
-            time="seconds",
-            waveforms=False,
-            pandas=True,
+        self,
+        cell_df="spikes_df",
+        stimulus_df="stimulus_df",
+        time="seconds",
+        waveforms=False,
+        pandas=True,
     ):
         """
         Returns all spikes from all recordings and all stimuli in the choosen "cell_df" and "stimulus_df".
@@ -993,7 +999,6 @@ class Recording_s(Recording):
         """
 
         # Create the inputs to the get_spikes_triggered function:
-
         try:
             input_df = pl.from_pandas(
                 self.dataframes[cell_df][["recording", "stimulus_index", "cell_index"]]
@@ -1003,7 +1008,6 @@ class Recording_s(Recording):
                 "The cell dataframe does not contain the required columns. Accidentally provided a stimulus dataframe?"
             )
             return
-        assert (len(input_df) > 0), "The cell dataframe is empty"
         recordings = [
             [rec] for rec in input_df.unique("recording")["recording"].to_list()
         ]
@@ -1052,15 +1056,15 @@ class Recording_s(Recording):
             return df
 
     def get_spikes_triggered(
-            self,
-            recordings,
-            stimuli,
-            cells,
-            time="seconds",
-            waveforms=False,
-            pandas=True,
-            cell_df="spikes_df",
-            stimulus_df="stimulus_df",
+        self,
+        recordings,
+        stimuli,
+        cells,
+        time="seconds",
+        waveforms=False,
+        pandas=True,
+        cell_df="spikes_df",
+        stimulus_df="stimulus_df",
     ):
         self.synchronize_dataframes()
         nr_cpus = mp.cpu_count()
@@ -1121,15 +1125,15 @@ class Recording_s(Recording):
             return df
 
     def get_spikes_chunked(
-            self,
-            chunk_size,
-            chunk_position,
-            recordings,
-            cells,
-            stimuli,
-            time="seconds",
-            waveforms=False,
-            pandas=True,
+        self,
+        chunk_size,
+        chunk_position,
+        recordings,
+        cells,
+        stimuli,
+        time="seconds",
+        waveforms=False,
+        pandas=True,
     ):
         if recordings[0] == "all":
             recordings = self.recordings.keys()
@@ -1170,7 +1174,7 @@ class Recording_s(Recording):
         for df_name in self.dataframes:
             for recording in self.recordings.values():
                 df_temp = self.dataframes[df_name].query("recording == @recording.name")
-                self.recordings[recording.name].dataframes[df_name] = df_temp.reset_index()
+                self.recordings[recording.name].dataframes[df_name] = df_temp
                 # Need to save the changes in an uninterruptible way:
                 save_thread = Thread(
                     target=self.recordings[recording.name].save_save,

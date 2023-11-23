@@ -41,7 +41,8 @@ def get_stimulus_name(df, stimulus):
 def get_stimulus_info(df):
     begin_end = df[["begin_fr", "end_fr"]].to_numpy()
     trigger = df[["trigger_fr_relative"]].to_numpy()[0][0]
-    trigger_end = df[["trigger_ends"]].to_numpy()[0][0]
+    trigger_end = df[["trigger_fr_relative"]].to_numpy()[0][0][1:]
+    # trigger_end = df[["trigger_ends"]].to_numpy()[0][0]
     stim_logic = df[["stimulus_repeat_logic"]].to_numpy()[0][0]
     return begin_end, trigger, trigger_end, stim_logic
 
