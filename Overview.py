@@ -30,8 +30,8 @@ def spike_load_worker(args):
     path, stimuli, cells, time, waveforms, cell_df, stimulus_df = args
     obj = Recording.load(path)
     df = obj.get_spikes_triggered(
-        stimuli[0],
-        cells[0],
+        stimuli,
+        cells,
         time,
         waveforms,
         stimulus_df=stimulus_df,
@@ -412,7 +412,7 @@ class Recording:
                     sub_stim_list.append(sub_stim)
                     sub_cell_list.append(cell * len(sub_stim))
             new_stimuli.append(sub_stim_list)
-            new_cells.append(sub_cell_list)
+            new_cells.append(sub_cell_list[0])
         return recordings, new_stimuli, new_cells
 
     def get_stimulus_subset(self, stimulus=None, name=None, dataframes=None):
@@ -853,9 +853,10 @@ class Recording:
 class Recording_s(Recording):
     def __init__(self, analysis_path, analysis_name):
         super().__init__(
-            analysis_path,
+            "",
             dataframes={"spikes_df": None, "stimulus_df": None},
         )
+        self.store_path = analysis_path
         self.name = analysis_name
         self.recordings = {}
         self.nr_recordings = 0
@@ -1021,16 +1022,19 @@ class Recording_s(Recording):
                 [stim_id]
                 for stim_id in df.unique("stimulus_index")["stimulus_index"].to_list()
             ]
-            rec_input.append([stim_list])
+            rec_input.append(stim_list)
             stim_df = df.partition_by("stimulus_index")
-            cell_list = [[df["cell_index"].to_list()] for df in stim_df]
+            cell_list = [df["cell_index"].to_list() for df in stim_df]
             rec_input.append(cell_list)
             input_list.append(rec_input)
 
-        self.synchronize_dataframes()
         nr_cpus = mp.cpu_count()
         if nr_cpus > len(recordings):
             nr_cpus = len(recordings)
+
+        self.synchronize_dataframes()
+
+        paths = self.dummy_objects([rec[0] for rec in recordings])
 
         with mp.Pool(nr_cpus) as pool:
             # Pass all required arguments to the worker function
@@ -1038,7 +1042,7 @@ class Recording_s(Recording):
                 spike_load_worker,
                 [
                     (
-                        self.recordings[rec_input[0][0]].load_path,
+                        path,
                         rec_input[1],
                         rec_input[2],
                         time,
@@ -1046,7 +1050,7 @@ class Recording_s(Recording):
                         cell_df,
                         stimulus_df,
                     )
-                    for rec_input in input_list
+                    for path, rec_input in zip(paths, input_list)
                 ],
             )
 
@@ -1067,16 +1071,15 @@ class Recording_s(Recording):
         cell_df="spikes_df",
         stimulus_df="stimulus_df",
     ):
-        self.synchronize_dataframes()
-        nr_cpus = mp.cpu_count()
-        if nr_cpus > len(recordings):
-            nr_cpus = len(recordings)
+        # self.synchronize_dataframes()
 
         all_recordings = [[recording] for recording in self.recordings.keys()]
         recordings, stimuli, cells = self.organize_recording_parameters(
             recordings, stimuli, cells, stimulus_df, all_recordings
         )
-
+        nr_cpus = mp.cpu_count()
+        if nr_cpus > len(recordings):
+            nr_cpus = len(recordings)
         # Now we have lists of list matching the recordings, cells and stimuli. But, we still need to fill in
         # the "all" cells:
         new_cells = []
@@ -1084,8 +1087,8 @@ class Recording_s(Recording):
             stim_cells_new = []
             for stim_cell_list in cell_list:
                 cell_sub_list = []
-                for cell in stim_cell_list:
-                    if cell[0] == "all":
+                for cell in stim_cell_list[:1]:
+                    if cell == "all":
                         cell_sub_list.append(
                             self.dataframes[cell_df]
                             .query("recording == @recording")["cell_index"]
@@ -1094,12 +1097,13 @@ class Recording_s(Recording):
                         )
 
                     else:
-                        cell_sub_list.append(stim_cell_list[0])
-                stim_cells_new.append(cell_sub_list)
+                        cell_sub_list.append(stim_cell_list)
+                stim_cells_new.append(cell_sub_list[0])
             new_cells.append(stim_cells_new)
         cells = new_cells
 
         # Identify the stimulus indices in the recordings if stimulus name was provided.
+        paths = self.dummy_objects([rec[0] for rec in recordings])
 
         with mp.Pool(nr_cpus) as pool:
             # Pass all required arguments to the worker function
@@ -1107,7 +1111,7 @@ class Recording_s(Recording):
                 spike_load_worker,
                 [
                     (
-                        self.recordings[rec[0]].load_path,
+                        rec,
                         stimulus_list,
                         cell_list,
                         time,
@@ -1115,7 +1119,7 @@ class Recording_s(Recording):
                         cell_df,
                         stimulus_df,
                     )
-                    for rec, stimulus_list, cell_list in zip(recordings, stimuli, cells)
+                    for rec, stimulus_list, cell_list in zip(paths, stimuli, cells)
                 ],
             )
 
@@ -1176,12 +1180,18 @@ class Recording_s(Recording):
             for recording in self.recordings.values():
                 df_temp = self.dataframes[df_name].query("recording == @recording.name")
                 self.recordings[recording.name].dataframes[df_name] = df_temp
-                # Need to save the changes in an uninterruptible way:
-                save_thread = Thread(
-                    target=self.recordings[recording.name].save_save,
-                )
-                save_thread.start()
-                save_thread.join()
+
+    def dummy_objects(self, recordings):
+        self.synchronize_dataframes()
+        paths = []
+        for recording in recordings:
+            recording = self.recordings[recording]
+            new_rec = Recording(
+                recording.parquet_path, recording.dataframes, recording.sampling_freq
+            )
+            new_rec.save(f"{self.store_path}\\{recording.name}")
+            paths.append(f"{self.store_path}\\{recording.name}")
+        return paths
 
     def delete_df(self, df_name):
         """

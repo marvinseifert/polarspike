@@ -14,11 +14,13 @@ plt.style.use("dark_background")
 import Extractors
 
 if __name__ == "__main__":
-    recording = Overview.Recording.load(r"D:\Zebrafish_14_11_23\ks_sorted\overview")
-    recording.dataframes["fff_analysis"] = recording.spikes_df.query(
+    recordings = Overview.Recording_s.load_from_single(
+        r"D:\combined_analysis",
+        "test_analysis",
+        r"D:\zebrafish_14_11_23\ks_sorted\overview",
+    )
+    recordings.add_from_saved(r"D:\zebrafish_26_10_23\ks_sorted\overview")
+    recordings.dataframes["fff_all"] = recordings.dataframes["spikes_df"].query(
         "stimulus_name=='FFF'"
     )
-    recording.dataframes["fff_analysis"] = recording.dataframes["fff_analysis"].loc[
-        recording.dataframes["fff_analysis"]["nr_of_spikes"] > 20
-    ]
-    spikes_df = recording.get_spikes_df("fff_analysis")
+    recordings.get_spikes_df(cell_df="fff_all")
