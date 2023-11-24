@@ -611,11 +611,13 @@ class Recording:
         -------
 
         """
+        self.views = {}
         with open(filename, "wb") as f:
             pickle.dump(self, f)
 
     def save_save(self):
         """ """
+        self.views = {}
         with open(self.load_path, "wb") as f:
             pickle.dump(self, f)
 
