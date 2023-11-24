@@ -1015,7 +1015,8 @@ class Recording_s(Recording):
         recordings = [
             [rec] for rec in input_df.unique("recording")["recording"].to_list()
         ]
-        input_df = input_df.partition_by("recording")
+        input_dict = input_df.partition_by("recording", as_dict=True)
+        input_df = [input_dict[rec[0]] for rec in recordings]
         input_list = []
         for df in input_df:
             rec_input = []
