@@ -7,7 +7,7 @@ file formate.
 
 @author: Marvin
 """
-import backbone
+from polarspike import backbone
 import h5py
 import pandas as pd
 import numpy as np

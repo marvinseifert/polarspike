@@ -13,15 +13,15 @@ from functools import partial
 import traceback
 import pickle
 
-import stimulus_dfs
-import stimulus_spikes
+from polarspike import stimulus_dfs
+from polarspike import stimulus_spikes
 import polars as pl
-from grid import Table
-import df_filter
+from polarspike.grid import Table
+from polarspike import df_filter
 from dataclasses import dataclass, field
-import cells_and_stimuli
-import stimulus_trace
-import recordings_stimuli_cells
+from polarspike import cells_and_stimuli
+from polarspike import stimulus_trace
+from polarspike import recordings_stimuli_cells
 from threading import Thread
 import warnings
 
@@ -1062,6 +1062,25 @@ class Recording_s(Recording):
             return df.to_pandas()
         else:
             return df
+
+    def spikes_for_analysis(self, analysis_name, **kwargs):
+        """
+        Returns the spikes that are used for a specific analysis.
+
+        Parameters
+        ----------
+        analysis_name : str
+            Name of the analysis that shall be used.
+
+        Returns
+        -------
+        spikes_df : pandas.DataFrame
+            A dataframe that contains the spikes that are used for a specific analysis.
+        """
+        analysis = self.analysis[analysis_name]
+        cell_df = analysis["cell_df"]
+        stimulus_df = analysis["stimulus_df"]
+        return self.get_spikes_df(cell_df, stimulus_df, **kwargs)
 
     def get_spikes_triggered(
         self,

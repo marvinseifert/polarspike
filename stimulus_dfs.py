@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-import stimulus_trace
+from polarspike import stimulus_trace
 
 
 class Stimulus_df_schroeder:

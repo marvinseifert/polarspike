@@ -60,6 +60,7 @@ class Table:
         return self.panel.servable()
 
     def update_filter_widget(self, event=None):
+        print("test")
         # Remove any previous widget
         self.filter_placeholder[:] = []
 
@@ -77,6 +78,7 @@ class Table:
             self.filter_placeholder.append(self.filter_widget)
 
         elif pd.api.types.is_numeric_dtype(self.df[column]):
+            print("numeric")
             # Create two FloatInput widgets for lower and upper bounds
             self.lower_bound_input = pn.widgets.FloatInput(
                 name=f"Min {column}", value=float(self.df[column].min())
@@ -94,6 +96,7 @@ class Table:
                 [self.lower_bound_input, self.upper_bound_input]
             )
         elif pd.api.types.is_string_dtype(self.df[column]):
+            print("string")
             options = ["All"] + list(self.df[column].unique())
             self.filter_widget = pn.widgets.MultiSelect(
                 name=column, options=options, value=options

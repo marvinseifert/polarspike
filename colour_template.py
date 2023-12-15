@@ -12,6 +12,7 @@ from mpl_toolkits.axes_grid1.axes_divider import HBoxDivider, VBoxDivider
 import mpl_toolkits.axes_grid1.axes_size as Size
 import matplotlib.gridspec as gridspec
 from matplotlib.colorbar import Colorbar
+import polarspike
 
 
 class Colour_template:
@@ -24,7 +25,10 @@ class Colour_template:
         button_style="",  # 'success', 'info', 'warning', 'danger' or ''
     )
 
-    def __init__(self, df_file="stim_colour_df"):
+    def __init__(self, df_file=None):
+        if df_file is None:
+            df_file = polarspike.__path__[0] + "/stim_colour_df"
+
         self.plot_colour_dataframe = pd.read_pickle(df_file)
 
         self.stimulus_select = widgets.RadioButtons(

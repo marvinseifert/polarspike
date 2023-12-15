@@ -19,8 +19,10 @@ if __name__ == "__main__":
         "test_analysis",
         r"D:\zebrafish_14_11_23\ks_sorted\overview",
     )
+
     recordings.add_from_saved(r"D:\zebrafish_26_10_23\ks_sorted\overview")
-    recordings.dataframes["fff_all"] = recordings.dataframes["spikes_df"].query(
-        "stimulus_name=='FFF'"
+
+    recordings.dataframes["fff_latency_stim"] = (
+        recordings.dataframes["stimulus_df"].query("stimulus_name == 'FFF'").copy()
     )
-    recordings.get_spikes_df(cell_df="fff_all")
+    spikes = recordings.get_spikes_df(stimulus_df="fff_latency_stim", pandas=False)
