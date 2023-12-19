@@ -115,3 +115,8 @@ def mean_trigger_times(df, stimulus, time="seconds"):
         new_trigger_int = new_trigger_int / stim_df["sampling_freq"].values[0]
 
     return new_trigger_int
+
+
+def stim_duration(df, stimulus, time="seconds"):
+    stim_duration = np.sum(mean_trigger_times(df, stimulus, time))
+    return stim_duration
