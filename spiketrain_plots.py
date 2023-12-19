@@ -7,6 +7,11 @@ import numpy as np
 import pandas as pd
 from polarspike import histograms
 from polarspike import spiketrains
+from plotly.subplots import make_subplots
+from polarspike import histograms
+from bokeh.plotting import figure, show
+from bokeh.models import ColumnDataSource
+from bokeh.layouts import gridplot
 
 
 def whole_stimulus_plotly(df, stacked=False):
@@ -245,3 +250,58 @@ def map_index(df, index="cell_index", y_key="repeat"):
 
 
 # def plot_vertical(df, )
+
+
+def spikes_and_trace(df, stacked=False):
+    y_key = "repeat"
+    if type(df) is pl.DataFrame:
+        df = df.to_pandas()
+
+    if stacked:
+        df, unique_indices = map_index(df, "cell_index", "repeat")
+        y_key = "index_linear"
+
+    psth, bins = histograms.psth(
+        df, bin_size=0.05, start=0, end=df["times_triggered"].max()
+    )
+    psth = psth / df["cell_index"].unique().shape[0] * (1 / 0.05)
+
+    # First subplot
+    s1 = figure(width=1200, height=100, title=None, sizing_mode="fixed")
+    s1.line(bins[1:], psth, line_width=2, color="black")
+    s1.xaxis.major_label_text_font_size = "0pt"
+
+    # Second subplot
+    s2 = figure(
+        width=1200, height=400, title=None, x_range=s1.x_range, sizing_mode="fixed"
+    )
+    source = ColumnDataSource(df)
+    s2.dash(
+        "times_triggered",
+        y_key,
+        size=10,
+        source=source,
+        color="black",
+        alpha=1,
+        angle=1.5708,
+    )
+    s2.xgrid.grid_line_color = None
+    s2.ygrid.grid_line_color = None
+
+    s2.xaxis.axis_label = "Time (s)"
+    s2.yaxis.axis_label = "Cell index"
+    s1.yaxis.axis_label = "Spikes / s"
+
+    if stacked:
+        s2.yaxis.ticker = np.arange(1, df[y_key].max() + 1, 2)
+        s2.yaxis.major_label_overrides = {
+            i: str(label)
+            for i, label in enumerate(
+                np.repeat(df["cell_index"].unique(), df["repeat"].max() + 1)[1::2]
+            )
+        }
+
+    # Combine plots vertically
+    grid = gridplot([[s1], [s2]], sizing_mode="scale_width")
+
+    return grid

@@ -13,6 +13,9 @@ import mpl_toolkits.axes_grid1.axes_size as Size
 import matplotlib.gridspec as gridspec
 from matplotlib.colorbar import Colorbar
 import polarspike
+import bokeh
+from bokeh.plotting import figure, show
+from bokeh.models import BoxAnnotation, Label
 
 
 class Colour_template:
@@ -184,6 +187,11 @@ class Colour_template:
             return fig
         elif type(initial_fig) == plt.Figure:
             fig = add_stimulus_to_matplotlib(
+                initial_fig, self.colours, flash_durations, names=names
+            )
+            return fig
+        elif type(initial_fig) == bokeh.models.plots.GridPlot:
+            fig = add_stimulus_to_bokeh(
                 initial_fig, self.colours, flash_durations, names=names
             )
             return fig
@@ -416,5 +424,50 @@ def add_stimulus_to_matplotlib(initial_fig, colours, flash_durations, names=None
 
     # Adjust the layout
     # initial_fig.tight_layout()
+
+    return initial_fig
+
+
+def add_stimulus_to_bokeh(initial_fig, colours, flash_durations, names=None):
+    # Assuming 'height', 'colours', 'flash_durations', and optionally 'names' are defined
+    # Create a new plot
+    height = 2
+    fig = figure(
+        width=1200,
+        height=50,
+        x_range=initial_fig.children[0][0].x_range,
+        sizing_mode="fixed",
+    )
+
+    x_start = 0
+    xs = []  # List to hold x coordinates of all patches
+    ys = []  # List to hold y coordinates of all patches
+    for i, (color, width) in enumerate(zip(colours, flash_durations)):
+        # Define the coordinates for each rectangle (patch)
+        xs.append([x_start, x_start, x_start + width, x_start + width])
+        ys.append([0, height, height, 0])
+
+        # Add labels if names are provided
+        if names is not None and len(names) == len(colours):
+            label = Label(
+                x=x_start + width / 2,
+                y=height / 2,
+                text=names[i],
+                text_font_size="14pt",
+                text_align="center",
+            )
+            fig.add_layout(label)
+
+        x_start += width
+
+    # Add the patches to the figure
+    fig.patches(xs, ys, color=colours, alpha=0.8, line_width=2)
+    fig.xgrid.grid_line_color = None
+    fig.ygrid.grid_line_color = None
+    fig.xaxis.major_label_text_font_size = "0pt"
+    fig.yaxis.major_label_text_font_size = "0pt"
+
+    rows = len(initial_fig.children)
+    initial_fig.children.append((fig, rows, 0))
 
     return initial_fig
