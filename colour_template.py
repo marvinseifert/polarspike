@@ -432,8 +432,9 @@ def add_stimulus_to_bokeh(initial_fig, colours, flash_durations, names=None):
     # Assuming 'height', 'colours', 'flash_durations', and optionally 'names' are defined
     # Create a new plot
     height = 2
+    width = initial_fig.children[0][0].width
     fig = figure(
-        width=1200,
+        width=width,
         height=50,
         x_range=initial_fig.children[0][0].x_range,
         sizing_mode="fixed",
@@ -449,12 +450,19 @@ def add_stimulus_to_bokeh(initial_fig, colours, flash_durations, names=None):
 
         # Add labels if names are provided
         if names is not None and len(names) == len(colours):
+            # Check if colour is dark:
+            if calculate_luminance(hex_to_rgb(color)) < 128:
+                text_color = "white"
+            else:
+                text_color = "black"
+
             label = Label(
                 x=x_start + width / 2,
                 y=height / 2,
                 text=names[i],
-                text_font_size="14pt",
+                text_font_size="11pt",
                 text_align="center",
+                text_color=text_color,
             )
             fig.add_layout(label)
 
@@ -464,10 +472,27 @@ def add_stimulus_to_bokeh(initial_fig, colours, flash_durations, names=None):
     fig.patches(xs, ys, color=colours, alpha=0.8, line_width=2)
     fig.xgrid.grid_line_color = None
     fig.ygrid.grid_line_color = None
+    fig.xaxis.major_tick_line_color = None
+    fig.yaxis.major_tick_line_color = None
+    fig.xaxis.minor_tick_line_color = None
+    fig.yaxis.minor_tick_line_color = None
     fig.xaxis.major_label_text_font_size = "0pt"
     fig.yaxis.major_label_text_font_size = "0pt"
+    fig.yaxis.axis_label = "Stimulus"
+    fig.yaxis.axis_label_orientation = 0
 
     rows = len(initial_fig.children)
     initial_fig.children.append((fig, rows, 0))
 
     return initial_fig
+
+
+def hex_to_rgb(hex_color):
+    # Convert hex to RGB
+    hex_color = hex_color.lstrip("#")
+    return tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
+
+
+def calculate_luminance(rgb):
+    # Calculate luminance using the formula
+    return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]

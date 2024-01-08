@@ -325,3 +325,9 @@ def find_nearest(array, value):
     array = np.asarray(array)
     idx = (np.abs(array - value)).argmin()
     return array[idx]
+
+
+def enumerate2(xs, start=0, step=1):
+    for x in xs:
+        yield (start, x)
+        start += step

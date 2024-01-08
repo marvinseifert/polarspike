@@ -12,6 +12,7 @@ from polarspike import histograms
 from bokeh.plotting import figure, show
 from bokeh.models import ColumnDataSource
 from bokeh.layouts import gridplot
+from polarspike import backbone
 
 
 def whole_stimulus_plotly(df, stacked=False):
@@ -252,7 +253,7 @@ def map_index(df, index="cell_index", y_key="repeat"):
 # def plot_vertical(df, )
 
 
-def spikes_and_trace(df, stacked=False):
+def spikes_and_trace(df, stacked=False, width=1400, height=500):
     y_key = "repeat"
     if type(df) is pl.DataFrame:
         df = df.to_pandas()
@@ -267,13 +268,17 @@ def spikes_and_trace(df, stacked=False):
     psth = psth / df["cell_index"].unique().shape[0] * (1 / 0.05)
 
     # First subplot
-    s1 = figure(width=1200, height=100, title=None, sizing_mode="fixed")
+    s1 = figure(width=width, height=int(0.2 * height), title=None, sizing_mode="fixed")
     s1.line(bins[1:], psth, line_width=2, color="black")
     s1.xaxis.major_label_text_font_size = "0pt"
 
     # Second subplot
     s2 = figure(
-        width=1200, height=400, title=None, x_range=s1.x_range, sizing_mode="fixed"
+        width=width,
+        height=int(0.8 * height),
+        title=None,
+        x_range=s1.x_range,
+        sizing_mode="fixed",
     )
     source = ColumnDataSource(df)
     s2.dash(
@@ -289,19 +294,28 @@ def spikes_and_trace(df, stacked=False):
     s2.ygrid.grid_line_color = None
 
     s2.xaxis.axis_label = "Time (s)"
-    s2.yaxis.axis_label = "Cell index"
+    if stacked:
+        s2.yaxis.axis_label = "Cell index and repeat(s)"
+    else:
+        s2.yaxis.axis_label = "Repeat(s)"
     s1.yaxis.axis_label = "Spikes / s"
 
     if stacked:
         s2.yaxis.ticker = np.arange(1, df[y_key].max() + 1, 2)
         s2.yaxis.major_label_overrides = {
             i: str(label)
-            for i, label in enumerate(
-                np.repeat(df["cell_index"].unique(), df["repeat"].max() + 1)[1::2]
+            for i, label in backbone.enumerate2(
+                np.repeat(np.sort(df["cell_index"].unique()), df["repeat"].max() + 1)[
+                    1::2
+                ],
+                start=1,
+                step=2,
             )
         }
 
     # Combine plots vertically
-    grid = gridplot([[s1], [s2]], sizing_mode="scale_width")
+    grid = gridplot(
+        [[s1], [s2]], width=width, sizing_mode="scale_width", merge_tools=True
+    )
 
     return grid

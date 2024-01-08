@@ -19,10 +19,7 @@ if __name__ == "__main__":
         "test_analysis",
         r"D:\zebrafish_14_11_23\ks_sorted\overview",
     )
-
-    recordings.add_from_saved(r"D:\zebrafish_26_10_23\ks_sorted\overview")
-
-    recordings.dataframes["fff_latency_stim"] = (
-        recordings.dataframes["stimulus_df"].query("stimulus_name == 'FFF'").copy()
+    spikes = recordings.get_spikes_triggered(
+        [["zebrafish_14_11_23"]], [[[0], [5]]], [[[270, 271, 272, 273]]]
     )
-    spikes = recordings.get_spikes_df(stimulus_df="fff_latency_stim", pandas=False)
+    fig = spiketrain_plots.spikes_and_trace(spikes, stacked=True)
