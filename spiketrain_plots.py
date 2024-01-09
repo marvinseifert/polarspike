@@ -21,7 +21,7 @@ def whole_stimulus_plotly(df, stacked=False):
         df = df.to_pandas()
 
     if stacked:
-        df, unique_indices = map_index(df, "cell_index", "repeat")
+        df, unique_indices = map_index(df, ["cell_index", "repeat"])
         y_key = "index_linear"
 
     fig = go.Figure()
@@ -53,18 +53,19 @@ def whole_stimulus_plotly(df, stacked=False):
 def whole_stimulus(
     df,
     how="times_triggered",
-    index="cell_index",
+    index=None,
     stacked=True,
     height=10,
     width=10,
     cmap="Greys",
     bin_size=0.05,
     norm="linear",
-    y_key="repeat",
 ):
+    if index is None:
+        index = ["cell_index", "repeat"]
     # Store some information about the data
-    unique_indices = np.unique(df[index])
-    nr_repeats = df[y_key].max() + 1
+    unique_indices = np.unique(df[index[0]])
+    nr_repeats = df[index[1]].max() + 1
     nr_unique = unique_indices.shape[0]  # In case of a single cell or a single color
     max_time = np.max(df[how])
 
@@ -89,7 +90,7 @@ def whole_stimulus(
     df = df.copy()
     if stacked:
         # To space the cells, we need to map the combined repeats and cells indices to a linear range.
-        df, unique_indices = map_index(df, index, y_key)
+        df, unique_indices = map_index(df, index)
         y_key = "index_linear"
     #     psth, bins = histograms.psth_by_index(
     #         df, bin_size=bin_size, index=index, window_end=max_time
@@ -103,11 +104,11 @@ def whole_stimulus(
     axs[0, 0].plot(bins[1:], psth, color="black", alpha=0.5)
 
     # Switch data format to categorical
-    df["index"] = df[index].astype("category")
+    df["index"] = df[index[0]].astype("category")
     df["index"] = df["index"].cat.as_ordered()
 
     if stacked:
-        plot_height = int(nr_unique * nr_repeats)
+        plot_height = len(df["index_linear"].unique())
     else:
         plot_height = nr_repeats
 
@@ -145,8 +146,8 @@ def whole_stimulus(
             )
 
     if stacked:
-        axs[1, 0].yaxis.set_ticks(np.arange(1, nr_unique * nr_repeats + 1, 2))
-        axs[1, 0].set_yticklabels(np.repeat(unique_indices.to_numpy(), nr_repeats)[::2])
+        axs[1, 0].yaxis.set_ticks(np.arange(1, len(df["index_linear"].unique()) + 1, 2))
+        axs[1, 0].set_yticklabels(unique_indices.to_numpy()[::2])
     axs[0, 0].set_ylabel("Spikes / s")
     axs[1, 0].set_ylabel(f"{index} and repeat(s)")
     axs[2, 0].set_xlabel("Time in s")
@@ -173,6 +174,7 @@ def whole_stimulus(
     axs[2, 0].tick_params(axis="y", which="both", length=0)
     axs[2, 0].set_yticks([])
     axs[1, 0].set_xlim(0, np.max(df[how]))
+    fig.subplots_adjust(left=0.2)
     return fig, axs
 
 
@@ -223,43 +225,15 @@ def draw_artist(
     cbar.set_label(f"Nr of spikes, binsize={bin_size} s")
 
 
-def map_index(df, index="cell_index", y_key="repeat"):
-    """Maps the cell indices to a linear range.
-    Parameters
-    ----------
-    df : pandas.DataFrame
-        A DataFrame containing the times of spikes relative to the stimulus onset.
-    Returns
-    -------
-    df : pandas.DataFrame
-        The DataFrame with the cell indices mapped to a linear range.
-    unique_cells : pandas.Series
-        A Series containing the unique cell indices.
-
-    """
-
-    unique_index = pd.Series(df[index].unique())
-    mapping = pd.Series(index=unique_index, data=range(len(unique_index)))
-    df["index_linear"] = df[index].map(mapping)
-    # Assign a new unique index for each cell and repeat:
-    combined_indices = np.array(list(zip(df["index_linear"], df[y_key])))
-
-    _, inverse_indices = np.unique(combined_indices, axis=0, return_inverse=True)
-    df["index_linear"] = inverse_indices + 1
-
-    return df, unique_index
-
-
-# def plot_vertical(df, )
-
-
-def spikes_and_trace(df, stacked=False, width=1400, height=500):
+def spikes_and_trace(df, stacked=False, indices=None, width=1400, height=500):
     y_key = "repeat"
+    if indices is None:
+        indices = ["cell_index", "repeat"]
     if type(df) is pl.DataFrame:
         df = df.to_pandas()
 
     if stacked:
-        df, unique_indices = map_index(df, "cell_index", "repeat")
+        df, unique_indices = map_index(df, indices)
         y_key = "index_linear"
 
     psth, bins = histograms.psth(
@@ -295,7 +269,8 @@ def spikes_and_trace(df, stacked=False, width=1400, height=500):
 
     s2.xaxis.axis_label = "Time (s)"
     if stacked:
-        s2.yaxis.axis_label = "Cell index and repeat(s)"
+        seperator = ", "
+        s2.yaxis.axis_label = seperator.join(indices)
     else:
         s2.yaxis.axis_label = "Repeat(s)"
     s1.yaxis.axis_label = "Spikes / s"
@@ -305,12 +280,10 @@ def spikes_and_trace(df, stacked=False, width=1400, height=500):
         s2.yaxis.major_label_overrides = {
             i: str(label)
             for i, label in backbone.enumerate2(
-                np.repeat(np.sort(df["cell_index"].unique()), df["repeat"].max() + 1)[
-                    1::2
-                ],
+                unique_indices.to_numpy()[1::2],
                 start=1,
                 step=2,
-            )
+            )  #
         }
 
     # Combine plots vertically
@@ -319,3 +292,36 @@ def spikes_and_trace(df, stacked=False, width=1400, height=500):
     )
 
     return grid
+
+
+def map_index(df, index_columns):
+    """
+    Maps the indices specified by index_columns to a linear range.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        A DataFrame containing data with indices to be linearly mapped.
+    index_columns : list
+        A list of column names to be used for creating a multi-dimensional index.
+
+    Returns
+    -------
+    df : pandas.DataFrame
+        The DataFrame with the indices mapped to a linear range.
+    unique_indices : pandas.Series
+        A Series containing the unique indices created from the specified columns.
+    """
+
+    # Create a multi-dimensional index based on the specified columns
+    df = df.sort_values(index_columns)
+    multi_index = df[index_columns].apply(tuple, axis=1)
+
+    # Get unique indices and create a mapping
+    unique_indices = pd.Series(multi_index.unique())
+    mapping = pd.Series(index=unique_indices, data=range(len(unique_indices)))
+
+    # Map the multi-dimensional index to a linear index
+    df["index_linear"] = multi_index.map(mapping) + 1
+
+    return df, unique_indices

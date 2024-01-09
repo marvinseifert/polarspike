@@ -14,12 +14,14 @@ plt.style.use("dark_background")
 import Extractors
 
 if __name__ == "__main__":
-    recordings = Overview.Recording_s.load_from_single(
-        r"D:\combined_analysis",
-        "test_analysis",
-        r"D:\zebrafish_14_11_23\ks_sorted\overview",
+    recordings = Overview.Recording_s.load("D:\\combined_analysis\\all_recordings")
+    recordings.dataframes["test_df"] = recordings.dataframes["fff_df"].loc[
+        (recordings.dataframes["fff_df"]["cell_index"] == 5)
+        | (recordings.dataframes["fff_df"]["cell_index"] == 6)
+    ]
+
+    spikes = recordings.get_spikes_df(cell_df="test_df", stimulus_df="fff_stim_normal")
+
+    fig, ax = spiketrain_plots.whole_stimulus(
+        spikes, index=["recording", "cell_index", "repeat"], width=14
     )
-    spikes = recordings.get_spikes_triggered(
-        [["zebrafish_14_11_23"]], [[[0], [5]]], [[[270, 271, 272, 273]]]
-    )
-    fig = spiketrain_plots.spikes_and_trace(spikes, stacked=True)
