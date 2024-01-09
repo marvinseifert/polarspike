@@ -15,7 +15,12 @@ recordings.add_recording(
 )
 spikes_df = recordings.get_spikes_triggered([["all"]], [[10], [100]], [[0]])
 fig, ax = single_cell_plots.whole_stimulus(
-    spikes_df, stacked=True, index="cell_index", height=10, norm="linear", bin_size=0.05
+    spikes_df,
+    stacked=True,
+    indices="cell_index",
+    height=10,
+    norm="linear",
+    bin_size=0.05,
 )
 CT = colour_template.Colour_template()
 CT.pick_stimulus("FFF_6")

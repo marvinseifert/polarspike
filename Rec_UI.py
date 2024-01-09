@@ -381,11 +381,10 @@ class Explorer:
         if len(plot_df) != 0:
             raster_plot = spiketrain_plots.whole_stimulus_plotly(plot_df)
             # Add stimulus:
-            raster_plot = colour_template.add_stimulus_to_plotly(
+            raster_plot = self.ct.add_stimulus_to_plot(
                 raster_plot,
-                self.ct.colours,
                 stimulus_spikes.mean_trigger_times(
-                    self.overview_df.stimulus_df, self.stimulus_select.value
+                    self.overview_df.stimulus_df, [self.stimulus_select.value]
                 ),
             )
             self.single_cell_raster.object = raster_plot

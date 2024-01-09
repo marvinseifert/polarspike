@@ -23,5 +23,5 @@ if __name__ == "__main__":
     spikes = recordings.get_spikes_df(cell_df="test_df", stimulus_df="fff_stim_normal")
 
     fig, ax = spiketrain_plots.whole_stimulus(
-        spikes, index=["recording", "cell_index", "repeat"], width=14
+        spikes, indices=["recording", "cell_index", "repeat"], width=14
     )

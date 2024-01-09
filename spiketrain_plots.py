@@ -53,7 +53,7 @@ def whole_stimulus_plotly(df, stacked=False):
 def whole_stimulus(
     df,
     how="times_triggered",
-    index=None,
+    indices=None,
     stacked=True,
     height=10,
     width=10,
@@ -61,11 +61,11 @@ def whole_stimulus(
     bin_size=0.05,
     norm="linear",
 ):
-    if index is None:
-        index = ["cell_index", "repeat"]
+    if indices is None:
+        indices = ["cell_index", "repeat"]
     # Store some information about the data
-    unique_indices = np.unique(df[index[0]])
-    nr_repeats = df[index[1]].max() + 1
+    unique_indices = np.unique(df[indices[0]])
+    nr_repeats = df[indices[1]].max() + 1
     nr_unique = unique_indices.shape[0]  # In case of a single cell or a single color
     max_time = np.max(df[how])
 
@@ -90,21 +90,21 @@ def whole_stimulus(
     df = df.copy()
     if stacked:
         # To space the cells, we need to map the combined repeats and cells indices to a linear range.
-        df, unique_indices = map_index(df, index)
+        df, unique_indices = map_index(df, indices)
         y_key = "index_linear"
     #     psth, bins = histograms.psth_by_index(
     #         df, bin_size=bin_size, index=index, window_end=max_time
     #     )
     # else:
     psth, bins = histograms.psth(df, bin_size=bin_size, start=0, end=max_time)
-    psth = psth / unique_indices.shape[0] * bin_size
+    psth = psth / df[indices[0]].unique().shape[0] * (1 / bin_size)
 
     # Plot the PSTH
 
     axs[0, 0].plot(bins[1:], psth, color="black", alpha=0.5)
 
     # Switch data format to categorical
-    df["index"] = df[index[0]].astype("category")
+    df["index"] = df[indices[0]].astype("category")
     df["index"] = df["index"].cat.as_ordered()
 
     if stacked:
@@ -148,8 +148,9 @@ def whole_stimulus(
     if stacked:
         axs[1, 0].yaxis.set_ticks(np.arange(1, len(df["index_linear"].unique()) + 1, 2))
         axs[1, 0].set_yticklabels(unique_indices.to_numpy()[::2])
-    axs[0, 0].set_ylabel("Spikes / s")
-    axs[1, 0].set_ylabel(f"{index} and repeat(s)")
+    axs[0, 0].set_ylabel("Spikes / s/ nr_cells")
+    seperator = ", "
+    axs[1, 0].set_ylabel(seperator.join(indices))
     axs[2, 0].set_xlabel("Time in s")
     axs[2, 1].axis("off")
     axs[0, 1].axis("off")
@@ -225,7 +226,9 @@ def draw_artist(
     cbar.set_label(f"Nr of spikes, binsize={bin_size} s")
 
 
-def spikes_and_trace(df, stacked=False, indices=None, width=1400, height=500):
+def spikes_and_trace(
+    df, stacked=False, indices=None, width=1400, height=500, bin_size=0.05
+):
     y_key = "repeat"
     if indices is None:
         indices = ["cell_index", "repeat"]
@@ -237,9 +240,9 @@ def spikes_and_trace(df, stacked=False, indices=None, width=1400, height=500):
         y_key = "index_linear"
 
     psth, bins = histograms.psth(
-        df, bin_size=0.05, start=0, end=df["times_triggered"].max()
+        df, bin_size=bin_size, start=0, end=df["times_triggered"].max()
     )
-    psth = psth / df["cell_index"].unique().shape[0] * (1 / 0.05)
+    psth = psth / df[indices[0]].unique().shape[0] * (1 / bin_size)
 
     # First subplot
     s1 = figure(width=width, height=int(0.2 * height), title=None, sizing_mode="fixed")
@@ -273,7 +276,7 @@ def spikes_and_trace(df, stacked=False, indices=None, width=1400, height=500):
         s2.yaxis.axis_label = seperator.join(indices)
     else:
         s2.yaxis.axis_label = "Repeat(s)"
-    s1.yaxis.axis_label = "Spikes / s"
+    s1.yaxis.axis_label = "Spikes / s / nr_cells"
 
     if stacked:
         s2.yaxis.ticker = np.arange(1, df[y_key].max() + 1, 2)
