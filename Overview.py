@@ -63,6 +63,7 @@ def version_control(obj):
 @dataclass
 class Recording:
     parquet_path: str  # Path, pointing to the parquet file which stores the spiketimestamps
+    raw_path: str  # Path, pointing to the raw file which stores the raw data
     dataframes: dict = field(
         default_factory=lambda: {}, init=True
     )  # Dictionary that stores the dataframes

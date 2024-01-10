@@ -1,27 +1,30 @@
-from pathlib import Path
-import recording_overview
-import matplotlib.pyplot as plt
-from IPython import display
-import Overview
-import spiketrain_plots
-import colour_template
-import stimulus_spikes
-import binarizer
-import numpy as np
-import stimulus_dfs
+from Neuroelectropy import electrical_imaging as elpy
+from polarspike import (
+    Overview,
+    spiketrain_plots,
+    colour_template,
+    stimulus_spikes,
+    recording_overview,
+)
 
-plt.style.use("dark_background")
-import Extractors
+from bokeh.plotting import figure, show
+import panel as pn
+import polars as pl
+import numpy as np
+
+pn.extension()
 
 if __name__ == "__main__":
     recordings = Overview.Recording_s.load("D:\\combined_analysis\\all_recordings")
-    recordings.dataframes["test_df"] = recordings.dataframes["fff_df"].loc[
-        (recordings.dataframes["fff_df"]["cell_index"] == 5)
-        | (recordings.dataframes["fff_df"]["cell_index"] == 6)
-    ]
-
-    spikes = recordings.get_spikes_df(cell_df="test_df", stimulus_df="fff_stim_normal")
-
-    fig, ax = spiketrain_plots.whole_stimulus(
-        spikes, indices=["recording", "cell_index", "repeat"], width=14
+    spikes = pl.scan_parquet(recordings.recordings["zebrafish_14_11_23"].parquet_path)
+    spikes = spikes.filter(pl.col("cell_index") == 270).collect()
+    trigger = np.arange(0, np.max(spikes["times"].to_numpy()), 1)
+    sta = elpy.sta_main_loop(
+        spikes["times"].to_numpy(),
+        trigger,
+        "D:\\Zebrafish_14_11_23\\ks_sorted\\alldata.dat",
+        nr_pre_bins=10,
+        nr_post_bins=40,
+        nr_boxes=252,
+        mea="MCS",
     )

@@ -412,6 +412,10 @@ def add_stimulus_to_matplotlib(initial_fig, colours, flash_durations, names=None
         aspect = ax_stimulus.get_data_ratio()
         x_position = 0
         for i, width in enumerate(flash_durations):
+            if calculate_luminance(hex_to_rgb(colours[i])) < 128:
+                text_color = "white"
+            else:
+                text_color = "black"
             ax_stimulus.text(
                 x_position + width / 2,
                 0.5,
@@ -419,6 +423,7 @@ def add_stimulus_to_matplotlib(initial_fig, colours, flash_durations, names=None
                 ha="center",
                 va="center",
                 fontsize=12**2 * aspect,
+                color=text_color,
             )
             x_position += width
 

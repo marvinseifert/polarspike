@@ -278,6 +278,7 @@ class Explorer:
         dataframes["spikes_df"]["filter"] = True
         self.overview_df = Overview.Recording(
             str(self.recording.file.with_suffix(".parquet")),
+            self.recording_file,
             dataframes,
             self.frequency_input.value,
         )
