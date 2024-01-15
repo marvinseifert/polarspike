@@ -12,6 +12,10 @@ from mpl_toolkits.axes_grid1.axes_divider import HBoxDivider, VBoxDivider
 import mpl_toolkits.axes_grid1.axes_size as Size
 import matplotlib.gridspec as gridspec
 from matplotlib.colorbar import Colorbar
+import polarspike
+import bokeh
+from bokeh.plotting import figure, show
+from bokeh.models import BoxAnnotation, Label
 
 
 class Colour_template:
@@ -24,7 +28,10 @@ class Colour_template:
         button_style="",  # 'success', 'info', 'warning', 'danger' or ''
     )
 
-    def __init__(self, df_file="stim_colour_df"):
+    def __init__(self, df_file=None):
+        if df_file is None:
+            df_file = polarspike.__path__[0] + "/stim_colour_df"
+
         self.plot_colour_dataframe = pd.read_pickle(df_file)
 
         self.stimulus_select = widgets.RadioButtons(
@@ -180,6 +187,11 @@ class Colour_template:
             return fig
         elif type(initial_fig) == plt.Figure:
             fig = add_stimulus_to_matplotlib(
+                initial_fig, self.colours, flash_durations, names=names
+            )
+            return fig
+        elif type(initial_fig) == bokeh.models.plots.GridPlot:
+            fig = add_stimulus_to_bokeh(
                 initial_fig, self.colours, flash_durations, names=names
             )
             return fig
@@ -400,6 +412,10 @@ def add_stimulus_to_matplotlib(initial_fig, colours, flash_durations, names=None
         aspect = ax_stimulus.get_data_ratio()
         x_position = 0
         for i, width in enumerate(flash_durations):
+            if calculate_luminance(hex_to_rgb(colours[i])) < 128:
+                text_color = "white"
+            else:
+                text_color = "black"
             ax_stimulus.text(
                 x_position + width / 2,
                 0.5,
@@ -407,6 +423,7 @@ def add_stimulus_to_matplotlib(initial_fig, colours, flash_durations, names=None
                 ha="center",
                 va="center",
                 fontsize=12**2 * aspect,
+                color=text_color,
             )
             x_position += width
 
@@ -414,3 +431,73 @@ def add_stimulus_to_matplotlib(initial_fig, colours, flash_durations, names=None
     # initial_fig.tight_layout()
 
     return initial_fig
+
+
+def add_stimulus_to_bokeh(initial_fig, colours, flash_durations, names=None):
+    # Assuming 'height', 'colours', 'flash_durations', and optionally 'names' are defined
+    # Create a new plot
+    height = 2
+    width = initial_fig.children[0][0].width
+    fig = figure(
+        width=width,
+        height=50,
+        x_range=initial_fig.children[0][0].x_range,
+        sizing_mode="fixed",
+    )
+
+    x_start = 0
+    xs = []  # List to hold x coordinates of all patches
+    ys = []  # List to hold y coordinates of all patches
+    for i, (color, width) in enumerate(zip(colours, flash_durations)):
+        # Define the coordinates for each rectangle (patch)
+        xs.append([x_start, x_start, x_start + width, x_start + width])
+        ys.append([0, height, height, 0])
+
+        # Add labels if names are provided
+        if names is not None and len(names) == len(colours):
+            # Check if colour is dark:
+            if calculate_luminance(hex_to_rgb(color)) < 128:
+                text_color = "white"
+            else:
+                text_color = "black"
+
+            label = Label(
+                x=x_start + width / 2,
+                y=height / 2,
+                text=names[i],
+                text_font_size="11pt",
+                text_align="center",
+                text_color=text_color,
+            )
+            fig.add_layout(label)
+
+        x_start += width
+
+    # Add the patches to the figure
+    fig.patches(xs, ys, color=colours, alpha=0.8, line_width=2)
+    fig.xgrid.grid_line_color = None
+    fig.ygrid.grid_line_color = None
+    fig.xaxis.major_tick_line_color = None
+    fig.yaxis.major_tick_line_color = None
+    fig.xaxis.minor_tick_line_color = None
+    fig.yaxis.minor_tick_line_color = None
+    fig.xaxis.major_label_text_font_size = "0pt"
+    fig.yaxis.major_label_text_font_size = "0pt"
+    fig.yaxis.axis_label = "Stimulus"
+    fig.yaxis.axis_label_orientation = 0
+
+    rows = len(initial_fig.children)
+    initial_fig.children.append((fig, rows, 0))
+
+    return initial_fig
+
+
+def hex_to_rgb(hex_color):
+    # Convert hex to RGB
+    hex_color = hex_color.lstrip("#")
+    return tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
+
+
+def calculate_luminance(rgb):
+    # Calculate luminance using the formula
+    return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]
