@@ -1,25 +1,25 @@
-import Overview
+from polarspike import Overview
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import holoviews as hv
 import panel as pn
-import stimulus_trace
+from polarspike import stimulus_trace
 import plotly.graph_objects as go
 import param
 from bokeh.plotting import figure
 from bokeh.models import ColumnDataSource
 import time
-from backbone import SelectFilesButton
-import backbone
-import Extractors
-import recording_overview
+from polarspike.backbone import SelectFilesButton
+from polarspike import backbone
+from polarspike import Extractors
+from polarspike import recording_overview
 import ipywidgets as widgets
-import spiketrain_plots
+from polarspike import spiketrain_plots
 from pathlib import Path
-import colour_template
-import stimulus_spikes
-import binarizer
+from polarspike import colour_template
+from polarspike import stimulus_spikes
+from polarspike import binarizer
 
 
 def stimulus_df():
@@ -265,6 +265,7 @@ class Explorer:
         begins, ends = self.plot_app.get_frames()
         stim_df = self.stimulus.get_stim_range_new(begins, ends)
         stim_df["recording"] = self.recording_name.value
+        stim_df["sampling_freq"] = self.frequency_input.value
         self.stimulus_df.value = stim_df
 
     def stimulus_spikes(self, event):
@@ -307,6 +308,16 @@ class Explorer:
         file_format = backbone.get_file_ending(self.recording_file)
         if file_format == ".dat":
             self.recording = Extractors.Extractor_SPC(self.recording_file)
+            try:
+                self.frequency_input.value = float(
+                    np.loadtxt(
+                        Path(self.recording_file).parent / "bininfo.txt", dtype=object
+                    )[1]
+                )
+
+            except FileNotFoundError:
+                print("No bininfo.txt file found. Using user input frequency.")
+
         elif file_format == ".hdf5":
             self.recording = Extractors.Extractor_HS2(self.recording_file)
             self.frequency_input.value = float(self.recording.spikes["sampling"])
@@ -397,7 +408,7 @@ class Explorer:
 
     def save_to_overview(self, event):
         if self.overview_df is not None:
-            self.overview_df.save(Path(self.stimulus_file).parent / "overview")
+            self.overview_df.save(Path(self.stimulus_file).parents[1] / "overview")
         else:
             print("No overview to save")
 
@@ -417,7 +428,7 @@ class Explorer:
             0.001,
             np.sum(
                 stimulus_spikes.mean_trigger_times(
-                    self.overview_df.stimulus_df, self.stimulus_select.value
+                    self.overview_df.stimulus_df, [self.stimulus_select.value]
                 )
             ),
             self.overview_df.stimulus_df.loc[self.stimulus_select.value]["nr_repeats"],
