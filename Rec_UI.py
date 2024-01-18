@@ -414,7 +414,7 @@ class Explorer:
             if self.mea_type == "MCS":
                 self.overview_df.save(Path(self.stimulus_file).parents[1] / "overview")
             elif self.mea_type == "3Brain":
-                self.overview_df.save(Path(self.stimulus_file) / "overview")
+                self.overview_df.save(Path(self.stimulus_file).parents[0] / "overview")
 
         else:
             print("No overview to save")
