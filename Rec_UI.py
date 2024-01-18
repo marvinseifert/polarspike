@@ -61,8 +61,10 @@ class Explorer:
         self.ct = colour_template.Colour_template()
         self.stimulus_input = SelectFilesButton("Stimulus File")
         self.recording_input = SelectFilesButton("Recording File")
+        self.sorting_input = SelectFilesButton("Sorting File")
         self.stimulus_input.observe(self._on_stimulus_selected, names="files")
         self.recording_input.observe(self._on_recording_selected, names="files")
+        self.sorting_input.observe(self._on_sorting_selected, names="files")
         self.stimulus = None
         self.mea_type = None
         self.text = """ ## Single Recording Overview.
@@ -161,6 +163,8 @@ class Explorer:
             self.stimulus_input,
             "Recording File",
             self.recording_input,
+            "Sorting File </br> (only for herdingspikes2)",
+            self.sorting_input,
             self.recording_name,
             self.frequency_input,
             self.load_button,
@@ -262,6 +266,10 @@ class Explorer:
         self.recording_file = change["new"][0] if change["new"] else ""
         # print(f"File selected: {self.recording_file}")
 
+    def _on_sorting_selected(self, change):
+        self.sorting_file = change["new"][0] if change["new"] else ""
+        # print(f"File selected: {self.sorting_file}")
+
     def define_stimuli(self, event):
         begins, ends = self.plot_app.get_frames()
         stim_df = self.stimulus.get_stim_range_new(begins, ends)
@@ -278,12 +286,20 @@ class Explorer:
             "stimulus_df": self.stimulus_df.value,
         }
         dataframes["spikes_df"]["filter"] = True
-        self.overview_df = Overview.Recording(
-            str(self.recording.file.with_suffix(".parquet")),
-            self.recording_file,
-            dataframes,
-            self.frequency_input.value,
-        )
+        if self.mea_type == "MCS":
+            self.overview_df = Overview.Recording(
+                str(self.recording.file.with_suffix(".parquet")),
+                self.recording_file,
+                dataframes,
+                self.frequency_input.value,
+            )
+        elif self.mea_type == "3Brain":
+            self.overview_df = Overview.Recording(
+                str(self.recording.file.with_suffix(".parquet")),
+                self.sorting_file,
+                dataframes,
+                self.frequency_input.value,
+            )
         stimulus_names = self.overview_df.stimulus_df["stimulus_name"].tolist()
         options_dict = {f"{name}_{idx}": idx for idx, name in enumerate(stimulus_names)}
         self.stimulus_select.options = options_dict
@@ -320,9 +336,9 @@ class Explorer:
             except FileNotFoundError:
                 print("No bininfo.txt file found. Using user input frequency.")
 
-        elif file_format == ".hdf5":
+        elif file_format == ".brw":
             self.mea_type = "3Brain"
-            self.recording = Extractors.Extractor_HS2(self.recording_file)
+            self.recording = Extractors.Extractor_HS2(self.sorting_file)
             self.frequency_input.value = float(self.recording.spikes["sampling"])
 
         self.recording.get_spikes()
