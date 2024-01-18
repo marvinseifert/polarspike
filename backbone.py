@@ -86,16 +86,32 @@ class SelectFilesButton(widgets.Button):
                 root.withdraw()
                 # Raise the root to the top of all windows.
                 root.call("wm", "attributes", ".", "-topmost", True)
-                # List of selected files will be set to b.value
+                # List of selected files will be set to b.files
                 b.files = filedialog.askopenfilename(multiple=True)
 
-                b.description = "File Selected"
-                b.icon = "check-square-o"
-                b.style.button_color = "lightgreen"
-                self.loaded = True
-            except FileNotFoundError:
+                # Convert b.files to a list if it is not one
+                if not isinstance(b.files, list):
+                    b.files = root.tk.splitlist(b.files)
+
+                # Check if a file actually was selected
+                if (
+                    b.files and b.files[0]
+                ):  # This checks if the first element is not an empty string
+                    b.description = "File Selected"
+                    b.icon = "check-square-o"
+                    b.style.button_color = "lightgreen"
+                    self.loaded = True
+                else:
+                    # Reset the button style or do nothing
+                    self.loaded = False
+
+            except Exception as e:
+                # Handle other exceptions if necessary
                 self.loaded = False
-                pass
+                print(f"Error: {e}")
+            finally:
+                # Ensure the Tk window is destroyed
+                root.destroy()
 
 
 def bisection(array, value):

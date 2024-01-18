@@ -260,6 +260,7 @@ class Explorer:
 
     def _on_stimulus_selected(self, change):
         self.stimulus_file = change["new"][0] if change["new"] else ""
+        self.recording_name.value = "".join(Path(self.stimulus_file).parts[1:-1])
         # print(f"File selected: {self.stimulus_file}")
 
     def _on_recording_selected(self, change):
@@ -312,7 +313,6 @@ class Explorer:
 
         # print("Before update: ", self.stim_figure.object)  # Debug
         self.stim_figure.object = self.plot_app.plot
-        # print("After update: ", self.stim_figure.object)  # Debug
 
     def load_recording(self):
         file_format = backbone.get_file_ending(self.recording_file)
