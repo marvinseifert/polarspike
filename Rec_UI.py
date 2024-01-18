@@ -64,6 +64,7 @@ class Explorer:
         self.stimulus_input.observe(self._on_stimulus_selected, names="files")
         self.recording_input.observe(self._on_recording_selected, names="files")
         self.stimulus = None
+        self.mea_type = None
         self.text = """ ## Single Recording Overview.
         This UI allows you to explore
         a single MEA recording fast
@@ -308,6 +309,7 @@ class Explorer:
         file_format = backbone.get_file_ending(self.recording_file)
         if file_format == ".dat":
             self.recording = Extractors.Extractor_SPC(self.recording_file)
+            self.mea_type = "MCS"
             try:
                 self.frequency_input.value = float(
                     np.loadtxt(
@@ -319,6 +321,7 @@ class Explorer:
                 print("No bininfo.txt file found. Using user input frequency.")
 
         elif file_format == ".hdf5":
+            self.mea_type = "3Brain"
             self.recording = Extractors.Extractor_HS2(self.recording_file)
             self.frequency_input.value = float(self.recording.spikes["sampling"])
 
@@ -408,7 +411,11 @@ class Explorer:
 
     def save_to_overview(self, event):
         if self.overview_df is not None:
-            self.overview_df.save(Path(self.stimulus_file).parents[1] / "overview")
+            if self.mea_type == "MCS":
+                self.overview_df.save(Path(self.stimulus_file).parents[1] / "overview")
+            elif self.mea_type == "3Brain":
+                self.overview_df.save(Path(self.stimulus_file) / "overview")
+
         else:
             print("No overview to save")
 
