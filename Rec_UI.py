@@ -286,20 +286,13 @@ class Explorer:
             "stimulus_df": self.stimulus_df.value,
         }
         dataframes["spikes_df"]["filter"] = True
-        if self.mea_type == "MCS":
-            self.overview_df = Overview.Recording(
-                str(self.recording.file.with_suffix(".parquet")),
-                self.recording_file,
-                dataframes,
-                self.frequency_input.value,
-            )
-        elif self.mea_type == "3Brain":
-            self.overview_df = Overview.Recording(
-                str(self.recording.file.with_suffix(".parquet")),
-                self.sorting_file,
-                dataframes,
-                self.frequency_input.value,
-            )
+
+        self.overview_df = Overview.Recording(
+            str(self.recording.file.with_suffix(".parquet")),
+            self.recording_file,
+            dataframes,
+            self.frequency_input.value,
+        )
         stimulus_names = self.overview_df.stimulus_df["stimulus_name"].tolist()
         options_dict = {f"{name}_{idx}": idx for idx, name in enumerate(stimulus_names)}
         self.stimulus_select.options = options_dict
