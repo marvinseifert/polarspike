@@ -86,7 +86,7 @@ class Explorer:
         self.load_button.on_click(self.load_data)
 
         self.recording_name = pn.widgets.TextInput(
-            name="Recording Name", placeholder="Recording Name", width=200
+            name="recording name", placeholder="recording name (LC!)", width=200
         )
 
         self.define_stimuli_button = pn.widgets.Button(
@@ -253,6 +253,7 @@ class Explorer:
             self.stimulus_input.loaded = False
             self.status.active = False
         if self.recording_input.loaded:
+            self.recording_name.value = self.recording_name.value.lower()
             self.status.active = True
             self.load_recording()
             self.recording_input.loaded = False
@@ -260,7 +261,9 @@ class Explorer:
 
     def _on_stimulus_selected(self, change):
         self.stimulus_file = change["new"][0] if change["new"] else ""
-        self.recording_name.value = "".join(Path(self.stimulus_file).parts[1:-1])
+        self.recording_name.value = (
+            "".join(Path(self.stimulus_file).parts[1:-1])
+        ).lower()
         # print(f"File selected: {self.stimulus_file}")
 
     def _on_recording_selected(self, change):

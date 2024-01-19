@@ -857,6 +857,7 @@ class Recording_s(Recording):
     def __init__(self, analysis_path, analysis_name):
         super().__init__(
             "",
+            "",
             dataframes={"spikes_df": None, "stimulus_df": None},
         )
         self.store_path = analysis_path
@@ -1210,7 +1211,10 @@ class Recording_s(Recording):
         for recording in recordings:
             recording = self.recordings[recording]
             new_rec = Recording(
-                recording.parquet_path, recording.dataframes, recording.sampling_freq
+                recording.parquet_path,
+                "",
+                recording.dataframes,
+                recording.sampling_freq,
             )
             new_rec.save(f"{self.store_path}\\{recording.name}")
             paths.append(f"{self.store_path}\\{recording.name}")
