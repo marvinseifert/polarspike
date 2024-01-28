@@ -139,7 +139,7 @@ class Extractor:
         centres_id = np.hstack(
             [
                 self.spikes["cell_indices"].reshape(-1, 1) - 1,
-                self.spikes["centres"],
+                self.spikes["spik"],
             ]
         )
 

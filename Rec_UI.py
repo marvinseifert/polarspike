@@ -20,6 +20,13 @@ from pathlib import Path
 from polarspike import colour_template
 from polarspike import stimulus_spikes
 from polarspike import binarizer
+from math import pi
+from bokeh.palettes import Category20c, Category20
+from bokeh.plotting import figure
+from bokeh.transform import cumsum
+import panel as pn
+import matplotlib
+from polarspike.grid import Table
 
 
 def stimulus_df():
@@ -542,7 +549,7 @@ class PlotApp(param.Parameterized):
             elapsed_time = 1  # First callback, so allow it
         self.last_callback_time = current_time
         if (
-            elapsed_time < 0.5
+                elapsed_time < 0.5
         ):  # If less than 0.5 seconds elapsed since last callback, ignore
             print("Callback debounced")
             return
@@ -584,3 +591,144 @@ class PlotApp(param.Parameterized):
 
     def get_frames(self):
         return self.x[self.begins], self.x[self.ends]
+
+
+class Recording_explorer:
+    def __init__(self, analysis_path):
+        self.analysis_path = analysis_path
+        self.nr_added_recordings = 0
+        self.recordings_dataframe = pd.DataFrame(
+            columns=["name", "save_path", "raw_path", "parquet_path", "sampling_freq"])
+        self.recordings_dataframe_widget = pn.widgets.DataFrame(self.recordings_dataframe, max_height=5)
+
+        # Placeholders
+        self.spikes_fig = widgets.Output()
+
+        self.isi_fig = widgets.Output()
+
+        self.spike_trains = widgets.Output()
+        self.isi_clus_fig = widgets.Output()
+
+        self.nr_spikes_fig = go.FigureWidget(go.Scatter(x=[0], y=[0]))
+
+        # Recording menu
+        # Single Reocring Menu
+        self.single_recording_items = []
+
+        self.single_recording_menu = pn.widgets.MenuButton(name='Recording', items=self.single_recording_items,
+                                                           button_type='primary',
+                                                           width=200)
+        self.single_recording_menu.on_click(self.load_single_recording)
+
+        # Main
+
+        self.recordings_object = Overview.Recording_s(analysis_path, "gui_analysis")
+        self.load_button = SelectFilesButton("Recordings")
+        self.load_button.observe(self.load_recording, names="files")
+        self.spike_trains = widgets.Output()
+        self.main = pn.Tabs(
+            ("Overview",
+             pn.Column("## Recordings loaded", self.recordings_dataframe_widget, self.nr_spikes_fig,
+                       sizing_mode="stretch_width"),),
+            ("Single Recording",
+             pn.Column(pn.Column((self.single_recording_menu), pn.Column(pn.Tabs(
+                 (
+                     "Spike Counts",
+                     pn.Column(self.spikes_fig, sizing_mode="stretch_width"),
+                 ),
+                 ("ISI_time", pn.Column(self.isi_fig, sizing_mode="stretch_width")),
+                 (
+                     "ISI_cluster",
+                     pn.Column(self.isi_clus_fig, sizing_mode="stretch_width"),
+                 ),
+                 (
+                     "Raster",
+                     pn.Column(self.spike_trains, sizing_mode="stretch_width"),
+                 ),
+                 sizing_mode="stretch_width",
+             ), )))),
+            sizing_mode="stretch_width")
+
+        # Sidebar
+        self.sidebar = pn.layout.WidgetBox("Load Recording", self.load_button,
+                                           sizing_mode="fixed", width=300, height=1000
+                                           ).servable(area="sidebar")
+
+    def plot_recording_spike_trains(self):
+        fig, ax = recording_overview.spiketrains_from_file(self.recording.parquet_path, self.recording.sampling_freq,
+                                                           cmap="gist_gray")
+        fig = recording_overview.add_stimulus_df(fig, self.recording.stimulus_df)
+        fig.set_size_inches(10, 8)
+
+        # Create a Matplotlib pane and display it
+        matplotlib_pane = pn.pane.Matplotlib(fig, width=400, height=400)
+        self.spike_trains.object = matplotlib_pane
+
+    def load_recording(self, change):
+        if change["new"]:
+            recording_path = change["new"][0] if change["new"] else ""
+            recording = Overview.Recording.load(recording_path)
+            self.recordings_object.add_recording(recording)
+            self.nr_added_recordings += 1
+            self.single_recording_items.append(
+                (recording.name, recording.name))  # Append as a tuple (name, callback)
+            self.single_recording_menu.items = self.single_recording_items
+            self.add_recording_info_to_df(recording)
+            self.single_recording_menu.param.trigger('items')
+            self.recordings_dataframe_widget.param.trigger('value')
+
+    def load_single_recording(self, event):
+        recording_name = self.single_recording_menu.clicked
+        recording = self.recordings_object.recordings[recording_name]
+        self.plot_spike_counts(recording)
+        self.plot_isi(recording, "times", self.isi_fig)
+        self.plot_isi(recording, "cell_index", self.isi_clus_fig)
+        self.plot_spike_trains(recording)
+
+    def plot_spike_counts(self, recording):
+        fig, ax = recording_overview.spike_counts_from_file(
+            recording.parquet_path, "viridis"
+        )
+        fig.set_size_inches(10, 8)
+        with self.spikes_fig:
+            fig.show()
+
+    def plot_isi(self, recording, x, widget):
+        fig, ax = recording_overview.isi_from_file(
+            recording.parquet_path,
+            recording.sampling_freq,
+            x=x,
+            cmap="viridis",
+            cutoff=np.log10(0.001),
+        )
+        fig.set_size_inches(10, 8)
+        with widget:
+            fig.show()
+
+    def plot_spike_trains(self, recording):
+        fig, ax = recording_overview.spiketrains_from_file(
+            recording.parquet_path,
+            recording.sampling_freq,
+            cmap="gist_gray",
+        )
+        fig = recording_overview.add_stimulus_df(fig, recording.stimulus_df)
+        fig.set_size_inches(10, 8)
+        with self.spike_trains:
+            fig.show()
+
+    def add_recording_info_to_df(self, recording):
+        new_df = pd.DataFrame({"name": recording.name, "save_path": recording.load_path, "raw_path": recording.raw_path,
+                               "parquet_path": recording.parquet_path,
+                               "sampling_freq": recording.sampling_freq}, index=pd.Index([self.nr_added_recordings]))
+        self.recordings_dataframe = pd.concat([self.recordings_dataframe, new_df])
+        self.recordings_dataframe_widget.value = self.recordings_dataframe
+
+    def serve(self):
+        app = pn.Row(
+            pn.Column(self.sidebar, sizing_mode="fixed", height=300, width=300),
+            pn.Spacer(width=20),  # Adjust width for desired spacing
+            pn.Column(self.main, sizing_mode="fixed", height=1000, width=1000),
+            sizing_mode="stretch_width",
+
+        )
+        return app
