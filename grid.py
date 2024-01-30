@@ -3,9 +3,15 @@ import panel as pn
 
 
 class Table:
-    def __init__(self, df):
+    def __init__(self, df, width=1000, height=500):
         self.df = df
-        self.tabulator = pn.widgets.Tabulator(df, pagination="remote", widths=150)
+        self.tabulator = pn.widgets.Tabulator(
+            df,
+            pagination="remote",
+            width=width,
+            height=height,
+            layout="fit_columns",
+        )
         self.column_select = pn.widgets.Select(
             name="Select Column", options=df.columns.to_list()
         )
@@ -36,6 +42,8 @@ class Table:
                 pn.Column(self.recording_select),
             ),
             self.tabulator,
+            width=width,
+            height=height,
         )
         # Initial setup
         self.update_filter_widget()
@@ -60,7 +68,6 @@ class Table:
         return self.panel.servable()
 
     def update_filter_widget(self, event=None):
-        print("test")
         # Remove any previous widget
         self.filter_placeholder[:] = []
 
@@ -78,7 +85,6 @@ class Table:
             self.filter_placeholder.append(self.filter_widget)
 
         elif pd.api.types.is_numeric_dtype(self.df[column]):
-            print("numeric")
             # Create two FloatInput widgets for lower and upper bounds
             self.lower_bound_input = pn.widgets.FloatInput(
                 name=f"Min {column}", value=float(self.df[column].min())

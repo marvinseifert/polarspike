@@ -27,6 +27,8 @@ from bokeh.transform import cumsum
 import panel as pn
 import matplotlib
 from polarspike.grid import Table
+from polarspike import plotly_templates, grid, waveforms
+from functools import partial
 
 
 def stimulus_df():
@@ -549,7 +551,7 @@ class PlotApp(param.Parameterized):
             elapsed_time = 1  # First callback, so allow it
         self.last_callback_time = current_time
         if (
-                elapsed_time < 0.5
+            elapsed_time < 0.5
         ):  # If less than 0.5 seconds elapsed since last callback, ignore
             print("Callback debounced")
             return
@@ -598,8 +600,11 @@ class Recording_explorer:
         self.analysis_path = analysis_path
         self.nr_added_recordings = 0
         self.recordings_dataframe = pd.DataFrame(
-            columns=["name", "save_path", "raw_path", "parquet_path", "sampling_freq"])
-        self.recordings_dataframe_widget = pn.widgets.DataFrame(self.recordings_dataframe, max_height=5)
+            columns=["name", "save_path", "raw_path", "parquet_path", "sampling_freq"]
+        )
+        self.recordings_dataframe_widget = pn.widgets.DataFrame(
+            self.recordings_dataframe, max_height=5
+        )
 
         # Placeholders
         self.spikes_fig = widgets.Output()
@@ -609,16 +614,78 @@ class Recording_explorer:
         self.spike_trains = widgets.Output()
         self.isi_clus_fig = widgets.Output()
 
-        self.nr_spikes_fig = go.FigureWidget(go.Scatter(x=[0], y=[0]))
+        # Nr spikes figure
+        fig = go.Figure()
+        fig.add_trace(go.Pie(labels=["empty"], values=[0]))
+        fig.update_layout(template="scatter_template_jupyter")
+
+        self.nr_cells_fig = pn.pane.Plotly(fig, width=500, height=300)
 
         # Recording menu
         # Single Reocring Menu
         self.single_recording_items = []
 
-        self.single_recording_menu = pn.widgets.MenuButton(name='Recording', items=self.single_recording_items,
-                                                           button_type='primary',
-                                                           width=200)
+        self.single_recording_menu = pn.widgets.MenuButton(
+            name="Recording",
+            items=self.single_recording_items,
+            button_type="primary",
+            width=200,
+        )
         self.single_recording_menu.on_click(self.load_single_recording)
+
+        # Dataframe Tab
+        self.dataframe_names = ["spikes_df", "stimulus_df"]
+
+        self.dataframe_menu = pn.widgets.MenuButton(
+            name="Dataframe",
+            items=self.dataframe_names,
+            button_type="primary",
+            width=200,
+        )
+        self.dataframe_menu.on_click(self.fill_dataframe)
+
+        self.grid_row = pn.Row()
+
+        # Action menu
+        self.action_dict = {
+            "single_cell_raster": {
+                "func": partial(
+                    spiketrain_plots.spikes_and_trace,
+                    stacked=True,
+                    indices=["cell_index", "repeat"],
+                ),
+                "type": "stimulus_trace",
+            },
+            "multiple_cell_raster": {
+                "func": partial(
+                    spiketrain_plots.spikes_and_trace,
+                    stacked=True,
+                    indices=["recording", "cell_index", "repeat"],
+                ),
+                "type": "stimulus_trace",
+            },
+            "many_cell_raster": {
+                "func": spiketrain_plots.whole_stimulus_plotly,
+                "type": "stimulus_trace",
+            },
+            "waveforms": waveforms.plot_waveforms,
+        }
+        self.action_items = [item for item in self.action_dict.keys()]
+        self.action_menu = pn.widgets.MenuButton(
+            name="Actions", items=self.action_items, button_type="primary", width=200
+        )
+        self.action_menu.on_click(self.trigger_action)
+
+        # Output
+        self.output = pn.Column()
+
+        # Colour Panel
+        self.ct = colour_template.Colour_template()
+        self.colour_selector = pn.widgets.Select(
+            name="Select colour set", options=self.ct.list_stimuli().tolist()
+        )
+        self.colour_selector.param.watch(self.on_colour_change, "value")
+        self.selected_color = pn.pane.IPyWidget(self.ct.pickstimcolour())
 
         # Main
 
@@ -627,36 +694,77 @@ class Recording_explorer:
         self.load_button.observe(self.load_recording, names="files")
         self.spike_trains = widgets.Output()
         self.main = pn.Tabs(
-            ("Overview",
-             pn.Column("## Recordings loaded", self.recordings_dataframe_widget, self.nr_spikes_fig,
-                       sizing_mode="stretch_width"),),
-            ("Single Recording",
-             pn.Column(pn.Column((self.single_recording_menu), pn.Column(pn.Tabs(
-                 (
-                     "Spike Counts",
-                     pn.Column(self.spikes_fig, sizing_mode="stretch_width"),
-                 ),
-                 ("ISI_time", pn.Column(self.isi_fig, sizing_mode="stretch_width")),
-                 (
-                     "ISI_cluster",
-                     pn.Column(self.isi_clus_fig, sizing_mode="stretch_width"),
-                 ),
-                 (
-                     "Raster",
-                     pn.Column(self.spike_trains, sizing_mode="stretch_width"),
-                 ),
-                 sizing_mode="stretch_width",
-             ), )))),
-            sizing_mode="stretch_width")
+            (
+                "Overview",
+                pn.Column(
+                    "## Recordings loaded",
+                    self.recordings_dataframe_widget,
+                    pn.Accordion(
+                        ("Nr cells", self.nr_cells_fig),
+                    ),
+                    sizing_mode="stretch_width",
+                ),
+            ),
+            (
+                "Single Recording",
+                pn.Column(
+                    pn.Column(
+                        (self.single_recording_menu),
+                        pn.Column(
+                            pn.Tabs(
+                                (
+                                    "Spike Counts",
+                                    pn.Column(
+                                        self.spikes_fig, sizing_mode="stretch_width"
+                                    ),
+                                ),
+                                (
+                                    "ISI_time",
+                                    pn.Column(
+                                        self.isi_fig, sizing_mode="stretch_width"
+                                    ),
+                                ),
+                                (
+                                    "ISI_cluster",
+                                    pn.Column(
+                                        self.isi_clus_fig, sizing_mode="stretch_width"
+                                    ),
+                                ),
+                                (
+                                    "Raster",
+                                    pn.Column(
+                                        self.spike_trains, sizing_mode="stretch_width"
+                                    ),
+                                ),
+                                sizing_mode="stretch_width",
+                            ),
+                        ),
+                    )
+                ),
+            ),
+            ("Dataframes", pn.Column(pn.Row(self.dataframe_menu), self.grid_row)),
+            ("Output", self.output),
+            width=1500,
+            height=1000,
+        )
 
         # Sidebar
-        self.sidebar = pn.layout.WidgetBox("Load Recording", self.load_button,
-                                           sizing_mode="fixed", width=300, height=1000
-                                           ).servable(area="sidebar")
+        self.sidebar = pn.layout.WidgetBox(
+            "Load Recording",
+            self.load_button,
+            pn.Column(self.action_menu, sizing_mode="stretch_width"),
+            "Active Colour template",
+            self.colour_selector,
+            self.selected_color,
+            sizing_mode="fixed",
+            width=310,
+            height=1000,
+        ).servable(area="sidebar")
 
     def plot_recording_spike_trains(self):
-        fig, ax = recording_overview.spiketrains_from_file(self.recording.parquet_path, self.recording.sampling_freq,
-                                                           cmap="gist_gray")
+        fig, ax = recording_overview.spiketrains_from_file(
+            self.recording.parquet_path, self.recording.sampling_freq, cmap="gist_gray"
+        )
         fig = recording_overview.add_stimulus_df(fig, self.recording.stimulus_df)
         fig.set_size_inches(10, 8)
 
@@ -671,11 +779,16 @@ class Recording_explorer:
             self.recordings_object.add_recording(recording)
             self.nr_added_recordings += 1
             self.single_recording_items.append(
-                (recording.name, recording.name))  # Append as a tuple (name, callback)
+                (recording.name, recording.name)
+            )  # Append as a tuple (name, callback)
             self.single_recording_menu.items = self.single_recording_items
             self.add_recording_info_to_df(recording)
-            self.single_recording_menu.param.trigger('items')
-            self.recordings_dataframe_widget.param.trigger('value')
+            self.single_recording_menu.param.trigger("items")
+            self.recordings_dataframe_widget.param.trigger("value")
+            self.nr_cells_recording()
+            self.nr_cells_fig.param.trigger("object")
+            self.fill_dataframe_menu()
+            self.fill_dataframe()
 
     def load_single_recording(self, event):
         recording_name = self.single_recording_menu.clicked
@@ -717,11 +830,76 @@ class Recording_explorer:
             fig.show()
 
     def add_recording_info_to_df(self, recording):
-        new_df = pd.DataFrame({"name": recording.name, "save_path": recording.load_path, "raw_path": recording.raw_path,
-                               "parquet_path": recording.parquet_path,
-                               "sampling_freq": recording.sampling_freq}, index=pd.Index([self.nr_added_recordings]))
+        new_df = pd.DataFrame(
+            {
+                "name": recording.name,
+                "save_path": recording.load_path,
+                "raw_path": recording.raw_path,
+                "parquet_path": recording.parquet_path,
+                "sampling_freq": recording.sampling_freq,
+            },
+            index=pd.Index([self.nr_added_recordings]),
+        )
         self.recordings_dataframe = pd.concat([self.recordings_dataframe, new_df])
         self.recordings_dataframe_widget.value = self.recordings_dataframe
+
+    def nr_cells_recording(self):
+        nr_cells = []
+        recordings = []
+        for recording in self.recordings_object.recordings.keys():
+            nr_cells.append(self.recordings_object.recordings[recording].nr_cells)
+            recordings.append(str(recording))
+
+        fig = go.Figure(data=[go.Pie(labels=recordings, values=nr_cells)])
+
+        fig.update_traces(hoverinfo="label+percent", textinfo="value")
+        fig.update_layout(
+            margin=dict(l=0, r=0, t=0, b=0), template="scatter_template_jupyter"
+        )
+
+        self.nr_cells_fig.object = fig
+
+    def fill_dataframe_menu(self):
+        self.dataframe_menu.items = [
+            item for item in self.recordings_object.dataframes.keys()
+        ]
+
+    def fill_dataframe(self, *args, **kwargs):
+        df_name = self.dataframe_menu.clicked
+        table_object = grid.Table(
+            self.recordings_object.dataframes[df_name], width=1500
+        ).panel
+        table_object[-1].selectable = "checkbox"
+        self.grid_row.clear()
+        self.grid_row.objects = [table_object]
+
+    def on_colour_change(self, event):
+        self.ct.pick_stimulus(event.new)
+        self.selected_color.object = self.ct.pickstimcolour(event.new)
+
+    def trigger_action(self, event):
+        action = self.action_menu.clicked
+        func = self.action_dict[action]["func"]
+        cells = self.grid_row.objects[0][1].selection
+        self.recordings_object.dataframes[
+            "cell_selection"
+        ] = self.recordings_object.dataframes[self.dataframe_menu.clicked].iloc[cells]
+        stimulus_indices = (
+            self.recordings_object.dataframes["cell_selection"]
+            .stimulus_index.unique()
+            .tolist()
+        )
+        spikes = self.recordings_object.get_spikes_df("cell_selection")
+        fig = func(df=spikes)
+
+        flash_duration = stimulus_spikes.mean_trigger_times(
+            self.recordings_object.dataframes["stimulus_df"], stimulus_indices
+        )
+
+        fig = self.ct.add_stimulus_to_plot(fig, flash_duration)
+
+        self.output.clear()
+        self.output.objects = [fig]
 
     def serve(self):
         app = pn.Row(
@@ -729,6 +907,5 @@ class Recording_explorer:
             pn.Spacer(width=20),  # Adjust width for desired spacing
             pn.Column(self.main, sizing_mode="fixed", height=1000, width=1000),
             sizing_mode="stretch_width",
-
         )
         return app

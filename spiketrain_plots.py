@@ -13,6 +13,8 @@ from bokeh.plotting import figure, show
 from bokeh.models import ColumnDataSource
 from bokeh.layouts import gridplot
 from polarspike import backbone
+from bokeh.io import curdoc
+from bokeh.themes import built_in_themes
 
 
 def whole_stimulus_plotly(df, stacked=False):
@@ -238,6 +240,15 @@ def spikes_and_trace(
     if stacked:
         df, unique_indices = map_index(df, indices)
         y_key = "index_linear"
+    try:
+        current_theme = curdoc().theme
+        theme_name = next(k for k, v in built_in_themes.items() if v is current_theme)
+        if theme_name == "dark_minimal":
+            line_color = "white"
+        else:
+            line_color = "black"
+    except StopIteration:
+        line_color = "black"
 
     psth, bins = histograms.psth(
         df, bin_size=bin_size, start=0, end=df["times_triggered"].max()
@@ -246,7 +257,7 @@ def spikes_and_trace(
 
     # First subplot
     s1 = figure(width=width, height=int(0.2 * height), title=None, sizing_mode="fixed")
-    s1.line(bins[1:], psth, line_width=2, color="black")
+    s1.line(bins[1:], psth, line_width=2, color=line_color)
     s1.xaxis.major_label_text_font_size = "0pt"
 
     # Second subplot
@@ -263,7 +274,7 @@ def spikes_and_trace(
         y_key,
         size=10,
         source=source,
-        color="black",
+        color=line_color,
         alpha=1,
         angle=1.5708,
     )

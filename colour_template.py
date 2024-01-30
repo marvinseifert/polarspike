@@ -195,6 +195,10 @@ class Colour_template:
                 initial_fig, self.colours, flash_durations, names=names
             )
             return fig
+        else:
+            raise TypeError(
+                f"The type of the initial figure {type(initial_fig)} is not supported. Please use a plotly, matplotlib or bokeh figure."
+            )
 
 
 class Interactive_template:
