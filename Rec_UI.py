@@ -803,6 +803,7 @@ class Recording_explorer:
             recording.parquet_path, "viridis"
         )
         fig.set_size_inches(10, 8)
+        self.spikes_fig.clear_output()
         with self.spikes_fig:
             fig.show()
 
@@ -815,6 +816,7 @@ class Recording_explorer:
             cutoff=np.log10(0.001),
         )
         fig.set_size_inches(10, 8)
+        widget.clear_output()
         with widget:
             fig.show()
 
@@ -826,6 +828,7 @@ class Recording_explorer:
         )
         fig = recording_overview.add_stimulus_df(fig, recording.stimulus_df)
         fig.set_size_inches(10, 8)
+        self.spike_trains.clear_output()
         with self.spike_trains:
             fig.show()
 
