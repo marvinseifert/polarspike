@@ -62,6 +62,7 @@ def whole_stimulus(
     cmap="Greys",
     bin_size=0.05,
     norm="linear",
+    line_colour="white",
 ):
     if indices is None:
         indices = ["cell_index", "repeat"]
@@ -103,7 +104,7 @@ def whole_stimulus(
 
     # Plot the PSTH
 
-    axs[0, 0].plot(bins[1:], psth, color="black", alpha=0.5)
+    axs[0, 0].plot(bins[1:], psth, color=line_colour, alpha=0.5)
 
     # Switch data format to categorical
     df["index"] = df[indices[0]].astype("category")
@@ -229,8 +230,11 @@ def draw_artist(
 
 
 def spikes_and_trace(
-    df, stacked=False, indices=None, width=1400, height=500, bin_size=0.05
+    df, stacked=False, indices=None, width=1400, height=500, bin_size=0.05, theme="dark"
 ):
+    assert (
+        len(df) < 10000
+    ), "The number of spikes is too high for this plot, use spiketrain_plots.whole_stimulus instead"
     y_key = "repeat"
     if indices is None:
         indices = ["cell_index", "repeat"]
@@ -248,7 +252,11 @@ def spikes_and_trace(
         else:
             line_color = "black"
     except StopIteration:
-        line_color = "black"
+        if theme == "dark":
+            line_color = "white"
+        else:
+            line_color = "black"
+    print(line_color)
 
     psth, bins = histograms.psth(
         df, bin_size=bin_size, start=0, end=df["times_triggered"].max()

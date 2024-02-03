@@ -32,6 +32,12 @@ class Table:
         # Watch for column selection changes
         self.column_select.param.watch(self.update_filter_widget, "value")
 
+        # Widget for queries
+        self.query_widget = pn.widgets.TextInput(
+            name="Query", placeholder="Enter query"
+        )
+        self.query_error = pn.pane.Markdown("", style={"color": "red"})
+
         # Panel to display the widgets
         self.panel = pn.Column(
             pn.Row(
@@ -40,6 +46,7 @@ class Table:
                 ),  # Updated layout
                 pn.Column(self.stimulus_select),
                 pn.Column(self.recording_select),
+                pn.Column(self.query_widget, self.query_error),
             ),
             self.tabulator,
             width=width,
@@ -64,6 +71,8 @@ class Table:
             "value",
         )
 
+        self.query_widget.param.watch(self.apply_filters, "value")
+
     def show(self):
         return self.panel.servable()
 
@@ -79,9 +88,9 @@ class Table:
             self.filter_widget = pn.widgets.CheckBoxGroup(
                 name=column, options=[True, False], value=[True, False]
             )
-
             self.filter_widget.param.watch(self.apply_filters, "value")
 
+            # Add the new widget
             self.filter_placeholder.append(self.filter_widget)
 
         elif pd.api.types.is_numeric_dtype(self.df[column]):
@@ -107,6 +116,7 @@ class Table:
             self.filter_widget = pn.widgets.MultiSelect(
                 name=column, options=options, value=options
             )
+
             self.filter_widget.param.watch(self.apply_filters, "value")
 
             # Add the new widget
@@ -126,7 +136,7 @@ class Table:
             column = self.column_select.value
             lower = self.lower_bound_input.value
             upper = self.upper_bound_input.value
-            filtered_df = filtered_df[
+            filtered_df = filtered_df.loc[
                 (filtered_df[column] >= lower) & (filtered_df[column] <= upper)
             ]
 
@@ -148,6 +158,17 @@ class Table:
             filtered_df = filtered_df[
                 filtered_df["recording"] == self.recording_select.value
             ]
+
+        # Query filter
+        try:
+            query = self.query_widget.value
+            if query != "":
+                filtered_df = filtered_df.query(query)
+                self.query_error.object = ""
+        except KeyError:
+            self.query_error.object = "Invalid Key"
+        except pd.errors.UndefinedVariableError:
+            self.query_error.object = "Invalid Variable, use '' for strings"
 
         self.tabulator.value = filtered_df
 

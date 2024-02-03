@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from ipywidgets import widgets, interact
+from ipywidgets import widgets, interact, Layout
 import re
 import math
 from IPython.display import Markdown, display
@@ -101,7 +101,7 @@ class Colour_template:
     def interactive_stimulus(self):
         interact(self.pickstimcolour, selected_stimulus=self.stimulus_select)
 
-    def pickstimcolour(self, selected_stimulus=None):
+    def pickstimcolour(self, selected_stimulus=None, small=False):
         if not selected_stimulus:
             self.stimulus = self.stimulus_select.value
         else:
@@ -119,6 +119,7 @@ class Colour_template:
             widgets.ColorPicker(
                 description=w,
                 value=self.plot_colour_dataframe.loc[self.stimulus]["Colours"][trigger],
+                concise=small,
             )
             for w, trigger in zip(words, range(nr_trigger))
         ]
@@ -141,11 +142,18 @@ class Colour_template:
             except IndexError:
                 break
 
-        first_box = widgets.VBox(first_box_items)
+        first_box = widgets.VBox(
+            first_box_items,
+            # layout=Layout(overflow="scroll", width="100%", height="100%"),
+        )
         # second_box = widgets.VBox(second_box_items)
         # third_box = widgets.VBox(third_box_items)
         # fourth_box = widgets.VBox(fourth_box_items)
-        self.picker = widgets.HBox([first_box])
+        self.picker = widgets.HBox(
+            [first_box],
+            # Prevent scrolling
+            layout=Layout(height="300px", width="200px"),
+        )
 
         return self.picker
 

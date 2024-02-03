@@ -7,7 +7,7 @@ import panel as pn
 from polarspike import stimulus_trace
 import plotly.graph_objects as go
 import param
-from bokeh.plotting import figure
+from bokeh.plotting import figure, curdoc
 from bokeh.models import ColumnDataSource
 import time
 from polarspike.backbone import SelectFilesButton
@@ -19,16 +19,18 @@ from polarspike import spiketrain_plots
 from pathlib import Path
 from polarspike import colour_template
 from polarspike import stimulus_spikes
-from polarspike import binarizer
+from polarspike import binarizer, quality_tests
 from math import pi
 from bokeh.palettes import Category20c, Category20
-from bokeh.plotting import figure
+from bokeh.plotting import figure, output_file, save
 from bokeh.transform import cumsum
 import panel as pn
 import matplotlib
 from polarspike.grid import Table
 from polarspike import plotly_templates, grid, waveforms
 from functools import partial
+from panel.theme import Bootstrap, Material, Native
+from bokeh.io import export_png
 
 
 def stimulus_df():
@@ -597,6 +599,8 @@ class PlotApp(param.Parameterized):
 
 class Recording_explorer:
     def __init__(self, analysis_path):
+        pn.config.theme = "dark"
+        pn.config.design = Bootstrap
         self.analysis_path = analysis_path
         self.nr_added_recordings = 0
         self.recordings_dataframe = pd.DataFrame(
@@ -648,44 +652,112 @@ class Recording_explorer:
 
         # Action menu
         self.action_dict = {
-            "single_cell_raster": {
+            "raster_plot": {
                 "func": partial(
                     spiketrain_plots.spikes_and_trace,
                     stacked=True,
-                    indices=["cell_index", "repeat"],
+                    height=800,
+                    width=1500,
                 ),
                 "type": "stimulus_trace",
             },
-            "multiple_cell_raster": {
+            "datashader_plot": {
                 "func": partial(
-                    spiketrain_plots.spikes_and_trace,
+                    spiketrain_plots.whole_stimulus,
                     stacked=True,
-                    indices=["recording", "cell_index", "repeat"],
+                    cmap="gist_gray",
+                    line_colour="white",
+                    height=8,
+                    width=15,
                 ),
                 "type": "stimulus_trace",
             },
-            "many_cell_raster": {
-                "func": spiketrain_plots.whole_stimulus_plotly,
-                "type": "stimulus_trace",
-            },
-            "waveforms": waveforms.plot_waveforms,
+            "waveforms": {"type": "waveforms"},
+            "dataframe": {"type": "dataframe"},
+            "quality_tests": {"type": "quality_tests"},
         }
         self.action_items = [item for item in self.action_dict.keys()]
         self.action_menu = pn.widgets.MenuButton(
             name="Actions", items=self.action_items, button_type="primary", width=200
         )
-        self.action_menu.on_click(self.trigger_action)
+        self.action_menu.on_click(self.action_selected)
+
+        self.action_column = pn.Column([], height=800, width=310)
+        self.action_run_button = pn.widgets.Button(name="Go")
+        self.action_run_button.on_click(self.trigger_action)
 
         # Output
-        self.output = pn.Column()
+        self.output = pn.Column([], sizing_mode="stretch_width")
 
         # Colour Panel
         self.ct = colour_template.Colour_template()
         self.colour_selector = pn.widgets.Select(
-            name="Select colour set", options=self.ct.list_stimuli().tolist()
+            name="Select colour set", options=self.ct.list_stimuli().tolist(), width=250
         )
         self.colour_selector.param.watch(self.on_colour_change, "value")
-        self.selected_color = pn.pane.IPyWidget(self.ct.pickstimcolour())
+        self.selected_color = pn.pane.IPyWidget(
+            self.ct.pickstimcolour(small=True), width=250
+        )
+
+        self.figure_name_input = pn.widgets.TextInput(
+            placeholder="Figure_1", max_length=20, width=100
+        )
+        self.save_figure_button = pn.widgets.Button(name="Save Figure")
+        self.save_figure_button.on_click(self.save_figure)
+
+        # Bin size
+        self.bin_size_input = pn.widgets.FloatInput(
+            name="Bin size", value=0.05, step=0.01, start=0, end=10, width=100
+        )
+
+        # Stimulus trace context menu
+        self.stimulus_trace_ct = pn.Column(
+            pn.Column(
+                pn.widgets.MultiChoice(
+                    name="Select stack order",
+                    value=["cell_index", "repeat"],
+                    options=["cell_index", "repeat", "recording", "stimulus_index"],
+                    width=250,
+                ),
+                width=150,
+            ),
+            "Select bin size",
+            self.bin_size_input,
+            "Select colour set",
+            self.colour_selector,
+            self.selected_color,
+            "Plot",
+            pn.Row(
+                self.action_run_button, self.figure_name_input, self.save_figure_button
+            ),
+        )
+
+        # Dataframe context menu
+        self.new_df_name = pn.widgets.TextInput(
+            name="New dataframe name", placeholder="new_df", width=250
+        )
+        self.new_df_button = pn.widgets.Button(name="Create new dataframe")
+        self.new_df_button.on_click(self.create_new_df)
+        self.dataframe_ct = pn.Column(self.new_df_name, "Create", self.new_df_button)
+
+        # Quality tests context menu
+        self.run_quality_tests_button = pn.widgets.Button(name="Run Quality Test")
+        self.run_quality_tests_button.on_click(self.run_quality_tests)
+        self.quality_radio = pn.widgets.RadioButtonGroup(
+            name="How",
+            options=["combined", "one_by_one"],
+            value="combined",
+        )
+        self.quality_tests_ct = pn.Column(
+            "How to handle multiple stimuli",
+            self.quality_radio,
+            self.run_quality_tests_button,
+        )
+
+        # Recording Overview Accordion
+        self.rec_overview_container = pn.Accordion(
+            ("Nr cells", self.nr_cells_fig), toggle=True, active=[0]
+        )
 
         # Main
 
@@ -697,11 +769,9 @@ class Recording_explorer:
             (
                 "Overview",
                 pn.Column(
-                    "## Recordings loaded",
+                    "#### Recordings loaded",
                     self.recordings_dataframe_widget,
-                    pn.Accordion(
-                        ("Nr cells", self.nr_cells_fig),
-                    ),
+                    self.rec_overview_container,
                     sizing_mode="stretch_width",
                 ),
             ),
@@ -753,12 +823,11 @@ class Recording_explorer:
             "Load Recording",
             self.load_button,
             pn.Column(self.action_menu, sizing_mode="stretch_width"),
-            "Active Colour template",
-            self.colour_selector,
-            self.selected_color,
+            self.action_column,
             sizing_mode="fixed",
             width=310,
             height=1000,
+            scroll=True,
         ).servable(area="sidebar")
 
     def plot_recording_spike_trains(self):
@@ -774,21 +843,27 @@ class Recording_explorer:
 
     def load_recording(self, change):
         if change["new"]:
-            recording_path = change["new"][0] if change["new"] else ""
-            recording = Overview.Recording.load(recording_path)
-            self.recordings_object.add_recording(recording)
-            self.nr_added_recordings += 1
-            self.single_recording_items.append(
-                (recording.name, recording.name)
-            )  # Append as a tuple (name, callback)
-            self.single_recording_menu.items = self.single_recording_items
-            self.add_recording_info_to_df(recording)
-            self.single_recording_menu.param.trigger("items")
-            self.recordings_dataframe_widget.param.trigger("value")
-            self.nr_cells_recording()
-            self.nr_cells_fig.param.trigger("object")
-            self.fill_dataframe_menu()
-            self.fill_dataframe()
+            try:
+                recording_path = change["new"][0] if change["new"] else ""
+                recording = Overview.Recording.load(recording_path)
+                self.recordings_object.add_recording(recording)
+                self.nr_added_recordings += 1
+                self.single_recording_items.append(
+                    (recording.name, recording.name)
+                )  # Append as a tuple (name, callback)
+                self.single_recording_menu.items = self.single_recording_items
+                self.add_recording_info_to_df(recording)
+                self.single_recording_menu.param.trigger("items")
+                self.recordings_dataframe_widget.param.trigger("value")
+                self.nr_cells_recording()
+                self.nr_cells_fig.param.trigger("object")
+                self.fill_dataframe_menu()
+                self.fill_dataframe()
+
+            except FileNotFoundError:
+                print("No recording found")
+            except AttributeError:
+                print("Recording object not constructed correctly")
 
     def load_single_recording(self, event):
         recording_name = self.single_recording_menu.clicked
@@ -878,31 +953,124 @@ class Recording_explorer:
 
     def on_colour_change(self, event):
         self.ct.pick_stimulus(event.new)
-        self.selected_color.object = self.ct.pickstimcolour(event.new)
+        self.selected_color.object = self.ct.pickstimcolour(event.new, small=True)
+
+    def create_new_df(self, event):
+        name = self.new_df_name.value
+        self.recordings_object.dataframes[name] = self.grid_row.objects[0][1].value
+        self.fill_dataframe_menu()
+
+    def run_quality_tests(self, event):
+        recordings = self.grid_row.objects[0][1].value.recording.unique()
+
+        if self.quality_radio.value == "combined":
+            for recording in recordings:
+                self.recordings_object.dataframes[
+                    "cell_selection"
+                ] = self.grid_row.objects[0][1].value.query(
+                    f"recording == '{recording}'"
+                )
+                spikes = self.recordings_object.get_spikes_df(cell_df="cell_selection")
+                # Get max time and nr_repeats
+                mean_trigger_times = stimulus_spikes.mean_trigger_times(
+                    self.recordings_object.recordings[recording].stimulus_df,
+                    self.recordings_object.dataframes["cell_selection"]
+                    .stimulus_index.unique()
+                    .tolist(),
+                )
+                max_repeat = np.max(spikes["repeat"])
+                quality_df = quality_tests.spiketrain_qi(
+                    spikes, np.sum(mean_trigger_times), max_repeat=max_repeat
+                )
+                insert_df = (
+                    self.grid_row.objects[0][1]
+                    .value.set_index(["recording", "cell_index"])
+                    .copy()
+                )
+                insert_df["qi"] = 0
+                insert_df.update(quality_df.set_index(["recording", "cell_index"]))
+                insert_df = insert_df.reset_index(drop=False)
+                self.grid_row.objects[0][1].value = insert_df
+
+        for recording in recordings:
+            sub_df = self.recordings_object.dataframes["cell_selection"].query(
+                f"recording == '{recording}'"
+            )
+            spikes = self.recordings_object.get_spikes_df("cell_selection")
+
+        quality_df = quality_tests.spiketrain_qi(spikes)
+
+    def action_selected(self, event):
+        action = self.action_menu.clicked
+        type = self.action_dict[action]["type"]
+        if type == "stimulus_trace":
+            self.action_column.clear()
+            self.action_column.append(self.stimulus_trace_ct)
+        if type == "dataframe":
+            self.action_column.clear()
+            self.action_column.append(self.dataframe_ct)
+        if type == "quality_tests":
+            self.action_column.clear()
+            self.action_column.append(self.quality_tests_ct)
 
     def trigger_action(self, event):
         action = self.action_menu.clicked
+        action_type = self.action_dict[action]["type"]
         func = self.action_dict[action]["func"]
-        cells = self.grid_row.objects[0][1].selection
-        self.recordings_object.dataframes[
-            "cell_selection"
-        ] = self.recordings_object.dataframes[self.dataframe_menu.clicked].iloc[cells]
+        df_idx = self.grid_row.objects[0][1].selection
+        if len(df_idx) == 0:
+            df_idx = self.grid_row.objects[0][1].value.index.tolist()
+        else:
+            df_idx = self.grid_row.objects[0][1].value.iloc[df_idx].index
+        self.recordings_object.dataframes["cell_selection"] = self.grid_row.objects[0][
+            1
+        ].value.loc[df_idx]
         stimulus_indices = (
             self.recordings_object.dataframes["cell_selection"]
             .stimulus_index.unique()
             .tolist()
         )
         spikes = self.recordings_object.get_spikes_df("cell_selection")
-        fig = func(df=spikes)
+        if len(spikes) == 0:
+            return
 
-        flash_duration = stimulus_spikes.mean_trigger_times(
-            self.recordings_object.dataframes["stimulus_df"], stimulus_indices
-        )
+        if action_type == "stimulus_trace":
+            fig = func(
+                df=spikes,
+                indices=self.stimulus_trace_ct.objects[0][0].value,
+                bin_size=self.bin_size_input.value,
+            )
 
-        fig = self.ct.add_stimulus_to_plot(fig, flash_duration)
+            flash_duration = stimulus_spikes.mean_trigger_times(
+                self.recordings_object.dataframes["stimulus_df"], stimulus_indices
+            )
 
-        self.output.clear()
-        self.output.objects = [fig]
+            self.output.clear()
+            try:
+                fig = self.ct.add_stimulus_to_plot(fig, flash_duration)
+                self.output.objects = [fig]
+            except TypeError:  # In case the figure gets returned as fig, ax tuple
+                fig = self.ct.add_stimulus_to_plot(fig[0], flash_duration)
+                self.output.objects = [pn.pane.Matplotlib(fig, height=800, width=1500)]
+
+    def save_figure(self, event):
+        if self.output.objects:
+            if type(self.output.objects[0]) == pn.pane.plot.Matplotlib:
+                self.output.objects[0].object.savefig(
+                    Path(self.analysis_path) / f"{self.figure_name_input.value}.svg"
+                )
+            elif type(self.output.objects[0]) == go.Figure:
+                self.output.objects[0].write_image(
+                    Path(self.analysis_path) / f"{self.figure_name_input.value}.svg"
+                )
+            elif type(self.output.objects[0]) == pn.pane.plot.Bokeh:
+                export_png(
+                    self.output.objects[0].object,
+                    filename=Path(self.analysis_path)
+                    / f"{self.figure_name_input.value}.png",
+                    width=1500,
+                    height=800,
+                )
 
     def serve(self):
         app = pn.Row(
