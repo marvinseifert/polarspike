@@ -151,6 +151,7 @@ def plot_spiketrains(df, cmap, height=None, width=None):
     sm.set_array([])
 
     cbar = plt.colorbar(sm, ax=ax)
+    cbar.set_label("nr spikes")
 
     ax.set_xlabel("time in seconds")
     ax.set_ylabel("cell_index")
@@ -206,7 +207,7 @@ def add_stimulus_df(fig, df):
             row["end_fr"] / row["sampling_freq"],
             facecolor=colours[i],
             linestyle="dashed",
-            alpha=0.2,
+            alpha=0.1,
             zorder=0,
         )
         midpoint = (row["begin_fr"] + row["end_fr"]) / 2

@@ -20,10 +20,6 @@ def timestamps_to_binary_polars(df_timestamps, sample_rate, max_window):
         schema={"index": pl.Int64, "value": pl.UInt8},
     )
 
-    # df_binary_signal = pl.DataFrame(
-    #     {"index": list(range(max_window + 1))},
-    #     schema={"index": pl.Int64},
-    # )
     # Overlay the ones onto the zeros based on the calculated indices
     df_result = df_binary_signal.join(
         df_timestamps, on="index", how="left"
@@ -36,9 +32,6 @@ def timestamps_to_binary_polars(df_timestamps, sample_rate, max_window):
     )
     if len(df_result) != max_window + 1:
         df_result = df_result.unique(subset="index")
-        # print(
-        #     "Warning: duplicate indices found in timestamps_to_binary_polars, increase sample rate"
-        # )
 
     df_result = df_result.with_columns(
         pl.col("cell_index").fill_null(strategy="backward")
@@ -174,7 +167,7 @@ def kernel_template(width=0.0100, sampling_freq=17852.767845719834):
     gtime = np.arange(-k, k)
 
     # create Gaussian window
-    gauswin = np.exp(-(4 * np.log(2) * gtime**2) / fwhm**2)
+    gauswin = np.exp(-(4 * np.log(2) * gtime ** 2) / fwhm ** 2)
     gauswin = gauswin / np.sum(gauswin)
 
     # initialize filtered signal vector
