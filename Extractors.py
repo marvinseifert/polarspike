@@ -35,7 +35,7 @@ class Extractor:
         ----------
         file: str
             The location of the hdf5 results file
-        
+
 
         Returns
         -------
@@ -139,7 +139,7 @@ class Extractor:
         centres_id = np.hstack(
             [
                 self.spikes["cell_indices"].reshape(-1, 1) - 1,
-                self.spikes["spik"],
+                self.spikes["centres"],
             ]
         )
 
@@ -251,7 +251,8 @@ class Extractor_KS(Extractor):
         cell_idx = cell_idx.astype(np.dtypes.Int64DType)
         self.spikes["cell_indices"] = np.unique(cell_idx)
         df = pl.from_numpy(
-            np.vstack([cell_idx, self.spikes["times"]]).T, schema=["cell_index", "times"]
+            np.vstack([cell_idx, self.spikes["times"]]).T,
+            schema=["cell_index", "times"],
         )
         df.write_parquet(str(self.file.with_suffix(".parquet")))
 

@@ -31,6 +31,7 @@ from polarspike import plotly_templates, grid, waveforms
 from functools import partial
 from panel.theme import Bootstrap, Material, Native
 from bokeh.io import export_png
+import plotly.express as px
 
 
 def stimulus_df():
@@ -675,6 +676,7 @@ class Recording_explorer:
             "waveforms": {"type": "waveforms"},
             "dataframe": {"type": "dataframe"},
             "quality_tests": {"type": "quality_tests"},
+            "stats_plots": {"type": "plotly_stats"},
         }
         self.action_items = [item for item in self.action_dict.keys()]
         self.action_menu = pn.widgets.MenuButton(
@@ -759,11 +761,46 @@ class Recording_explorer:
             ("Nr cells", self.nr_cells_fig), toggle=True, active=[0]
         )
 
+        # Plotly stats
+        self.stats_plot_input = pn.widgets.Select(
+            name="Select plot type",
+            options=["histogram", "line", "marker", "bar", "scatter", "box", "violin"],
+            width=250,
+        )
+        self.stat_x_input = pn.widgets.Select(name="X", options=[], width=250)
+        self.stat_y_input = pn.widgets.Select(name="Y", options=[], width=250)
+        self.plot_stats_button = pn.widgets.Button(name="Plot")
+        self.plot_stats_button.on_click(self.plot_stats)
+        self.square_plot_radio = pn.widgets.RadioButtonGroup(
+            name="Square Plot", options=[0, 1]
+        )
+        self.stats_colour_column = pn.widgets.Select(
+            name="Colour column", options=[], width=250
+        )
+        self.plotly_stats_ct = pn.Column(
+            "Select plot type",
+            self.stats_plot_input,
+            self.stat_x_input,
+            self.stat_y_input,
+            self.stats_colour_column,
+            "Square plot",
+            self.square_plot_radio,
+            self.plot_stats_button,
+        )
+
         # Main
 
         self.recordings_object = Overview.Recording_s(analysis_path, "gui_analysis")
         self.load_button = SelectFilesButton("Recordings")
         self.load_button.observe(self.load_recording, names="files")
+        self.load_analysis_button = SelectFilesButton("Analysis")
+        self.load_analysis_button.observe(self.load_analysis, names="files")
+        self.save_name_input = pn.widgets.TextInput(placeholder="overview", width=120)
+        self.save_analysis_button = pn.widgets.Button(
+            name="💾 Save Analysis",
+        )
+        self.save_analysis_button.on_click(self.save_analysis)
+
         self.spike_trains = widgets.Output()
         self.main = pn.Tabs(
             (
@@ -822,6 +859,9 @@ class Recording_explorer:
         self.sidebar = pn.layout.WidgetBox(
             "Load Recording",
             self.load_button,
+            "Load previous analysis",
+            self.load_analysis_button,
+            pn.Row(self.save_name_input, self.save_analysis_button),
             pn.Column(self.action_menu, sizing_mode="stretch_width"),
             self.action_column,
             sizing_mode="fixed",
@@ -856,6 +896,7 @@ class Recording_explorer:
                 self.single_recording_menu.param.trigger("items")
                 self.recordings_dataframe_widget.param.trigger("value")
                 self.nr_cells_recording()
+                self.load_analysis_button.disabled = True
                 self.nr_cells_fig.param.trigger("object")
                 self.fill_dataframe_menu()
                 self.fill_dataframe()
@@ -872,6 +913,14 @@ class Recording_explorer:
         self.plot_isi(recording, "times", self.isi_fig)
         self.plot_isi(recording, "cell_index", self.isi_clus_fig)
         self.plot_spike_trains(recording)
+
+    def load_analysis(self, change):
+        return
+
+    def save_analysis(self, change):
+        self.recordings_object.save(
+            Path(self.analysis_path) / self.save_name_input.value
+        )
 
     def plot_spike_counts(self, recording):
         fig, ax = recording_overview.spike_counts_from_file(
@@ -950,6 +999,7 @@ class Recording_explorer:
         table_object[-1].selectable = "checkbox"
         self.grid_row.clear()
         self.grid_row.objects = [table_object]
+        self.grid_row.objects[0][1].on_edit(self.sync_dataframes)
 
     def on_colour_change(self, event):
         self.ct.pick_stimulus(event.new)
@@ -959,6 +1009,42 @@ class Recording_explorer:
         name = self.new_df_name.value
         self.recordings_object.dataframes[name] = self.grid_row.objects[0][1].value
         self.fill_dataframe_menu()
+
+    def sync_dataframes(self, event):
+        if event.new:
+            df_name = self.dataframe_menu.clicked
+            self.recordings_object.dataframes[df_name].update(
+                self.grid_row.objects[0][1].value
+            )
+
+    def return_values_to_df(self, df, new_columns, column_dtypes):
+        numeric_fill = 0
+        string_fill = ""
+        bool_fill = False
+        df_name = self.dataframe_menu.clicked
+        for column, dtype in zip(new_columns, column_dtypes):
+            if dtype == "int":
+                self.recordings_object.dataframes[df_name][column] = numeric_fill
+                self.recordings_object.dataframes[df_name][
+                    column
+                ] = self.recordings_object.dataframes[df_name][column].astype(int)
+            elif dtype == "float":
+                self.recordings_object.dataframes[df_name][column] = numeric_fill
+                self.recordings_object.dataframes[df_name][
+                    column
+                ] = self.recordings_object.dataframes[df_name][column].astype(float)
+            elif dtype == "str":
+                self.recordings_object.dataframes[df_name][column] = string_fill
+                self.recordings_object.dataframes[df_name][
+                    column
+                ] = self.recordings_object.dataframes[df_name][column].astype(str)
+            elif dtype == "bool":
+                self.recordings_object.dataframes[df_name][column] = bool_fill
+                self.recordings_object.dataframes[df_name][
+                    column
+                ] = self.recordings_object.dataframes[df_name][column].astype(bool)
+        self.recordings_object.dataframes[df_name].update(df)
+        self.fill_dataframe()
 
     def run_quality_tests(self, event):
         recordings = self.grid_row.objects[0][1].value.recording.unique()
@@ -970,7 +1056,9 @@ class Recording_explorer:
                 ] = self.grid_row.objects[0][1].value.query(
                     f"recording == '{recording}'"
                 )
-                spikes = self.recordings_object.get_spikes_df(cell_df="cell_selection")
+                spikes = self.recordings_object.get_spikes_df(
+                    cell_df="cell_selection", pandas=False
+                )
                 # Get max time and nr_repeats
                 mean_trigger_times = stimulus_spikes.mean_trigger_times(
                     self.recordings_object.recordings[recording].stimulus_df,
@@ -978,27 +1066,50 @@ class Recording_explorer:
                     .stimulus_index.unique()
                     .tolist(),
                 )
-                max_repeat = np.max(spikes["repeat"])
+                max_repeat = spikes["repeat"].max() + 1
                 quality_df = quality_tests.spiketrain_qi(
                     spikes, np.sum(mean_trigger_times), max_repeat=max_repeat
                 )
                 insert_df = (
                     self.grid_row.objects[0][1]
-                    .value.set_index(["recording", "cell_index"])
-                    .copy()
+                    .value.copy()
+                    .set_index(["cell_index", "recording"])
                 )
                 insert_df["qi"] = 0
-                insert_df.update(quality_df.set_index(["recording", "cell_index"]))
+                insert_df.update(quality_df)
                 insert_df = insert_df.reset_index(drop=False)
-                self.grid_row.objects[0][1].value = insert_df
+                self.return_values_to_df(insert_df, ["qi"], ["float"])
 
-        for recording in recordings:
-            sub_df = self.recordings_object.dataframes["cell_selection"].query(
-                f"recording == '{recording}'"
-            )
-            spikes = self.recordings_object.get_spikes_df("cell_selection")
+        # for recording in recordings:
+        #     sub_df = self.recordings_object.dataframes["cell_selection"].query(
+        #         f"recording == '{recording}'"
+        #     )
+        #     spikes = self.recordings_object.get_spikes_df("cell_selection")
+        #
+        # quality_df = quality_tests.spiketrain_qi(spikes)
 
-        quality_df = quality_tests.spiketrain_qi(spikes)
+    def plot_stats(self, event):
+        plotting_functions = {
+            "histogram": px.histogram,
+            "line": px.line,
+            "bar": px.bar,
+            "scatter": px.scatter,
+            "box": px.box,
+            "violin": px.violin,
+        }
+
+        fig = plotting_functions[self.stats_plot_input.value](
+            self.grid_row.objects[0][1].value,
+            x=self.stat_x_input.value,
+            y=self.stat_y_input.value,
+            color=self.stats_colour_column.value,
+        )
+        fig.update_layout(template="scatter_template_jupyter")
+        if self.square_plot_radio.value == 1:
+            fig.update_layout(height=800, width=800)
+
+        self.output.clear()
+        self.output.append(fig)
 
     def action_selected(self, event):
         action = self.action_menu.clicked
@@ -1012,6 +1123,20 @@ class Recording_explorer:
         if type == "quality_tests":
             self.action_column.clear()
             self.action_column.append(self.quality_tests_ct)
+        if type == "plotly_stats":
+            self.stat_x_input.options = [None] + self.recordings_object.dataframes[
+                self.dataframe_menu.clicked
+            ].columns.tolist()
+            self.stat_y_input.options = [None] + self.recordings_object.dataframes[
+                self.dataframe_menu.clicked
+            ].columns.tolist()
+            self.stats_colour_column.options = [
+                None
+            ] + self.recordings_object.dataframes[
+                self.dataframe_menu.clicked
+            ].columns.tolist()
+            self.action_column.clear()
+            self.action_column.append(self.plotly_stats_ct)
 
     def trigger_action(self, event):
         action = self.action_menu.clicked
