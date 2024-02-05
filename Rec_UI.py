@@ -915,7 +915,16 @@ class Recording_explorer:
         self.plot_spike_trains(recording)
 
     def load_analysis(self, change):
-        return
+        if change["new"]:
+            self.recordings_object = Overview.Recording_s.load(
+                change["new"][0] if change["new"] else ""
+            )
+            self.nr_cells_recording()
+            self.fill_dataframe_menu()
+            for recording in self.recordings_object.recordings.keys():
+                self.add_recording_info_to_df(
+                    self.recordings_object.recordings[recording]
+                )
 
     def save_analysis(self, change):
         self.recordings_object.save(
