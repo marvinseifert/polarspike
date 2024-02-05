@@ -31,6 +31,8 @@ class Colour_template:
     def __init__(self, df_file=None):
         if df_file is None:
             df_file = polarspike.__path__[0] + "/stim_colour_df"
+        self.df_file = df_file
+
 
         self.plot_colour_dataframe = pd.read_pickle(df_file)
 
@@ -96,7 +98,7 @@ class Colour_template:
         self.plot_colour_dataframe.loc[
             self.template.name, "Description"
         ] = self.template.description
-        self.plot_colour_dataframe.to_pickle("stim_colour_df")
+        self.plot_colour_dataframe.to_pickle(self.df_file)
 
     def interactive_stimulus(self):
         interact(self.pickstimcolour, selected_stimulus=self.stimulus_select)
