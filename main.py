@@ -15,16 +15,11 @@ import numpy as np
 pn.extension()
 
 if __name__ == "__main__":
-    recordings = Overview.Recording_s.load("D:\\combined_analysis\\all_recordings")
-    spikes = pl.scan_parquet(recordings.recordings["zebrafish_14_11_23"].parquet_path)
-    spikes = spikes.filter(pl.col("cell_index") == 270).collect()
-    trigger = np.arange(0, np.max(spikes["times"].to_numpy()), 1)
-    sta = elpy.sta_main_loop(
-        spikes["times"].to_numpy(),
-        trigger,
-        "D:\\Zebrafish_14_11_23\\ks_sorted\\alldata.dat",
-        nr_pre_bins=10,
-        nr_post_bins=40,
-        nr_boxes=252,
-        mea="MCS",
+    recordings = Overview.Recording_s.load_from_single(
+        r"B:\Marvin\combined_analysis",
+        "test_analysis",
+        r"B:\Marvin\Zebrafish_20_11_23\ks_sorted\overview",
     )
+    recordings.add_from_saved("B:\Marvin\Zebrafish_21_11_23\ks_sorted\overview")
+    recordings.dataframes["test"] = recordings.spikes_df.query("stimulus_name == 'FFF'")
+    spikes = recordings.get_spikes_triggered([["all"]], [[[0]]], [[["all"]]])
