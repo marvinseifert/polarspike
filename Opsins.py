@@ -1,7 +1,7 @@
 import numpy as np
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
-import plotly_templates
+from polarspike import plotly_templates
 
 
 class Opsin_template:

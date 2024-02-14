@@ -925,6 +925,8 @@ class Recording_explorer:
                 self.add_recording_info_to_df(
                     self.recordings_object.recordings[recording]
                 )
+                self.single_recording_menu.items.append(recording)
+            self.single_recording_menu.param.trigger("items")
 
     def save_analysis(self, change):
         self.recordings_object.save(
