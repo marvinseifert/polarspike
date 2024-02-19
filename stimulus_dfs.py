@@ -19,6 +19,8 @@ class Stimulus_df_schroeder:
         stimulus_repeat_sublogic=1,
         random_ids=None,
     ):
+        #TODO: Correct wrong trigger_fr_relative
+        #TODO: can this be done in seconds, relative to stimulus start? More intuitive!
         # Establish the trigger by interleaving the start and end times
         trigger_store = np.empty((1), dtype=object)
         trigger_store[0] = self.create_trigger(starts, ends, self.sampling_freq)
