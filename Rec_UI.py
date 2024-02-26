@@ -32,6 +32,7 @@ from functools import partial
 from panel.theme import Bootstrap, Material, Native
 from bokeh.io import export_png
 import plotly.express as px
+import polars as pl
 
 
 def stimulus_df():
@@ -448,28 +449,41 @@ class Explorer:
         self.selected_color.object = self.ct.pickstimcolour(event.new)
 
     def calculate_qi(self, event):
+        batch_size = 500
         self.status.active = True
         cell_ids = self.single_stimulus_df.value["cell_index"].unique().tolist()
         spikes_df = self.overview_df.get_spikes_triggered(
             [[self.stimulus_select.value]], [cell_ids], time="seconds", pandas=False
         )
-        # Update the cell indices, to account for cells without responses
-        binary_df = binarizer.timestamps_to_binary_multi(
-            spikes_df,
-            0.001,
-            np.sum(
-                stimulus_spikes.mean_trigger_times(
-                    self.overview_df.stimulus_df, [self.stimulus_select.value]
-                )
-            ),
-            self.overview_df.stimulus_df.loc[self.stimulus_select.value]["nr_repeats"],
-        )
-        qis = binarizer.calc_qis(binary_df)
-        cell_ids = binary_df["cell_index"].unique().to_numpy()
 
+        nr_batches = len(cell_ids) // batch_size
         df_temp = self.single_stimulus_df.value.set_index("cell_index")
         df_temp["qi"] = 0
-        df_temp.loc[cell_ids, "qi"] = qis
+        for i in range(nr_batches):
+            spikes_df_subset = spikes_df.filter(
+                pl.col("cell_index").is_in(
+                    cell_ids[(i * batch_size) : (i * batch_size) + batch_size]
+                )
+            )
+            if len(spikes_df_subset) > 0:
+                # Update the cell indices, to account for cells without responses
+                binary_df = binarizer.timestamps_to_binary_multi(
+                    spikes_df_subset,
+                    0.001,
+                    np.sum(
+                        stimulus_spikes.mean_trigger_times(
+                            self.overview_df.stimulus_df, [self.stimulus_select.value]
+                        )
+                    ),
+                    self.overview_df.stimulus_df.loc[self.stimulus_select.value][
+                        "nr_repeats"
+                    ],
+                )
+                qis = binarizer.calc_qis(binary_df)
+                cell_ids = binary_df["cell_index"].unique().to_numpy()
+
+                df_temp.loc[cell_ids, "qi"] = qis
+
         self.single_stimulus_df.value = df_temp.reset_index(drop=False)
         # Add the QI to the overview object
         self.merge_stimulus_df()
@@ -696,6 +710,9 @@ class Recording_explorer:
         self.colour_selector = pn.widgets.Select(
             name="Select colour set", options=self.ct.list_stimuli().tolist(), width=250
         )
+        self.colour_checkbox = pn.widgets.Checkbox(name="Plot stimtrace")
+        self.colour_checkbox.value = True
+
         self.colour_selector.param.watch(self.on_colour_change, "value")
         self.selected_color = pn.pane.IPyWidget(
             self.ct.pickstimcolour(small=True), width=250
@@ -709,7 +726,7 @@ class Recording_explorer:
 
         # Bin size
         self.bin_size_input = pn.widgets.FloatInput(
-            name="Bin size", value=0.05, step=0.01, start=0, end=10, width=100
+            name="Select bin size", value=0.05, step=0.01, start=0, end=10, width=100
         )
 
         # Stimulus trace context menu
@@ -723,9 +740,8 @@ class Recording_explorer:
                 ),
                 width=150,
             ),
-            "Select bin size",
             self.bin_size_input,
-            "Select colour set",
+            self.colour_checkbox,
             self.colour_selector,
             self.selected_color,
             "Plot",
@@ -1177,17 +1193,24 @@ class Recording_explorer:
                 bin_size=self.bin_size_input.value,
             )
 
-            flash_duration = stimulus_spikes.mean_trigger_times(
-                self.recordings_object.dataframes["stimulus_df"], stimulus_indices
-            )
+            self.output.clear()  #
 
-            self.output.clear()
-            try:
-                fig = self.ct.add_stimulus_to_plot(fig, flash_duration)
-                self.output.objects = [fig]
-            except TypeError:  # In case the figure gets returned as fig, ax tuple
-                fig = self.ct.add_stimulus_to_plot(fig[0], flash_duration)
+            if self.colour_checkbox.value:
+                flash_duration = stimulus_spikes.mean_trigger_times(
+                    self.recordings_object.dataframes["stimulus_df"], stimulus_indices
+                )
+                try:
+                    fig = self.ct.add_stimulus_to_plot(fig, flash_duration)
+                except TypeError:  # In case the figure gets returned as fig, ax tuple
+                    fig = self.ct.add_stimulus_to_plot(fig[0], flash_duration)
+            if type(fig) == plt.Figure:
                 self.output.objects = [pn.pane.Matplotlib(fig, height=800, width=1500)]
+            elif type(fig) == tuple:
+                self.output.objects = [
+                    pn.pane.Matplotlib(fig[0], height=800, width=1500)
+                ]
+            elif type(fig) == go.Figure:
+                self.output.objects = [fig]
 
     def save_figure(self, event):
         if self.output.objects:
