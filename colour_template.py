@@ -33,7 +33,6 @@ class Colour_template:
             df_file = polarspike.__path__[0] + "/stim_colour_df"
         self.df_file = df_file
 
-
         self.plot_colour_dataframe = pd.read_pickle(df_file)
 
         self.stimulus_select = widgets.RadioButtons(
@@ -75,7 +74,9 @@ class Colour_template:
         return colours
 
     def get_stimulus_names(self, name, sub_selection=None):
-        names = np.asarray(self.plot_colour_dataframe.loc[name]["Description"])
+        names = np.asarray(
+            self.plot_colour_dataframe.loc[name]["Description"], dtype="<U11"
+        )
         if sub_selection is not None:
             names = names[sub_selection[0] :: sub_selection[1]]
 
@@ -85,7 +86,10 @@ class Colour_template:
         names = self.get_stimulus_names(name, sub_selection)
         wavelengths = []
         for name in names:
-            wavelengths.append(int(re.findall(r"\d+", name)[0]))
+            try:
+                wavelengths.append(int(re.findall(r"\d+", name)[0]))
+            except IndexError:
+                wavelengths.append(name)
         return wavelengths
 
     def list_stimuli(self):
