@@ -87,11 +87,18 @@ def fill_missing_repeats(max_repeat, nr_bins, df_result):
 
 
 def apply_on_group(sample_rate, max_window, group_df):
-    return timestamps_to_binary_polars(group_df, sample_rate, max_window)
+    try:
+        return timestamps_to_binary_polars(group_df, sample_rate, max_window)
+    except Exception as e:
+        print(group_df)
 
 
 def timestamps_to_binary_multi(df, bin_size, max_window, max_repeat):
     max_window = np.ceil(max_window / bin_size + bin_size).astype(int)
+
+    # Reject spikes larger than max_window
+    df = df.filter(pl.col("times_triggered") <= max_window)
+
     df = reject_single_spikes(
         df
     )  # This filters cells with single spikes or spikes only in one repeat
@@ -167,7 +174,7 @@ def kernel_template(width=0.0100, sampling_freq=17852.767845719834):
     gtime = np.arange(-k, k)
 
     # create Gaussian window
-    gauswin = np.exp(-(4 * np.log(2) * gtime ** 2) / fwhm ** 2)
+    gauswin = np.exp(-(4 * np.log(2) * gtime**2) / fwhm**2)
     gauswin = gauswin / np.sum(gauswin)
 
     # initialize filtered signal vector
