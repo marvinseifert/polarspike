@@ -117,6 +117,62 @@ def mean_trigger_times(df, stimulus, time="seconds"):
     return new_trigger_int
 
 
+def max_trigger_times(df, stimulus, time="seconds"):
+    if type(stimulus[0]) is str and stimulus[0] == "all":
+        stimulus = df["stimulus_index"].unique().tolist()
+
+    stim_df = df.query(f"stimulus_index=={stimulus}")
+    new_trigger_int = np.repeat(
+        np.max(
+            np.reshape(
+                stim_df["trigger_int"].values[0][
+                    : stim_df["nr_repeats"].values[0]  # Only get finished repeats
+                    * stim_df["stimulus_repeat_logic"].values[0]
+                ],
+                (
+                    stim_df["nr_repeats"].values[0],
+                    stim_df["stimulus_repeat_logic"].values[0],
+                ),
+            ),
+            axis=0,
+        )
+        / stim_df["stimulus_repeat_sublogic"].values[0],
+        stim_df["stimulus_repeat_sublogic"].values[0],
+    )
+    if time == "seconds":
+        new_trigger_int = new_trigger_int / stim_df["sampling_freq"].values[0]
+
+    return new_trigger_int
+
+
+def min_trigger_times(df, stimulus, time="seconds"):
+    if type(stimulus[0]) is str and stimulus[0] == "all":
+        stimulus = df["stimulus_index"].unique().tolist()
+
+    stim_df = df.query(f"stimulus_index=={stimulus}")
+    new_trigger_int = np.repeat(
+        np.max(
+            np.reshape(
+                stim_df["trigger_int"].values[0][
+                    : stim_df["nr_repeats"].values[0]  # Only get finished repeats
+                    * stim_df["stimulus_repeat_logic"].values[0]
+                ],
+                (
+                    stim_df["nr_repeats"].values[0],
+                    stim_df["stimulus_repeat_logic"].values[0],
+                ),
+            ),
+            axis=0,
+        )
+        / stim_df["stimulus_repeat_sublogic"].values[0],
+        stim_df["stimulus_repeat_sublogic"].values[0],
+    )
+    if time == "seconds":
+        new_trigger_int = new_trigger_int / stim_df["sampling_freq"].values[0]
+
+    return new_trigger_int
+
+
 def stim_duration(df, stimulus, time="seconds"):
     stim_duration = np.sum(mean_trigger_times(df, stimulus, time))
     return stim_duration

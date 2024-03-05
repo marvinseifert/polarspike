@@ -15,6 +15,8 @@ from bokeh.layouts import gridplot
 from polarspike import backbone
 from bokeh.io import curdoc
 from bokeh.themes import built_in_themes
+import matplotlib.cm as cm
+import warnings
 
 
 def whole_stimulus_plotly(df, stacked=False):
@@ -63,7 +65,10 @@ def whole_stimulus(
     bin_size=0.05,
     norm="linear",
     line_colour="white",
+    single_psth=True,
 ):
+    warnings.filterwarnings("ignore", module="matplotlib\..*")
+
     if indices is None:
         indices = ["cell_index", "repeat"]
     # Store some information about the data
@@ -71,6 +76,8 @@ def whole_stimulus(
     nr_repeats = df[indices[1]].max() + 1
     nr_unique = unique_indices.shape[0]  # In case of a single cell or a single color
     max_time = np.max(df[how])
+    if type(cmap) is str:
+        cmap = [cmap]
 
     if height is None:
         if nr_unique > 3:
@@ -93,18 +100,31 @@ def whole_stimulus(
     df = df.copy()
     if stacked:
         # To space the cells, we need to map the combined repeats and cells indices to a linear range.
-        df, unique_indices = map_index(df, indices)
+        df, repeated_indices = map_index(df, indices)
         y_key = "index_linear"
+
     #     psth, bins = histograms.psth_by_index(
     #         df, bin_size=bin_size, index=index, window_end=max_time
     #     )
-    # else:
-    psth, bins = histograms.psth(df, bin_size=bin_size, start=0, end=max_time)
-    psth = psth / df[indices[0]].unique().shape[0] * (1 / bin_size)
 
-    # Plot the PSTH
+    # Get psths per category
+    if not single_psth or stacked:
+        if len(cmap) != len(repeated_indices):
+            cmap = cmap * len(repeated_indices)
+        df_split = pl.from_pandas(df).partition_by(indices[0])
+        for idx, df_cat in enumerate(df_split):
+            psth, bins = histograms.psth(
+                df_cat, bin_size=bin_size, start=0, end=max_time
+            )
+            psth = psth / df_cat[indices[0]].unique().shape[0] * (1 / bin_size)
+            c = cm.get_cmap(cmap[idx])
+            axs[0, 0].plot(bins[1:], psth, color=c(0.5), alpha=0.5)
 
-    axs[0, 0].plot(bins[1:], psth, color=line_colour, alpha=0.5)
+    else:
+        psth, bins = histograms.psth(df, bin_size=bin_size, start=0, end=max_time)
+        psth = psth / df[indices[0]].unique().shape[0] * (1 / bin_size)
+        # Plot the PSTH
+        axs[0, 0].plot(bins[1:], psth, color=line_colour, alpha=0.5)
 
     # Switch data format to categorical
     df["index"] = df[indices[0]].astype("category")
@@ -115,42 +135,24 @@ def whole_stimulus(
     else:
         plot_height = nr_repeats
 
-    if type(cmap) is str:
+    for index_id, c in zip(unique_indices, cmap):
+        df_temp = df.query(f"index == {index_id}")
         draw_artist(
-            df,
+            df_temp,
             fig,
             axs,
             how,
             y_key,
-            cmap,
+            c,
             norm,
             plot_height,
             plot_width,
             bin_size,
         )
 
-    else:
-        if len(cmap) != len(unique_indices):
-            cmap = cmap * len(unique_indices)
-
-        for index_id, c in zip(unique_indices, cmap):
-            df_temp = df.query(f"index == {index_id}")
-            draw_artist(
-                df_temp,
-                fig,
-                axs,
-                how,
-                y_key,
-                c,
-                norm,
-                plot_height,
-                plot_width,
-                bin_size,
-            )
-
     if stacked:
         axs[1, 0].yaxis.set_ticks(np.arange(1, len(df["index_linear"].unique()) + 1, 2))
-        axs[1, 0].set_yticklabels(unique_indices.to_numpy()[::2])
+        axs[1, 0].set_yticklabels(repeated_indices.to_numpy()[::2])
     axs[0, 0].set_ylabel("Spikes / s/ nr_cells")
     seperator = ", "
     axs[1, 0].set_ylabel(seperator.join(indices))

@@ -7,7 +7,8 @@ file formate.
 
 @author: Marvin
 """
-from polarspike import backbone
+
+from polarspike import backbone, stimulus_spikes
 import h5py
 import pandas as pd
 import numpy as np
@@ -342,3 +343,30 @@ def create_stim_df():
         }
     )
     return stimuli_df
+
+
+# def correct_last_trigger(df):
+#     sampling_freq = df["sampling_freq"].values[0]
+#     trigger_fr_relative = []
+#     for row in df.itertuples():
+#         stimulus_index = row.stimulus_index
+#         mean_trigger_times = stimulus_spikes.mean_trigger_times(
+#             df, [stimulus_index], time="frames"
+#         )
+#
+#
+#
+#         # Check if the last trigger matches the mean trigger times
+#         last_trigger_diff = row.trigger_int[-1]
+#         if last_trigger_diff > mean_trigger_times[-1]:
+#             # Correct the last trigger
+#             new_trigger_fr_relative = row.trigger_fr_relative.copy()
+#             new_trigger_fr_relative[-1] = (
+#                 new_trigger_fr_relative[-2] + mean_trigger_times[-1]
+#             )
+#             trigger_fr_relative.append(new_trigger_fr_relative)
+#         else:
+#             trigger_fr_relative.append(row.trigger_fr_relative)
+#
+#     df["trigger_fr_relative"] = trigger_fr_relative
+#     return df
