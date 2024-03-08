@@ -142,7 +142,7 @@ def whole_stimulus(
 
     for index_id, c in zip(unique_indices, cmap):
         df_temp = df.query(f"index == {index_id}")
-        draw_artist(
+        _draw_artist(
             df_temp,
             fig,
             axs,
@@ -281,7 +281,7 @@ def _whole_stimulus_beautified(fig, axs, repeated_indices, indices, how, df):
     return fig, axs
 
 
-def draw_artist(
+def _draw_artist(
     df, fig, axs, how, y_key, cmap, norm, plot_height, plot_width, bin_size
 ):
     """Draws the artist on the figure and returns the figure and axis.
@@ -328,27 +328,62 @@ def draw_artist(
     cbar.set_label(f"Nr of spikes, binsize={bin_size} s")
 
 
-def spikes_and_trace(
-    df, stacked=False, indices=None, width=1400, height=500, bin_size=0.05, theme="dark"
-):
-    assert (
-        len(df) < 10000
-    ), "The number of spikes is too high for this plot, use spiketrain_plots.whole_stimulus instead"
-    y_key = "repeat"
-    if indices is None:
-        indices = ["cell_index", "repeat"]
+def _preprocess_input(df, indices, cmap):
+    """
+    Preprocess the input DataFrame and colormap.
+
+    Parameters:
+    -----------
+    df : DataFrame
+        The input DataFrame containing the spike train data.
+    indices : List[str]
+        The column names in `df` to use as indices for partitioning the data.
+    cmap : str or List[str]
+        The colormap(s) to use for plotting.
+
+    Returns:
+    --------
+    Tuple[DataFrame, List[str]]
+        A tuple containing the preprocessed DataFrame and colormap.
+    """
     if type(df) is pl.DataFrame:
         df = df.to_pandas()
 
-    if stacked:
-        df, unique_indices = map_index(df, indices)
-        y_key = "index_linear"
+    if type(cmap) is str:
+        cmap = [cmap]
+
+    if indices is None:
+        indices = ["cell_index", "repeat"]
+
+    return df, cmap, indices
+
+
+def _set_bokeh_theme(theme):
     try:
         current_theme = curdoc().theme
         theme_name = next(k for k, v in built_in_themes.items() if v is current_theme)
         line_color = "white" if theme_name == "dark_minimal" else "black"
     except StopIteration:
         line_color = "white" if theme == "dark" else "black"
+    return line_color
+
+
+def spikes_and_trace(
+    df, stacked=False, indices=None, width=1400, height=500, bin_size=0.05, theme="dark"
+):
+    assert (
+        len(df) < 10000
+    ), "The number of spikes is too high for this plot, use spiketrain_plots.whole_stimulus instead"
+
+    df, _, indices = _preprocess_input(df, indices, "Greys")
+
+    if stacked:
+        df, unique_indices = map_index(df, indices)
+        y_key = "index_linear"
+    else:
+        y_key = "repeat"
+
+    line_color = _set_bokeh_theme(theme)
 
     psth, bins = histograms.psth(
         df, bin_size=bin_size, start=0, end=df["times_triggered"].max()
