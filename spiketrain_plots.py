@@ -246,7 +246,7 @@ def _whole_stimulus_beautified(fig, axs, repeated_indices, indices, how, df):
     """
     axs[1, 0].yaxis.set_ticks(np.arange(1, len(df["index_linear"].unique()) + 1, 2))
     axs[1, 0].set_yticklabels(repeated_indices.to_numpy()[::2])
-    axs[0, 0].set_ylabel("Spikes / s\n / nr_cells")
+    axs[0, 0].set_ylabel(f"Spikes / s\n / {indices[0]}")
     seperator = ", "
     axs[1, 0].set_ylabel(seperator.join(indices))
     axs[2, 0].set_xlabel("Time in s")
@@ -354,16 +354,6 @@ def _preprocess_input(df, indices, cmap):
     return df, cmap, indices
 
 
-def _set_bokeh_theme(theme):
-    try:
-        current_theme = curdoc().theme
-        theme_name = next(k for k, v in built_in_themes.items() if v is current_theme)
-        line_color = "white" if theme_name == "dark_minimal" else "black"
-    except StopIteration:
-        line_color = "white" if theme == "dark" else "black"
-    return line_color
-
-
 def spikes_and_trace(
     df,
     stacked=False,
@@ -371,8 +361,7 @@ def spikes_and_trace(
     width=1400,
     height=500,
     bin_size=0.05,
-    line_colour=None,
-    theme="dark",
+    line_colour="black",
     single_psth=False,
 ):
     """
@@ -422,13 +411,12 @@ def spikes_and_trace(
 
     else:
         y_key = indices[1]
-    if line_colour is None:
-        line_colour = _set_bokeh_theme(theme)
-        # Map colours to the indices
-    category_values = df[indices[0]].unique().astype(str).tolist()
 
-    line_colours = line_colours * len(category_values)
-    line_colours = line_colours[: len(category_values)]
+    # Map colours to the indices
+    category_values = df[indices[0]].unique().astype(str).tolist()
+    if not single_psth:
+        line_colours = line_colours * len(category_values)
+        line_colours = line_colours[: len(category_values)]
 
     psth_list, bins_list = _calculate_psth(
         df, bin_size, single_psth, indices, df["times_triggered"].max()
@@ -451,6 +439,10 @@ def spikes_and_trace(
         sizing_mode="fixed",
     )
 
+    if single_psth:
+        line_colours = line_colours * len(category_values)
+        line_colours = line_colours[: len(category_values)]
+
     for index_id, c in zip(category_values, line_colours):
         source = df.query(f"{indices[0]} == {index_id}")
         s2.dash(
@@ -462,6 +454,41 @@ def spikes_and_trace(
             alpha=1,
             angle=1.5708,
         )
+
+    grid = _bokeh_beautified(
+        df, y_key, s1, s2, width, indices, repeated_indices, stacked
+    )
+
+    return grid
+
+
+def _bokeh_beautified(df, y_key, s1, s2, width, indices, repeated_indices, stacked):
+    """
+    Beautify the Bokeh plot and arrange the subplots.
+
+    Parameters
+    ----------
+    df : DataFrame
+        The input DataFrame containing the spike train data.
+    y_key : str
+        The column name in `df` representing the time of each spike.
+    s1, s2 : Figure
+        The figure objects for the subplots.
+    width : int
+        The width of the plot.
+    indices : list
+        The column names to use as indices.
+    repeated_indices : Series
+        The repeated indices.
+    stacked : bool
+        Whether to stack the spikes vertically.
+
+    Returns
+    -------
+    grid : GridPlot
+        The generated plot as a grid of subplots.
+
+    """
     s2.xgrid.grid_line_color = None
     s2.ygrid.grid_line_color = None
 
@@ -484,12 +511,16 @@ def spikes_and_trace(
                 step=2,
             )  #
         }
+        # Make sure the last label is included if len(repeated_indices) is odd
+        if len(repeated_indices) % 2 != 0:
+            s2.yaxis.major_label_overrides[len(repeated_indices)] = str(
+                repeated_indices.to_numpy()[-1]
+            )
 
     # Combine plots vertically
     grid = gridplot(
         [[s1], [s2]], width=width, sizing_mode="scale_width", merge_tools=True
     )
-
     return grid
 
 
