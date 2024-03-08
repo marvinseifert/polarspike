@@ -15,6 +15,7 @@ from bokeh.layouts import gridplot
 from polarspike import backbone
 from bokeh.io import curdoc
 from bokeh.themes import built_in_themes
+from bokeh.transform import factor_mark, factor_cmap
 import matplotlib.cm as cm
 import warnings
 
@@ -369,30 +370,44 @@ def _set_bokeh_theme(theme):
 
 
 def spikes_and_trace(
-    df, stacked=False, indices=None, width=1400, height=500, bin_size=0.05, theme="dark"
+    df,
+    stacked=False,
+    indices=None,
+    width=1400,
+    height=500,
+    bin_size=0.05,
+    line_colour=None,
+    theme="dark",
 ):
     assert (
         len(df) < 10000
     ), "The number of spikes is too high for this plot, use spiketrain_plots.whole_stimulus instead"
 
-    df, _, indices = _preprocess_input(df, indices, "Greys")
+    df, line_colours, indices = _preprocess_input(df, indices, line_colour)
 
     if stacked:
-        df, unique_indices = map_index(df, indices)
+        df, repeated_indices = map_index(df, indices)
         y_key = "index_linear"
     else:
         y_key = "repeat"
-
-    line_color = _set_bokeh_theme(theme)
-
-    psth, bins = histograms.psth(
-        df, bin_size=bin_size, start=0, end=df["times_triggered"].max()
+    if line_colour is None:
+        line_colour = _set_bokeh_theme(theme)
+        # Map colours to the indices
+    category_values = df[indices[0]].unique().astype(str).tolist()
+    color_mapper = factor_cmap(
+        indices[0], palette=line_colours, factors=category_values
     )
-    psth = psth / df[indices[0]].unique().shape[0] * (1 / bin_size)
+
+    psth_list, bins_list = _calculate_psth(
+        df, bin_size, False, indices, df["times_triggered"].max()
+    )
+    bins_list = bins_list[0][:-1]
+    bins_list = [bins_list] * len(psth_list)
 
     # First subplot
     s1 = figure(width=width, height=int(0.2 * height), title=None, sizing_mode="fixed")
-    s1.line(bins[1:], psth, line_width=2, color=line_color)
+
+    s1.multi_line(bins_list, psth_list, line_width=2, color=line_colours)
     s1.xaxis.major_label_text_font_size = "0pt"
 
     # Second subplot
@@ -403,13 +418,14 @@ def spikes_and_trace(
         x_range=s1.x_range,
         sizing_mode="fixed",
     )
+
     source = ColumnDataSource(df)
     s2.dash(
         "times_triggered",
         y_key,
         size=10,
         source=source,
-        color=line_color,
+        color=color_mapper,
         alpha=1,
         angle=1.5708,
     )
@@ -429,7 +445,7 @@ def spikes_and_trace(
         s2.yaxis.major_label_overrides = {
             i: str(label)
             for i, label in backbone.enumerate2(
-                unique_indices.to_numpy()[1::2],
+                repeated_indices.to_numpy()[1::2],
                 start=1,
                 step=2,
             )  #
