@@ -15,11 +15,14 @@ from bokeh.layouts import gridplot
 from polarspike import backbone
 from bokeh.io import curdoc
 from bokeh.themes import built_in_themes
+from bokeh.transform import factor_mark, factor_cmap
 import matplotlib.cm as cm
 import warnings
 
 
 def whole_stimulus_plotly(df, stacked=False):
+    warnings.warn("Deprecated, use spikes_and_trace instead", DeprecationWarning)
+
     y_key = "repeat"
     if type(df) is pl.DataFrame:
         df = df.to_pandas()
@@ -58,32 +61,50 @@ def whole_stimulus(
     df,
     how="times_triggered",
     indices=None,
-    stacked=True,
     height=10,
     width=10,
     cmap="Greys",
     bin_size=0.05,
     norm="linear",
-    line_colour="white",
     single_psth=True,
 ):
-    warnings.filterwarnings("ignore", module="matplotlib\..*")
+    """
+    Parameters:
+    -----------
+    df : DataFrame
+        The input DataFrame containing the spike train data.
+    how : str, optional
+        The column name in `df` representing the time of each spike. Defaults to "times_triggered".
+    indices : List[str], optional
+        The column names in `df` to use as indices for partitioning the data. Defaults to ["cell_index", "repeat"].
+    height : int, optional
+        The height of the resulting plot. Defaults to 10.
+    width : int, optional
+        The width of the resulting plot. Defaults to 10.
+    cmap : str or List[str], optional
+        The colormap(s) to use for plotting. Defaults to "Greys".
+    bin_size : float, optional
+        The bin size for calculating the PSTH. (line and histogram) Defaults to 0.05.
+    norm : str, optional
+        The normalization method for the PSTH histogram. Defaults to "linear". Available options: see datashader documentation.
+    single_psth : bool, optional
+        Whether to calculate a single PSTH for all indices or separate PSTHs for each index. Defaults to True.
+        If False, the PSTH will be calculated individually for the first index in `indices`.
 
-    if indices is None:
-        indices = ["cell_index", "repeat"]
+    Returns:
+    --------
+    Tuple[Figure, Axes]
+        A tuple containing the figure and axis objects of the resulting plot.
+    """
+
+    # Standard values:
+    df, cmap, indices = _preprocess_input(df, indices, cmap)
+
     # Store some information about the data
-    unique_indices = np.unique(df[indices[0]])
-    nr_repeats = df[indices[1]].max() + 1
-    nr_unique = unique_indices.shape[0]  # In case of a single cell or a single color
-    max_time = np.max(df[how])
-    if type(cmap) is str:
-        cmap = [cmap]
 
-    if height is None:
-        if nr_unique > 3:
-            height = int(5 * nr_unique)
-        else:
-            height = 10
+    unique_indices = np.unique(df[indices[0]])
+    max_time = np.max(df[how])
+
     plot_width = int(max_time / bin_size)
 
     # Create a figure and axis to draw
@@ -97,47 +118,27 @@ def whole_stimulus(
     )
 
     # Map 'cell_index' to 'cell_index_linear' using the mapping
-    df = df.copy()
-    if stacked:
-        # To space the cells, we need to map the combined repeats and cells indices to a linear range.
-        df, repeated_indices = map_index(df, indices)
-        y_key = "index_linear"
+    # To space the cells, we need to map the combined repeats and cells indices to a linear range.
+    df, repeated_indices = map_index(df.copy(), indices)
+    y_key = "index_linear"
+    plot_height = len(df["index_linear"].unique())
 
-    #     psth, bins = histograms.psth_by_index(
-    #         df, bin_size=bin_size, index=index, window_end=max_time
-    #     )
+    # Extend the colour map according to first index
+    cmap = cmap * np.unique(np.stack(repeated_indices)[:, 0]).shape[0]
 
     # Get psths per category
-    if not single_psth or stacked:
-        if len(cmap) != len(repeated_indices):
-            cmap = cmap * len(repeated_indices)
-        df_split = pl.from_pandas(df).partition_by(indices[0])
-        for idx, df_cat in enumerate(df_split):
-            psth, bins = histograms.psth(
-                df_cat, bin_size=bin_size, start=0, end=max_time
-            )
-            psth = psth / df_cat[indices[0]].unique().shape[0] * (1 / bin_size)
-            c = cm.get_cmap(cmap[idx])
-            axs[0, 0].plot(bins[1:], psth, color=c(0.5), alpha=0.5)
+    psth_list, bins_list = _calculate_psth(df, bin_size, single_psth, indices, max_time)
 
-    else:
-        psth, bins = histograms.psth(df, bin_size=bin_size, start=0, end=max_time)
-        psth = psth / df[indices[0]].unique().shape[0] * (1 / bin_size)
-        # Plot the PSTH
-        axs[0, 0].plot(bins[1:], psth, color=line_colour, alpha=0.5)
+    # Plot the PSTH
+    _plot_psth(psth_list, bins_list, axs, cmap)
 
     # Switch data format to categorical
     df["index"] = df[indices[0]].astype("category")
     df["index"] = df["index"].cat.as_ordered()
 
-    if stacked:
-        plot_height = len(df["index_linear"].unique())
-    else:
-        plot_height = nr_repeats
-
     for index_id, c in zip(unique_indices, cmap):
         df_temp = df.query(f"index == {index_id}")
-        draw_artist(
+        _draw_artist(
             df_temp,
             fig,
             axs,
@@ -150,10 +151,102 @@ def whole_stimulus(
             bin_size,
         )
 
-    if stacked:
-        axs[1, 0].yaxis.set_ticks(np.arange(1, len(df["index_linear"].unique()) + 1, 2))
-        axs[1, 0].set_yticklabels(repeated_indices.to_numpy()[::2])
-    axs[0, 0].set_ylabel("Spikes / s/ nr_cells")
+    fig, ax = _whole_stimulus_beautified(fig, axs, repeated_indices, indices, how, df)
+
+    return fig, axs
+
+
+def _calculate_psth(df, bin_size, single_psth, indices, max_time):
+    """
+    Calculate the PSTH (Peri-Stimulus Time Histogram) for the given DataFrame.
+
+    Parameters:
+    -----------
+    df : DataFrame
+        The input DataFrame containing the spike train data.
+    bin_size : float
+        The bin size for calculating the PSTH.
+    single_psth : bool
+        Whether to calculate a single PSTH for all indices or separate PSTHs for each index.
+    indices : List[str]
+        The column names in `df` to use as indices for partitioning the data.
+    max_time : float
+        The maximum time value for the PSTH calculation.
+
+    Returns:
+    --------
+    Tuple[List[np.ndarray], List[np.ndarray]]
+        A tuple containing lists of the calculated PSTHs and corresponding bins.
+    """
+    if not single_psth:
+        df_split = pl.from_pandas(df).partition_by(indices[0])
+        psth_list = []
+        bins_list = []
+        for df_cat in df_split:
+            psth, bins = histograms.psth(
+                df_cat, bin_size=bin_size, start=0, end=max_time
+            )
+            psth = psth / df_cat[indices[0]].unique().shape[0] * (1 / bin_size)
+            psth_list.append(psth)
+            bins_list.append(bins)
+        return psth_list, bins_list
+    else:
+        psth, bins = histograms.psth(df, bin_size=bin_size, start=0, end=max_time)
+        psth = psth / df[indices[0]].unique().shape[0] * (1 / bin_size)
+        return [psth], [bins]
+
+
+def _plot_psth(psth_list, bins_list, axs, cmap):
+    """
+    Plot the PSTH (Peri-Stimulus Time Histogram) using the given PSTHs and bins.
+
+    Parameters:
+    -----------
+    psth_list : List[np.ndarray]
+        A list of arrays representing the PSTHs.
+    bins_list : List[np.ndarray]
+        A list of arrays representing the bins for the PSTHs.
+    axs : Any
+        The axis object for plotting.
+    cmap : str or List[str]
+        The colormap(s) to use for plotting.
+
+    Returns:
+    --------
+    None
+    """
+    for idx, (psth, bins) in enumerate(zip(psth_list, bins_list)):
+        c = cm.get_cmap(cmap[idx])
+        axs[0, 0].plot(bins[1:], psth, color=c(0.5), alpha=0.5)
+
+
+def _whole_stimulus_beautified(fig, axs, repeated_indices, indices, how, df):
+    """
+    Adjust the appearance of the whole stimulus plot.
+
+    Parameters:
+    -----------
+    fig : Figure
+        The figure object of the plot.
+    axs : Any
+        The axis object of the plot.
+    repeated_indices : Any
+        The repeated indices.
+    indices : Any
+        The indices.
+    how : Any
+        The 'how' parameter.
+    df : Any
+        The DataFrame.
+
+    Returns:
+    --------
+    Tuple[Figure, Any]
+        A tuple containing the adjusted figure and axis objects.
+    """
+    axs[1, 0].yaxis.set_ticks(np.arange(1, len(df["index_linear"].unique()) + 1, 2))
+    axs[1, 0].set_yticklabels(repeated_indices.to_numpy()[::2])
+    axs[0, 0].set_ylabel(f"Spikes / s\n / {indices[0]}")
     seperator = ", "
     axs[1, 0].set_ylabel(seperator.join(indices))
     axs[2, 0].set_xlabel("Time in s")
@@ -184,7 +277,7 @@ def whole_stimulus(
     return fig, axs
 
 
-def draw_artist(
+def _draw_artist(
     df, fig, axs, how, y_key, cmap, norm, plot_height, plot_width, bin_size
 ):
     """Draws the artist on the figure and returns the figure and axis.
@@ -231,43 +324,110 @@ def draw_artist(
     cbar.set_label(f"Nr of spikes, binsize={bin_size} s")
 
 
-def spikes_and_trace(
-    df, stacked=False, indices=None, width=1400, height=500, bin_size=0.05, theme="dark"
-):
-    assert (
-        len(df) < 10000
-    ), "The number of spikes is too high for this plot, use spiketrain_plots.whole_stimulus instead"
-    y_key = "repeat"
-    if indices is None:
-        indices = ["cell_index", "repeat"]
+def _preprocess_input(df, indices, cmap):
+    """
+    Preprocess the input DataFrame and colormap.
+
+    Parameters:
+    -----------
+    df : DataFrame
+        The input DataFrame containing the spike train data.
+    indices : List[str]
+        The column names in `df` to use as indices for partitioning the data.
+    cmap : str or List[str]
+        The colormap(s) to use for plotting.
+
+    Returns:
+    --------
+    Tuple[DataFrame, List[str]]
+        A tuple containing the preprocessed DataFrame and colormap.
+    """
     if type(df) is pl.DataFrame:
         df = df.to_pandas()
 
-    if stacked:
-        df, unique_indices = map_index(df, indices)
-        y_key = "index_linear"
-    try:
-        current_theme = curdoc().theme
-        theme_name = next(k for k, v in built_in_themes.items() if v is current_theme)
-        if theme_name == "dark_minimal":
-            line_color = "white"
-        else:
-            line_color = "black"
-    except StopIteration:
-        if theme == "dark":
-            line_color = "white"
-        else:
-            line_color = "black"
-    print(line_color)
+    if type(cmap) is str:
+        cmap = [cmap]
 
-    psth, bins = histograms.psth(
-        df, bin_size=bin_size, start=0, end=df["times_triggered"].max()
+    if indices is None:
+        indices = ["cell_index", "repeat"]
+
+    return df, cmap, indices
+
+
+def spikes_and_trace(
+    df,
+    stacked=False,
+    indices=None,
+    width=1400,
+    height=500,
+    bin_size=0.05,
+    line_colour="black",
+    single_psth=False,
+):
+    """
+    Generate a plot of spikes and psth trace.
+
+    Parameters:
+        df : DataFrame
+            The input DataFrame containing spike data.
+        stacked : bool, optional
+            Whether to stack the spikes vertically. Defaults to False.
+        indices : list, optional
+            The column names to use as indices. Defaults to None.
+        width : int, optional
+            The width of the plot. Defaults to 1400.
+        height : int, optional
+            The height of the plot. Defaults to 500.
+        bin_size : float, optional
+            The bin size for calculating the PSTH. Defaults to 0.05.
+        line_colour : str, optional
+            The color of the lines in the plot. Defaults to None.
+        theme : str, optional
+            The theme of the plot. Defaults to "dark". Available options: see bokeh documentation.
+        single_psth : bool, optional
+            Whether to plot a single PSTH. Defaults to False.
+
+    Returns:
+        grid : GridPlot
+            The generated plot as a grid of subplots.
+
+    Raises:
+        AssertionError
+            If the number of spikes is too high (over 10000) for this plot.
+
+    """
+
+    assert (
+        len(df) < 20000
+    ), "The number of spikes is too high for this plot, use spiketrain_plots.whole_stimulus instead"
+
+    df, line_colours, indices = _preprocess_input(df, indices, line_colour)
+    if len(line_colours) == 1:
+        single_psth = True
+
+    if stacked:
+        df, repeated_indices = map_index(df, indices)
+        y_key = "index_linear"
+
+    else:
+        y_key = indices[1]
+
+    # Map colours to the indices
+    category_values = df[indices[0]].unique().astype(str).tolist()
+    if not single_psth:
+        line_colours = line_colours * len(category_values)
+        line_colours = line_colours[: len(category_values)]
+
+    psth_list, bins_list = _calculate_psth(
+        df, bin_size, single_psth, indices, df["times_triggered"].max()
     )
-    psth = psth / df[indices[0]].unique().shape[0] * (1 / bin_size)
+    bins_list = bins_list[0][:-1]
+    bins_list = [bins_list] * len(psth_list)
 
     # First subplot
     s1 = figure(width=width, height=int(0.2 * height), title=None, sizing_mode="fixed")
-    s1.line(bins[1:], psth, line_width=2, color=line_color)
+
+    s1.multi_line(bins_list, psth_list, line_width=2, color=line_colours)
     s1.xaxis.major_label_text_font_size = "0pt"
 
     # Second subplot
@@ -278,16 +438,57 @@ def spikes_and_trace(
         x_range=s1.x_range,
         sizing_mode="fixed",
     )
-    source = ColumnDataSource(df)
-    s2.dash(
-        "times_triggered",
-        y_key,
-        size=10,
-        source=source,
-        color=line_color,
-        alpha=1,
-        angle=1.5708,
+
+    if single_psth:
+        line_colours = line_colours * len(category_values)
+        line_colours = line_colours[: len(category_values)]
+
+    for index_id, c in zip(category_values, line_colours):
+        source = df.query(f"{indices[0]} == {index_id}")
+        s2.dash(
+            "times_triggered",
+            y_key,
+            size=10,
+            source=source,
+            color=c,
+            alpha=1,
+            angle=1.5708,
+        )
+
+    grid = _bokeh_beautified(
+        df, y_key, s1, s2, width, indices, repeated_indices, stacked
     )
+
+    return grid
+
+
+def _bokeh_beautified(df, y_key, s1, s2, width, indices, repeated_indices, stacked):
+    """
+    Beautify the Bokeh plot and arrange the subplots.
+
+    Parameters
+    ----------
+    df : DataFrame
+        The input DataFrame containing the spike train data.
+    y_key : str
+        The column name in `df` representing the time of each spike.
+    s1, s2 : Figure
+        The figure objects for the subplots.
+    width : int
+        The width of the plot.
+    indices : list
+        The column names to use as indices.
+    repeated_indices : Series
+        The repeated indices.
+    stacked : bool
+        Whether to stack the spikes vertically.
+
+    Returns
+    -------
+    grid : GridPlot
+        The generated plot as a grid of subplots.
+
+    """
     s2.xgrid.grid_line_color = None
     s2.ygrid.grid_line_color = None
 
@@ -297,24 +498,29 @@ def spikes_and_trace(
         s2.yaxis.axis_label = seperator.join(indices)
     else:
         s2.yaxis.axis_label = "Repeat(s)"
-    s1.yaxis.axis_label = "Spikes / s / nr_cells"
+    s1.yaxis.axis_label = f"Spikes / s \n / {indices[0]}"
+    s1.yaxis.axis_label_text_font_size = "9pt"
 
     if stacked:
         s2.yaxis.ticker = np.arange(1, df[y_key].max() + 1, 2)
         s2.yaxis.major_label_overrides = {
             i: str(label)
             for i, label in backbone.enumerate2(
-                unique_indices.to_numpy()[1::2],
+                repeated_indices.to_numpy()[1::2],
                 start=1,
                 step=2,
             )  #
         }
+        # Make sure the last label is included if len(repeated_indices) is odd
+        if len(repeated_indices) % 2 != 0:
+            s2.yaxis.major_label_overrides[len(repeated_indices)] = str(
+                repeated_indices.to_numpy()[-1]
+            )
 
     # Combine plots vertically
     grid = gridplot(
         [[s1], [s2]], width=width, sizing_mode="scale_width", merge_tools=True
     )
-
     return grid
 
 
