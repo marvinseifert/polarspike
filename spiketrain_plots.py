@@ -98,12 +98,7 @@ def whole_stimulus(
     """
 
     # Standard values:
-    if indices is None:
-        indices = ["cell_index", "repeat"]
-
-    # Colour map
-    if type(cmap) is str:
-        cmap = [cmap]
+    df, cmap, indices = _preprocess_input(df, indices, cmap)
 
     # Store some information about the data
 
@@ -251,7 +246,7 @@ def _whole_stimulus_beautified(fig, axs, repeated_indices, indices, how, df):
     """
     axs[1, 0].yaxis.set_ticks(np.arange(1, len(df["index_linear"].unique()) + 1, 2))
     axs[1, 0].set_yticklabels(repeated_indices.to_numpy()[::2])
-    axs[0, 0].set_ylabel("Spikes / s/ nr_cells")
+    axs[0, 0].set_ylabel("Spikes / s\n / nr_cells")
     seperator = ", "
     axs[1, 0].set_ylabel(seperator.join(indices))
     axs[2, 0].set_xlabel("Time in s")
@@ -380,8 +375,41 @@ def spikes_and_trace(
     theme="dark",
     single_psth=False,
 ):
+    """
+    Generate a plot of spikes and psth trace.
+
+    Parameters:
+        df : DataFrame
+            The input DataFrame containing spike data.
+        stacked : bool, optional
+            Whether to stack the spikes vertically. Defaults to False.
+        indices : list, optional
+            The column names to use as indices. Defaults to None.
+        width : int, optional
+            The width of the plot. Defaults to 1400.
+        height : int, optional
+            The height of the plot. Defaults to 500.
+        bin_size : float, optional
+            The bin size for calculating the PSTH. Defaults to 0.05.
+        line_colour : str, optional
+            The color of the lines in the plot. Defaults to None.
+        theme : str, optional
+            The theme of the plot. Defaults to "dark". Available options: see bokeh documentation.
+        single_psth : bool, optional
+            Whether to plot a single PSTH. Defaults to False.
+
+    Returns:
+        grid : GridPlot
+            The generated plot as a grid of subplots.
+
+    Raises:
+        AssertionError
+            If the number of spikes is too high (over 10000) for this plot.
+
+    """
+
     assert (
-        len(df) < 10000
+        len(df) < 20000
     ), "The number of spikes is too high for this plot, use spiketrain_plots.whole_stimulus instead"
 
     df, line_colours, indices = _preprocess_input(df, indices, line_colour)
@@ -393,7 +421,7 @@ def spikes_and_trace(
         y_key = "index_linear"
 
     else:
-        y_key = "repeat"
+        y_key = indices[1]
     if line_colour is None:
         line_colour = _set_bokeh_theme(theme)
         # Map colours to the indices
@@ -443,7 +471,8 @@ def spikes_and_trace(
         s2.yaxis.axis_label = seperator.join(indices)
     else:
         s2.yaxis.axis_label = "Repeat(s)"
-    s1.yaxis.axis_label = "Spikes / s / nr_cells"
+    s1.yaxis.axis_label = f"Spikes / s \n / {indices[0]}"
+    s1.yaxis.axis_label_text_font_size = "9pt"
 
     if stacked:
         s2.yaxis.ticker = np.arange(1, df[y_key].max() + 1, 2)
