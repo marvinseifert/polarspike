@@ -378,28 +378,32 @@ def spikes_and_trace(
     bin_size=0.05,
     line_colour=None,
     theme="dark",
+    single_psth=False,
 ):
     assert (
         len(df) < 10000
     ), "The number of spikes is too high for this plot, use spiketrain_plots.whole_stimulus instead"
 
     df, line_colours, indices = _preprocess_input(df, indices, line_colour)
+    if len(line_colours) == 1:
+        single_psth = True
 
     if stacked:
         df, repeated_indices = map_index(df, indices)
         y_key = "index_linear"
+
     else:
         y_key = "repeat"
     if line_colour is None:
         line_colour = _set_bokeh_theme(theme)
         # Map colours to the indices
     category_values = df[indices[0]].unique().astype(str).tolist()
-    color_mapper = factor_cmap(
-        indices[0], palette=line_colours, factors=category_values
-    )
+
+    line_colours = line_colours * len(category_values)
+    line_colours = line_colours[: len(category_values)]
 
     psth_list, bins_list = _calculate_psth(
-        df, bin_size, False, indices, df["times_triggered"].max()
+        df, bin_size, single_psth, indices, df["times_triggered"].max()
     )
     bins_list = bins_list[0][:-1]
     bins_list = [bins_list] * len(psth_list)
@@ -419,16 +423,17 @@ def spikes_and_trace(
         sizing_mode="fixed",
     )
 
-    source = ColumnDataSource(df)
-    s2.dash(
-        "times_triggered",
-        y_key,
-        size=10,
-        source=source,
-        color=color_mapper,
-        alpha=1,
-        angle=1.5708,
-    )
+    for index_id, c in zip(category_values, line_colours):
+        source = df.query(f"{indices[0]} == {index_id}")
+        s2.dash(
+            "times_triggered",
+            y_key,
+            size=10,
+            source=source,
+            color=c,
+            alpha=1,
+            angle=1.5708,
+        )
     s2.xgrid.grid_line_color = None
     s2.ygrid.grid_line_color = None
 
