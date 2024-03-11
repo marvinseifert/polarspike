@@ -651,8 +651,9 @@ class PlotApp(param.Parameterized):
 
 class Recording_explorer:
     def __init__(self, analysis_path):
-        pn.config.theme = "dark"
-        pn.config.design = Bootstrap
+        # pn.config.theme = "dark"
+        # pn.config.design = Bootstrap
+        self.recording = None
         self.analysis_path = analysis_path
         self.nr_added_recordings = 0
         self.recordings_dataframe = pd.DataFrame(
@@ -716,9 +717,7 @@ class Recording_explorer:
             "datashader_plot": {
                 "func": partial(
                     spiketrain_plots.whole_stimulus,
-                    stacked=True,
-                    cmap="gist_gray",
-                    line_colour="white",
+                    cmap=["Greys", "Reds"],
                     height=8,
                     width=15,
                 ),
@@ -729,7 +728,7 @@ class Recording_explorer:
             "quality_tests": {"type": "quality_tests"},
             "stats_plots": {"type": "plotly_stats"},
         }
-        self.action_items = [item for item in self.action_dict.keys()]
+        self.action_items = list(self.action_dict.keys())
         self.action_menu = pn.widgets.MenuButton(
             name="Actions", items=self.action_items, button_type="primary", width=200
         )
@@ -766,6 +765,9 @@ class Recording_explorer:
             name="Select bin size", value=0.05, step=0.01, start=0, end=10, width=100
         )
 
+        self.single_psth_input = pn.widgets.Checkbox(name="Single PSTH")
+        self.single_psth_input.value = True
+
         # Stimulus trace context menu
         self.stimulus_trace_ct = pn.Column(
             pn.Column(
@@ -777,7 +779,7 @@ class Recording_explorer:
                 ),
                 width=150,
             ),
-            self.bin_size_input,
+            pn.Row(self.bin_size_input, self.single_psth_input),
             self.colour_checkbox,
             self.colour_selector,
             self.selected_color,
@@ -869,7 +871,7 @@ class Recording_explorer:
                 "Single Recording",
                 pn.Column(
                     pn.Column(
-                        (self.single_recording_menu),
+                        self.single_recording_menu,
                         pn.Column(
                             pn.Tabs(
                                 (
@@ -1051,9 +1053,7 @@ class Recording_explorer:
         self.nr_cells_fig.object = fig
 
     def fill_dataframe_menu(self):
-        self.dataframe_menu.items = [
-            item for item in self.recordings_object.dataframes.keys()
-        ]
+        self.dataframe_menu.items = list(self.recordings_object.dataframes.keys())
 
     def fill_dataframe(self, *args, **kwargs):
         df_name = self.dataframe_menu.clicked
@@ -1228,6 +1228,7 @@ class Recording_explorer:
                 df=spikes,
                 indices=self.stimulus_trace_ct.objects[0][0].value,
                 bin_size=self.bin_size_input.value,
+                single_psth=self.single_psth_input.value,
             )
 
             self.output.clear()  #
@@ -1269,10 +1270,9 @@ class Recording_explorer:
                 )
 
     def serve(self):
-        app = pn.Row(
+        return pn.Row(
             pn.Column(self.sidebar, sizing_mode="fixed", height=300, width=300),
             pn.Spacer(width=20),  # Adjust width for desired spacing
             pn.Column(self.main, sizing_mode="fixed", height=1000, width=1000),
             sizing_mode="stretch_width",
         )
-        return app

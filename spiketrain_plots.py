@@ -137,19 +137,22 @@ def whole_stimulus(
     df["index"] = df["index"].cat.as_ordered()
 
     for index_id, c in zip(unique_indices, cmap):
-        df_temp = df.query(f"index == {index_id}")
-        _draw_artist(
-            df_temp,
-            fig,
-            axs,
-            how,
-            y_key,
-            c,
-            norm,
-            plot_height,
-            plot_width,
-            bin_size,
-        )
+        try:
+            df_temp = df.query(f"index == {index_id}")
+            _draw_artist(
+                df_temp,
+                fig,
+                axs,
+                how,
+                y_key,
+                c,
+                norm,
+                plot_height,
+                plot_width,
+                bin_size,
+            )
+        except pd.errors.UndefinedVariableError:
+            continue
 
     fig, ax = _whole_stimulus_beautified(fig, axs, repeated_indices, indices, how, df)
 
