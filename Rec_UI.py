@@ -33,6 +33,7 @@ from panel.theme import Bootstrap, Material, Native
 from bokeh.io import export_png
 import plotly.express as px
 import polars as pl
+from bokeh.plotting import show, curdoc
 
 
 def stimulus_df():
@@ -147,10 +148,25 @@ class Explorer:
             name="Indeterminate Progress", active=False, width=200
         )
 
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=[0, 1], y=[0, 1]))
-        fig.update_layout(width=1200, height=700)
-        self.single_cell_raster = pn.pane.Plotly(fig)
+        self.dummy_spiketrain = pd.DataFrame(
+            columns=[
+                "cell_index",
+                "times_triggered",
+                "trigger",
+                "repeat",
+                "stimulus_index",
+            ],
+            data=np.zeros((1, 5)),
+        )
+        self.single_cell_raster = pn.panel(
+            spiketrain_plots.spikes_and_trace(
+                self.dummy_spiketrain,
+                width=910,
+                stacked=True,
+                bin_size=0.05,
+                indices=["cell_index", "repeat"],
+            )
+        )
 
         self.single_stimulus_df = pn.widgets.Tabulator(
             pd.DataFrame(),
@@ -159,6 +175,7 @@ class Explorer:
             widths=150,
             width=900,
             height=200,
+            selectable="checkbox",
         )
         self.single_stimulus_df.on_click(self.update_raster)
 
@@ -242,11 +259,15 @@ class Explorer:
                             self.calculate_qi_button,
                             width=1000,
                         ),
-                        pn.Row(self.single_cell_raster, width=1000),
+                        pn.Row(self.single_cell_raster, width=800),
+                        width=800,
                     ),
+                    width=800,
                 ),
             ),
             height=800,
+            width=1000,
+            dynamic=True,
         )
 
     def run(self):
@@ -413,13 +434,25 @@ class Explorer:
 
     def update_raster(self, event):
         indices = event.row
-        cell_indices = [self.single_stimulus_df.value.loc[indices]["cell_index"]]
+
+        if len(self.single_stimulus_df.selection) > 1:
+            cell_indices = self.single_stimulus_df.value.loc[
+                self.single_stimulus_df.selection
+            ]["cell_index"].tolist()
+        else:
+            cell_indices = [self.single_stimulus_df.value.loc[indices]["cell_index"]]
 
         plot_df = self.overview_df.get_spikes_triggered(
             [[self.stimulus_select.value]], [cell_indices], time="seconds"
         )
         if len(plot_df) != 0:
-            raster_plot = spiketrain_plots.whole_stimulus_plotly(plot_df)
+            raster_plot = spiketrain_plots.spikes_and_trace(
+                plot_df,
+                stacked=True,
+                indices=["cell_index", "repeat"],
+                line_colour=["black", "red"],
+                width=910,
+            )
             # Add stimulus:
             raster_plot = self.ct.add_stimulus_to_plot(
                 raster_plot,
@@ -430,9 +463,14 @@ class Explorer:
             self.single_cell_raster.object = raster_plot
 
         else:
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=[0, 1], y=[0, 1]))
-            self.single_cell_raster.object = fig
+            self.single_cell_raster = spiketrain_plots.spikes_and_trace(
+                self.dummy_spiketrain,
+                width=910,
+                stacked=True,
+                bin_size=0.05,
+                indices=["cell_index", "repeat"],
+            )
+        self.single_cell_raster.param.trigger("object")
 
     def save_to_overview(self, event):
         if self.overview_df is not None:
@@ -449,9 +487,9 @@ class Explorer:
         self.selected_color.object = self.ct.pickstimcolour(event.new)
 
     def calculate_qi(self, event):
-        batch_size = 500
         self.status.active = True
         cell_ids = self.single_stimulus_df.value["cell_index"].unique().tolist()
+        batch_size = min(len(cell_ids), 500)
         spikes_df = self.overview_df.get_spikes_triggered(
             [[self.stimulus_select.value]], [cell_ids], time="seconds", pandas=False
         )
@@ -521,7 +559,6 @@ class PlotApp(param.Parameterized):
             width=1200,
             height=500,
             title="Stimulus selection",
-            output_backend="webgl",
         )
 
         # Add glyphs to the plot
