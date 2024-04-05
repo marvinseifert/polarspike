@@ -427,7 +427,7 @@ def spikes_and_trace(
     # First subplot
     s1 = figure(width=width, height=int(0.2 * height), title=None, sizing_mode="fixed")
 
-    s1.multi_line(bins_list, psth_list, line_width=2, color=line_colours)
+    s1.multi_line(bins_list, psth_list, line_width=2, color=line_colours, alpha=0.5)
     s1.xaxis.major_label_text_font_size = "0pt"
 
     # Second subplot

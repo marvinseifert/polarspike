@@ -708,21 +708,21 @@ class Recording_explorer:
                 "func": partial(
                     spiketrain_plots.spikes_and_trace,
                     stacked=True,
+                    line_colour=["white", "red"],
+                    single_psth=False,
                     height=800,
                     width=1500,
                 ),
-                "type": "stimulus_trace",
+                "type": "raster_plot",
             },
             "datashader_plot": {
                 "func": partial(
                     spiketrain_plots.whole_stimulus,
-                    stacked=True,
                     cmap="gist_gray",
-                    line_colour="white",
                     height=8,
                     width=15,
                 ),
-                "type": "stimulus_trace",
+                "type": "datashader_plot",
             },
             "waveforms": {"type": "waveforms"},
             "dataframe": {"type": "dataframe"},
@@ -1178,7 +1178,7 @@ class Recording_explorer:
     def action_selected(self, event):
         action = self.action_menu.clicked
         type = self.action_dict[action]["type"]
-        if type == "stimulus_trace":
+        if type == "raster_plot" or type == "datashader_plot":
             self.action_column.clear()
             self.action_column.append(self.stimulus_trace_ct)
         if type == "dataframe":
@@ -1223,7 +1223,7 @@ class Recording_explorer:
         if len(spikes) == 0:
             return
 
-        if action_type == "stimulus_trace":
+        if action_type == "datashader_plot":
             fig = func(
                 df=spikes,
                 indices=self.stimulus_trace_ct.objects[0][0].value,
@@ -1248,6 +1248,17 @@ class Recording_explorer:
                 ]
             elif type(fig) == go.Figure:
                 self.output.objects = [fig]
+
+        elif action_type == "raster_plot":
+            fig = func(spikes)
+            fig = self.ct.add_stimulus_to_plot(
+                fig,
+                stimulus_spikes.mean_trigger_times(
+                    self.recordings_object.dataframes["stimulus_df"], stimulus_indices
+                ),
+            )
+            self.output.clear()
+            self.output.objects = [fig]
 
     def save_figure(self, event):
         if self.output.objects:
