@@ -1250,7 +1250,11 @@ class Recording_explorer:
                 self.output.objects = [fig]
 
         elif action_type == "raster_plot":
-            fig = func(spikes)
+            fig = func(
+                spikes,
+                indices=self.stimulus_trace_ct.objects[0][0].value,
+                bin_size=self.bin_size_input.value,
+            )
             fig = self.ct.add_stimulus_to_plot(
                 fig,
                 stimulus_spikes.mean_trigger_times(

@@ -104,6 +104,8 @@ def whole_stimulus(
 
     unique_indices = np.unique(df[indices[0]])
     max_time = np.max(df[how])
+    # X range
+    x_range = (0, max_time)
 
     plot_width = int(max_time / bin_size)
 
@@ -119,9 +121,9 @@ def whole_stimulus(
 
     # Map 'cell_index' to 'cell_index_linear' using the mapping
     # To space the cells, we need to map the combined repeats and cells indices to a linear range.
-    df, repeated_indices = map_index(df.copy(), indices)
+    df, repeated_indices, rows_per_index = map_index(df.copy(), indices)
     y_key = "index_linear"
-    plot_height = len(df["index_linear"].unique())
+    plot_height = len(repeated_indices)
 
     # Extend the colour map according to first index
     cmap = cmap * np.unique(np.stack(repeated_indices)[:, 0]).shape[0]
@@ -132,12 +134,19 @@ def whole_stimulus(
     # Plot the PSTH
     _plot_psth(psth_list, bins_list, axs, cmap)
 
-    # Switch data format to categorical
+    y_ranges = [
+        (i, j)
+        for i, j in zip(
+            np.arange(0, plot_height, rows_per_index),
+            np.arange(rows_per_index - 1, plot_height, rows_per_index),
+        )
+    ]
     df["index"] = df[indices[0]].astype("category")
     df["index"] = df["index"].cat.as_ordered()
 
-    for index_id, c in zip(unique_indices, cmap):
+    for index_id, c, y_r in zip(unique_indices, cmap, y_ranges):
         df_temp = df.query(f"index == {index_id}")
+
         _draw_artist(
             df_temp,
             fig,
@@ -149,6 +158,7 @@ def whole_stimulus(
             plot_height,
             plot_width,
             bin_size,
+            (x_range, y_r),
         )
 
     fig, ax = _whole_stimulus_beautified(fig, axs, repeated_indices, indices, how, df)
@@ -244,8 +254,9 @@ def _whole_stimulus_beautified(fig, axs, repeated_indices, indices, how, df):
     Tuple[Figure, Any]
         A tuple containing the adjusted figure and axis objects.
     """
-    axs[1, 0].yaxis.set_ticks(np.arange(1, len(df["index_linear"].unique()) + 1, 2))
-    axs[1, 0].set_yticklabels(repeated_indices.to_numpy()[::2])
+    new_labels = np.arange(0, len(df["index_linear"].unique()), 2)
+    axs[1, 0].yaxis.set_ticks(new_labels)
+    axs[1, 0].set_yticklabels(repeated_indices.to_numpy()[new_labels])
     axs[0, 0].set_ylabel(f"Spikes / s\n / {indices[0]}")
     seperator = ", "
     axs[1, 0].set_ylabel(seperator.join(indices))
@@ -273,12 +284,13 @@ def _whole_stimulus_beautified(fig, axs, repeated_indices, indices, how, df):
     axs[2, 0].tick_params(axis="y", which="both", length=0)
     axs[2, 0].set_yticks([])
     axs[1, 0].set_xlim(0, np.max(df[how]))
+    axs[1, 0].set_ylim(0, len(df["index_linear"].unique()))
     fig.subplots_adjust(left=0.2)
     return fig, axs
 
 
 def _draw_artist(
-    df, fig, axs, how, y_key, cmap, norm, plot_height, plot_width, bin_size
+    df, fig, axs, how, y_key, cmap, norm, plot_height, plot_width, bin_size, ranges
 ):
     """Draws the artist on the figure and returns the figure and axis.
     Parameters
@@ -318,6 +330,8 @@ def _draw_artist(
         norm=norm,
         ax=axs[1, 0],
         aspect="auto",
+        x_range=ranges[0],
+        y_range=ranges[1],
     )
     cbar = fig.colorbar(artist, cax=axs[1, 1], shrink=0.1)
 
@@ -356,8 +370,7 @@ def _preprocess_input(df, indices, cmap):
 
 def spikes_and_trace(
     df,
-    stacked=False,
-    indices=None,
+    indices,
     width=1400,
     height=500,
     bin_size=0.05,
@@ -370,8 +383,6 @@ def spikes_and_trace(
     Parameters:
         df : DataFrame
             The input DataFrame containing spike data.
-        stacked : bool, optional
-            Whether to stack the spikes vertically. Defaults to False.
         indices : list, optional
             The column names to use as indices. Defaults to None.
         width : int, optional
@@ -382,8 +393,6 @@ def spikes_and_trace(
             The bin size for calculating the PSTH. Defaults to 0.05.
         line_colour : str, optional
             The color of the lines in the plot. Defaults to None.
-        theme : str, optional
-            The theme of the plot. Defaults to "dark". Available options: see bokeh documentation.
         single_psth : bool, optional
             Whether to plot a single PSTH. Defaults to False.
 
@@ -404,13 +413,12 @@ def spikes_and_trace(
     df, line_colours, indices = _preprocess_input(df, indices, line_colour)
     if len(line_colours) == 1:
         single_psth = True
-
-    if stacked:
-        df, repeated_indices = map_index(df, indices)
+    if len(indices) > 1:
+        df, repeated_indices, rows_per_index = map_index(df, indices)
         y_key = "index_linear"
-
     else:
-        y_key = indices[1]
+        y_key = indices[0]
+        repeated_indices = pd.Index(np.unique(df[y_key]))
 
     # Map colours to the indices
     category_values = df[indices[0]].unique().astype(str).tolist()
@@ -455,14 +463,12 @@ def spikes_and_trace(
             angle=1.5708,
         )
 
-    grid = _bokeh_beautified(
-        df, y_key, s1, s2, width, indices, repeated_indices, stacked
-    )
+    grid = _bokeh_beautified(df, y_key, s1, s2, width, indices, repeated_indices)
 
     return grid
 
 
-def _bokeh_beautified(df, y_key, s1, s2, width, indices, repeated_indices, stacked):
+def _bokeh_beautified(df, y_key, s1, s2, width, indices, repeated_indices):
     """
     Beautify the Bokeh plot and arrange the subplots.
 
@@ -480,8 +486,7 @@ def _bokeh_beautified(df, y_key, s1, s2, width, indices, repeated_indices, stack
         The column names to use as indices.
     repeated_indices : Series
         The repeated indices.
-    stacked : bool
-        Whether to stack the spikes vertically.
+
 
     Returns
     -------
@@ -493,29 +498,38 @@ def _bokeh_beautified(df, y_key, s1, s2, width, indices, repeated_indices, stack
     s2.ygrid.grid_line_color = None
 
     s2.xaxis.axis_label = "Time (s)"
-    if stacked:
-        seperator = ", "
-        s2.yaxis.axis_label = seperator.join(indices)
-    else:
-        s2.yaxis.axis_label = "Repeat(s)"
+
+    seperator = ", "
+    s2.yaxis.axis_label = seperator.join(indices)
+
     s1.yaxis.axis_label = f"Spikes / s \n / {indices[0]}"
     s1.yaxis.axis_label_text_font_size = "9pt"
-
-    if stacked:
-        s2.yaxis.ticker = np.arange(1, df[y_key].max() + 1, 2)
+    if len(repeated_indices) >= 10:
+        s2.yaxis.ticker = np.arange(0, df[y_key].max() + 1, 2)
         s2.yaxis.major_label_overrides = {
             i: str(label)
             for i, label in backbone.enumerate2(
                 repeated_indices.to_numpy()[1::2],
-                start=1,
+                start=0,
                 step=2,
             )  #
         }
-        # Make sure the last label is included if len(repeated_indices) is odd
-        if len(repeated_indices) % 2 != 0:
-            s2.yaxis.major_label_overrides[len(repeated_indices)] = str(
-                repeated_indices.to_numpy()[-1]
-            )
+    else:
+        s2.yaxis.ticker = np.arange(0, df[y_key].max() + 1, 1)
+        s2.yaxis.major_label_overrides = {
+            i: str(label)
+            for i, label in backbone.enumerate2(
+                repeated_indices.to_numpy(),
+                start=0,
+                step=1,
+            )  #
+        }
+
+    # Make sure the last label is included if len(repeated_indices) is odd
+    if len(repeated_indices) % 2 != 0:
+        s2.yaxis.major_label_overrides[len(repeated_indices)] = str(
+            repeated_indices.to_numpy()[-1]
+        )
 
     # Combine plots vertically
     grid = gridplot(
@@ -547,11 +561,23 @@ def map_index(df, index_columns):
     df = df.sort_values(index_columns)
     multi_index = df[index_columns].apply(tuple, axis=1)
 
+    # Create an ideal index as expected from the index_columns
+    # get unique entries per column
+    unique_indices = df[index_columns].apply(pd.unique)
+    rows_per_index = len(unique_indices[index_columns[-1]])
+
+    ideal_index = pd.MultiIndex.from_product(np.asarray(unique_indices).T)
     # Get unique indices and create a mapping
-    unique_indices = pd.Series(multi_index.unique())
-    mapping = pd.Series(index=unique_indices, data=range(len(unique_indices)))
+    # unique_indices = pd.Series(multi_index.unique())
+    mapping = pd.Series(index=ideal_index, data=range(len(ideal_index)))
+
+    dummy_df = pd.DataFrame(
+        index=ideal_index, data=ideal_index.map(mapping), columns=["index_linear"]
+    )
+    # Extract the actual index_linear
+    index_linear = dummy_df.loc[multi_index].values.flatten()
 
     # Map the multi-dimensional index to a linear index
-    df["index_linear"] = multi_index.map(mapping) + 1
+    df["index_linear"] = index_linear
 
-    return df, unique_indices
+    return df, ideal_index, rows_per_index

@@ -177,6 +177,16 @@ class Recording:
         else:
             return df
 
+    def spike_loading_assertions(self, stimuli, cells):
+        if len(stimuli[0]) > 1:
+            assert (
+                len(stimuli[0]) == len(cells[0]) or len(cells[0]) == 1
+            ), "If a list with multiple stimuli is provided the len of the cells list must be 1 or equal to len of stimuli."
+        if len(cells) > 1:
+            assert len(cells) == len(
+                stimuli
+            ), "If multiple cells are provided, the same amount of stimuli must be provided as well."
+
     def get_triggered(  # Function works on single recording only
         self,
         cells,
@@ -623,7 +633,7 @@ class Recording:
             pickle.dump(self, f)
 
     @classmethod
-    def load(cls, filename):
+    def load(cls, filename: str) -> "Recording":
         """Load a saved object from a file.
         Parameters
         ----------
