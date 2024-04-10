@@ -254,7 +254,7 @@ def _whole_stimulus_beautified(fig, axs, repeated_indices, indices, how, df):
     Tuple[Figure, Any]
         A tuple containing the adjusted figure and axis objects.
     """
-    new_labels = np.arange(0, len(df["index_linear"].unique()), 2)
+    new_labels = np.arange(0, len(repeated_indices), 2)
     axs[1, 0].yaxis.set_ticks(new_labels)
     axs[1, 0].set_yticklabels(repeated_indices.to_numpy()[new_labels])
     axs[0, 0].set_ylabel(f"Spikes / s\n / {indices[0]}")
@@ -284,7 +284,7 @@ def _whole_stimulus_beautified(fig, axs, repeated_indices, indices, how, df):
     axs[2, 0].tick_params(axis="y", which="both", length=0)
     axs[2, 0].set_yticks([])
     axs[1, 0].set_xlim(0, np.max(df[how]))
-    axs[1, 0].set_ylim(0, len(df["index_linear"].unique()))
+    axs[1, 0].set_ylim(0, len(repeated_indices))
     fig.subplots_adjust(left=0.2)
     return fig, axs
 
@@ -419,6 +419,7 @@ def spikes_and_trace(
     else:
         y_key = indices[0]
         repeated_indices = pd.Index(np.unique(df[y_key]))
+    plot_height = len(repeated_indices)
 
     # Map colours to the indices
     category_values = df[indices[0]].unique().astype(str).tolist()
@@ -444,6 +445,7 @@ def spikes_and_trace(
         height=int(0.8 * height),
         title=None,
         x_range=s1.x_range,
+        y_range=(-0.5, plot_height),
         sizing_mode="fixed",
     )
 
@@ -505,7 +507,7 @@ def _bokeh_beautified(df, y_key, s1, s2, width, indices, repeated_indices):
     s1.yaxis.axis_label = f"Spikes / s \n / {indices[0]}"
     s1.yaxis.axis_label_text_font_size = "9pt"
     if len(repeated_indices) >= 10:
-        s2.yaxis.ticker = np.arange(0, df[y_key].max() + 1, 2)
+        s2.yaxis.ticker = np.arange(0, len(repeated_indices), 2)
         s2.yaxis.major_label_overrides = {
             i: str(label)
             for i, label in backbone.enumerate2(
@@ -515,7 +517,7 @@ def _bokeh_beautified(df, y_key, s1, s2, width, indices, repeated_indices):
             )  #
         }
     else:
-        s2.yaxis.ticker = np.arange(0, df[y_key].max() + 1, 1)
+        s2.yaxis.ticker = np.arange(0, len(repeated_indices), 1)
         s2.yaxis.major_label_overrides = {
             i: str(label)
             for i, label in backbone.enumerate2(
