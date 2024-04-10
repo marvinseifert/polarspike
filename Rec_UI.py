@@ -162,7 +162,6 @@ class Explorer:
             spiketrain_plots.spikes_and_trace(
                 self.dummy_spiketrain,
                 width=910,
-                stacked=True,
                 bin_size=0.05,
                 indices=["cell_index", "repeat"],
             )
@@ -448,7 +447,6 @@ class Explorer:
         if len(plot_df) != 0:
             raster_plot = spiketrain_plots.spikes_and_trace(
                 plot_df,
-                stacked=True,
                 indices=["cell_index", "repeat"],
                 line_colour=["black", "red"],
                 width=910,
@@ -466,7 +464,6 @@ class Explorer:
             self.single_cell_raster = spiketrain_plots.spikes_and_trace(
                 self.dummy_spiketrain,
                 width=910,
-                stacked=True,
                 bin_size=0.05,
                 indices=["cell_index", "repeat"],
             )
@@ -707,7 +704,6 @@ class Recording_explorer:
             "raster_plot": {
                 "func": partial(
                     spiketrain_plots.spikes_and_trace,
-                    stacked=True,
                     line_colour=["white", "red"],
                     single_psth=False,
                     height=800,
