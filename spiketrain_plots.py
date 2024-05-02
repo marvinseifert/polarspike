@@ -18,6 +18,7 @@ from bokeh.themes import built_in_themes
 from bokeh.transform import factor_mark, factor_cmap
 import matplotlib.cm as cm
 import warnings
+from scipy.stats import gaussian_kde
 
 
 def whole_stimulus_plotly(df, stacked=False):
@@ -368,6 +369,82 @@ def _preprocess_input(df, indices, cmap):
     return df, cmap, indices
 
 
+def bokeh_psth_plot(df, single_trace, indices, line_colours, width, height, bin_size):
+    psth_list, bins_list = _calculate_psth(
+        df, bin_size, single_trace, indices, df["times_triggered"].max()
+    )
+    bins_list = bins_list[0][:-1]
+    bins_list = [bins_list] * len(psth_list)
+    s1 = figure(width=width, height=int(0.2 * height), title=None, sizing_mode="fixed")
+
+    s1.multi_line(bins_list, psth_list, line_width=2, color=line_colours, alpha=0.5)
+    s1.xaxis.major_label_text_font_size = "0pt"
+    return s1
+
+
+def bokeh_kde_plot(
+    df,
+    single_trace,
+    indices,
+    line_colours,
+    width,
+    height,
+    nr_samples,
+    max_time,
+    **kwargs,
+):
+    categories = df["index"].unique()
+    s1 = figure(width=width, height=int(0.2 * height), title=None, sizing_mode="fixed")
+    kdes = []
+    for category in categories:
+        kde_array = df.loc[df["index"] == category, "times_triggered"].values
+        kde = gaussian_kde(kde_array)
+        x = np.linspace(-1, max_time, nr_samples)
+        kde_list = np.zeros(100)
+        for i, x_i in enumerate(x):
+            kde_list[i] = kde(x_i)[0]
+        kdes.append(kde_list / np.max(kde_list))
+    s1.multi_line([x] * len(kdes), kdes, line_width=2, color=line_colours, alpha=0.5)
+    s1.y_range.start = 0
+    s1.y_range.end = np.max(kdes) + 0.5
+    return s1
+
+
+def bokeh_raster_plot(
+    df,
+    y_key,
+    line_colours,
+    width,
+    height,
+    plot_height,
+    category_values,
+    x_range,
+    **kwargs,
+):
+    s2 = figure(
+        width=width,
+        height=int(0.8 * height),
+        title=None,
+        x_range=x_range,
+        y_range=(-0.5, plot_height),
+        sizing_mode="fixed",
+    )
+
+    for index_id, c in zip(category_values, line_colours):
+        source = df.loc[df["index"] == int(index_id)]
+
+        s2.dash(
+            "times_triggered",
+            y_key,
+            size=10,
+            source=source,
+            color=c,
+            alpha=1,
+            angle=1.5708,
+        )
+    return s2
+
+
 def spikes_and_trace(
     df,
     indices,
@@ -406,13 +483,123 @@ def spikes_and_trace(
 
     """
 
-    assert (
-        len(df) < 20000
-    ), "The number of spikes is too high for this plot, use spiketrain_plots.whole_stimulus instead"
+    grid = _bokeh_plotting(
+        df,
+        indices,
+        width,
+        height,
+        single_trace=single_psth,
+        line_colour=line_colour,
+        bin_size=bin_size,
+        s1_func=bokeh_psth_plot,
+        s2_func=bokeh_raster_plot,
+    )
+
+    return grid
+
+
+def first_spikes_plot(
+    spikes: pd.DataFrame or pl.DataFrame,
+    category_name: str,
+    category_values: list,
+    category_colours: list,
+    nr_stim_repeats: int = None,
+    secondary_index: str = "cell_index",
+    max_time: float = None,
+    nr_samples: int = 100,
+    width=1400,
+    height=500,
+    bin_size=0.05,
+    single_trace=False,
+):
+    if nr_stim_repeats is None:
+        nr_stim_repeats = (spikes["repeat"].max() + 1) // len(category_values)
+    if type(spikes) is pd.DataFrame:
+        spikes = pl.from_pandas(spikes)
+
+    nr_categories = len(category_values)
+    repeat_max = nr_stim_repeats * nr_categories
+    if max_time is None:
+        max_time = spikes["times_triggered"].max()
+    # spikes = spikes.with_columns(**{category_name: pl.lit("")})
+    spikes = spikes.with_columns([pl.lit("").alias(category_name)])
+    for category in range(nr_categories):
+        spikes = spikes.with_columns(
+            [
+                (
+                    pl.when(
+                        pl.col("repeat").is_in(
+                            np.arange(category, repeat_max, nr_categories)
+                        )
+                    )
+                    .then(pl.lit(category_values[category], dtype=str))
+                    .otherwise(pl.col(category_name))
+                ).alias(category_name)
+            ]
+        )
+
+    spikes = spikes.to_pandas().sort_values(by=category_name)
+    indices = [category_name, secondary_index]
+    grid = _bokeh_plotting(
+        spikes,
+        indices,
+        width,
+        height,
+        single_trace=single_trace,
+        line_colour=category_colours,
+        bin_size=bin_size,
+        s1_func=bokeh_kde_plot,
+        s2_func=bokeh_raster_plot,
+        max_time=max_time,
+        nr_samples=nr_samples,
+    )
+    grid.children[0][0].yaxis.axis_label = f"kernel density \n [norm]"
+    return grid
+
+
+def _bokeh_plotting(
+    df,
+    indices,
+    width=1400,
+    height=500,
+    s1_func=bokeh_psth_plot,
+    s2_func=bokeh_raster_plot,
+    single_trace=False,
+    line_colour: str or list = "black",
+    **kwargs,
+):
+    """
+    Generate a plot of spikes and psth trace.
+
+    Parameters:
+        df : DataFrame
+            The input DataFrame containing spike data.
+        indices : list, optional
+            The column names to use as indices. Defaults to None.
+        width : int, optional
+            The width of the plot. Defaults to 1400.
+        height : int, optional
+            The height of the plot. Defaults to 500.
+        bin_size : float, optional
+            The bin size for calculating the PSTH. Defaults to 0.05.
+        line_colour : str, optional
+            The color of the lines in the plot. Defaults to None.
+        single_psth : bool, optional
+            Whether to plot a single PSTH. Defaults to False.
+
+    Returns:
+        grid : GridPlot
+            The generated plot as a grid of subplots.
+
+    Raises:
+        AssertionError
+            If the number of spikes is too high (over 10000) for this plot.
+
+    """
 
     df, line_colours, indices = _preprocess_input(df, indices, line_colour)
     if len(line_colours) == 1:
-        single_psth = True
+        single_trace = True
     if len(indices) > 1:
         df, repeated_indices, rows_per_index = map_index(df, indices)
         y_key = "index_linear"
@@ -423,47 +610,27 @@ def spikes_and_trace(
 
     # Map colours to the indices
     category_values = df[indices[0]].unique().astype(str).tolist()
-    if not single_psth:
+    if not single_trace:
         line_colours = line_colours * len(category_values)
         line_colours = line_colours[: len(category_values)]
 
-    psth_list, bins_list = _calculate_psth(
-        df, bin_size, single_psth, indices, df["times_triggered"].max()
-    )
-    bins_list = bins_list[0][:-1]
-    bins_list = [bins_list] * len(psth_list)
-
+    df["index"] = df[indices[0]].astype("category")
+    df["index"] = df["index"].cat.as_ordered()
     # First subplot
-    s1 = figure(width=width, height=int(0.2 * height), title=None, sizing_mode="fixed")
-
-    s1.multi_line(bins_list, psth_list, line_width=2, color=line_colours, alpha=0.5)
-    s1.xaxis.major_label_text_font_size = "0pt"
+    s1 = s1_func(df, single_trace, indices, line_colours, width, height, **kwargs)
 
     # Second subplot
-    s2 = figure(
-        width=width,
-        height=int(0.8 * height),
-        title=None,
-        x_range=s1.x_range,
-        y_range=(-0.5, plot_height),
-        sizing_mode="fixed",
+    s2 = s2_func(
+        df,
+        y_key,
+        line_colours,
+        width,
+        height,
+        plot_height,
+        category_values,
+        s1.x_range,
+        **kwargs,
     )
-
-    if single_psth:
-        line_colours = line_colours * len(category_values)
-        line_colours = line_colours[: len(category_values)]
-
-    for index_id, c in zip(category_values, line_colours):
-        source = df.query(f"{indices[0]} == {index_id}")
-        s2.dash(
-            "times_triggered",
-            y_key,
-            size=10,
-            source=source,
-            color=c,
-            alpha=1,
-            angle=1.5708,
-        )
 
     grid = _bokeh_beautified(df, y_key, s1, s2, width, indices, repeated_indices)
 
@@ -506,6 +673,7 @@ def _bokeh_beautified(df, y_key, s1, s2, width, indices, repeated_indices):
 
     s1.yaxis.axis_label = f"Spikes / s \n / {indices[0]}"
     s1.yaxis.axis_label_text_font_size = "9pt"
+
     if len(repeated_indices) >= 10:
         s2.yaxis.ticker = np.arange(0, len(repeated_indices), 2)
         s2.yaxis.major_label_overrides = {
