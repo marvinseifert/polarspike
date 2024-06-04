@@ -146,7 +146,10 @@ def whole_stimulus(
     df["index"] = df["index"].cat.as_ordered()
 
     for index_id, c, y_r in zip(unique_indices, cmap, y_ranges):
-        df_temp = df.query(f"index == {index_id}")
+        if type(index_id) is str:
+            df_temp = df.query(f"index == '{index_id}'")
+        else:
+            df_temp = df.query(f"index == {index_id}")
 
         _draw_artist(
             df_temp,
@@ -429,9 +432,11 @@ def bokeh_raster_plot(
         y_range=(-0.5, plot_height),
         sizing_mode="fixed",
     )
+    if len(category_values) != len(line_colours):
+        line_colours = line_colours * len(category_values)
 
     for index_id, c in zip(category_values, line_colours):
-        source = df.loc[df["index"] == int(index_id)]
+        source = df.loc[df["index"].astype(int) == int(index_id)]
 
         s2.dash(
             "times_triggered",
@@ -452,7 +457,7 @@ def spikes_and_trace(
     height=500,
     bin_size=0.05,
     line_colour="black",
-    single_psth=False,
+    single_psth=True,
 ):
     """
     Generate a plot of spikes and psth trace.
