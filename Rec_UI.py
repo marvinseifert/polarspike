@@ -34,6 +34,7 @@ from bokeh.io import export_png
 import plotly.express as px
 import polars as pl
 from bokeh.plotting import show, curdoc
+from IPython.display import display
 
 
 def stimulus_df():
@@ -156,14 +157,17 @@ class Explorer:
                 "repeat",
                 "stimulus_index",
             ],
-            data=np.zeros((1, 5)),
+            data=np.zeros(
+                (1, 5),
+                dtype=int,
+            ),
         )
         self.single_cell_raster = pn.panel(
             spiketrain_plots.spikes_and_trace(
                 self.dummy_spiketrain,
                 width=910,
                 bin_size=0.05,
-                indices=["cell_index", "repeat"],
+                indices=["stimulus_index", "cell_index"],
             )
         )
 
@@ -648,8 +652,6 @@ class PlotApp(param.Parameterized):
 
 class Recording_explorer:
     def __init__(self, analysis_path):
-        pn.config.theme = "dark"
-        pn.config.design = Bootstrap
         self.analysis_path = analysis_path
         self.nr_added_recordings = 0
         self.recordings_dataframe = pd.DataFrame(
@@ -917,7 +919,7 @@ class Recording_explorer:
             width=310,
             height=1000,
             scroll=True,
-        ).servable(area="sidebar")
+        )
 
     def plot_recording_spike_trains(self):
         fig, ax = recording_overview.spiketrains_from_file(
@@ -1281,7 +1283,12 @@ class Recording_explorer:
 
     def serve(self):
         app = pn.Row(
-            pn.Column(self.sidebar, sizing_mode="fixed", height=300, width=300),
+            pn.Column(
+                self.sidebar,
+                sizing_mode="fixed",
+                height=300,
+                width=300,
+            ),
             pn.Spacer(width=20),  # Adjust width for desired spacing
             pn.Column(self.main, sizing_mode="fixed", height=1000, width=1000),
             sizing_mode="stretch_width",
