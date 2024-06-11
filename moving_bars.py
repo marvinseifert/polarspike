@@ -145,11 +145,22 @@ def add_arrows_to_matplotlib(initial_fig, degrees, arrow_spacing, names=None):
 
 
 class Moving_stats:
-    directions = np.array([0, 180, 270, 90, 315, 225, 45, 135])
-    step_size = 45.0
+    def __init__(self, directions=None, step_size=None, frames_per_direction=None):
+        if directions is None:
+            self.directions = np.array([0, 180, 270, 90, 315, 225, 45, 135])
+        else:
+            self.directions = directions
+        if step_size is None:
+            self.step_size = 45.0
+        else:
+            self.step_size = step_size
+        if frames_per_direction is None:
+            self.frames_per_direction = 400
+        else:
+            self.frames_per_direction = frames_per_direction
 
     def calc_circ_stats(self, df):
-        directions = np.repeat(self.directions, 400)
+        directions = np.repeat(self.directions, self.frames_per_direction)
         trigger = df["trigger"].to_numpy()
         directions_spikes = directions[trigger]
         direction_counts = np.unique(directions_spikes, return_counts=True)
