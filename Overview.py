@@ -172,6 +172,8 @@ class Recording:
             df = df.with_columns(stimulus_index=pl.lit(stimulus[0]))
             dfs.append(df)
         df = pl.concat(dfs)  # Create one polars dataframe
+        if len(df) == 0:
+            warnings.warn("No spikes found for the provided parameters.")
         if pandas:
             return df.to_pandas()
         else:
@@ -1158,6 +1160,8 @@ class Recording_s(Recording):
             )
 
         df = pl.concat(dfs)
+        if len(df) == 0:
+            warnings.warn("No spikes found for the provided parameters.")
         if pandas:
             return df.to_pandas()
         else:
