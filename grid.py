@@ -36,7 +36,7 @@ class Table:
         self.query_widget = pn.widgets.TextInput(
             name="Query", placeholder="Enter query"
         )
-        self.query_error = pn.pane.Markdown("", style={"color": "red"})
+        self.query_error = pn.pane.Markdown("", styles={"color": "red"})
 
         # Panel to display the widgets
         self.panel = pn.Column(
