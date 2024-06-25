@@ -1,11 +1,39 @@
+"""
+Binarizer module. This module contains functions to convert timestamps to binary signals. This process is basically binning
+the timestamps into bins, so that each bin contains a 1 if a spike occurred in that bin, and a 0 otherwise.
+This module makes heavy use of the Polars library to increase performance.
+@ Marvin Seifert 2024
+"""
+
+
 import polars as pl
 from functools import partial
 import numpy as np
-import multiprocessing
 import scipy.signal as signal
 
 
-def timestamps_to_binary_polars(df_timestamps, sample_rate, max_window):
+def timestamps_to_binary_polars(df_timestamps, sample_rate=None, max_window=None):
+    """
+    This function converts timestamps to binary signals. It takes a DataFrame with timestamps and converts them to binary
+    signals. Conversion is done at a given sample rate and considering a window of a given size.
+    Parameters
+    ----------
+    df_timestamps : pl.DataFrame
+        DataFrame with timestamps
+    sample_rate : int
+        The sample rate at which the timestamps will be binarized
+    max_window : int
+        The maximum window size for the binary signal
+    Returns
+    -------
+    pl.DataFrame
+        DataFrame with the binary signals
+
+    """
+    if sample_rate is None:
+        sample_rate = int(1 / df_timestamps["times_triggered"].sort().diff().min())
+    if max_window is None:
+        max_window = np.ceil(df_timestamps["times_triggered"].max()).astype(int)
     # Create a DataFrame with the timestamps
     # Calculate the indices for the timestamps based on the sampling rate
     df_timestamps = df_timestamps.with_columns(
@@ -51,7 +79,7 @@ def timestamps_to_binary_polars(df_timestamps, sample_rate, max_window):
 
     # If cell didn't spike in a repeat, fill with zeros
 
-    return df_result
+    return df_result[:max_window]
 
 
 def fill_missing_repeats(max_repeat, nr_bins, df_result):
@@ -94,20 +122,22 @@ def apply_on_group(sample_rate, max_window, group_df):
 
 
 def timestamps_to_binary_multi(df, bin_size, max_window, max_repeat):
-    max_window = np.ceil(max_window / bin_size + bin_size).astype(int)
-
+    max_window = np.ceil(max_window / bin_size).astype(int)
+    nr_cells = df["cell_index"].unique().len()
     # Reject spikes larger than max_window
     df = df.filter(pl.col("times_triggered") <= max_window)
 
     df = reject_single_spikes(
         df
     )  # This filters cells with single spikes or spikes only in one repeat
-    func = partial(apply_on_group, bin_size, max_window)
-    results = df.group_by("cell_index", "repeat").map_groups(func)
+    if nr_cells > 1:
+        func = partial(apply_on_group, bin_size, max_window)
+        results = df.group_by("cell_index", "repeat").map_groups(func)
+        fill_func = partial(fill_missing_repeats, max_repeat, max_window)
+        results = results.group_by("cell_index").map_groups(fill_func)
+    else:
+        results = timestamps_to_binary_polars(df, bin_size, max_window)
 
-    fill_func = partial(fill_missing_repeats, max_repeat, max_window + 1)
-
-    results = results.group_by("cell_index").map_groups(fill_func)
     results = results.sort("cell_index", "repeat", "index")
 
     return results
@@ -123,7 +153,7 @@ def binary_as_array(repeats, bins, df):
 def calc_qis(result_df):
     repeats = result_df["repeat"].max() + 1
     bins_per_repeat = np.ceil(
-        len(result_df.filter(pl.col("cell_index") == result_df["cell_index"][0]))
+        (len(result_df.filter(pl.col("cell_index") == result_df["cell_index"][0])) - 1)
         / repeats
     ).astype(int)
     result_df = result_df.partition_by("cell_index")
