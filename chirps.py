@@ -52,6 +52,27 @@ def expo_chirp(start_time, end_time, start_freq, end_freq):
 
 
 def plot(df, start_time, end_time, start_freq, end_freq):
+    """
+    Plots the spike count histogram and the frequency chirp in a searborn figure and calculcates a kernel density estimate.
+
+    Parameters:
+    df : DataFrame
+        The DataFrame containing the spike count data.
+    start_time : float
+        The time at which the chirp starts.
+    end_time : float
+        The time at which the chirp ends.
+    start_freq : float
+        The starting frequency of the chirp in Hz.
+    end_freq : float
+        The ending frequency of the chirp in Hz.
+
+    Returns:
+    fig : Figure
+        The figure containing the plot (matplotlib).
+    axs : Axes
+        The axes containing the plot(matplotlib)   .
+    """
     plt.ioff()
     fig, axs = plt.subplots(
         2, 1, figsize=(15, 10), sharex=True, gridspec_kw=dict(height_ratios=[1, 2])
@@ -91,5 +112,26 @@ def plot(df, start_time, end_time, start_freq, end_freq):
 
 
 def plot_interactive(df, start_time, end_time, start_freq, end_freq):
+    """
+    Plots the spike count histogram and the frequency chirp in a searborn figure and calculcates a kernel density estimate.
+    This function directly shows the plot, which will be displayed interactively in Jupyter if %matplotlib widget magic is used.
+
+    Parameters:
+    df : DataFrame
+        The DataFrame containing the spike count data.
+    start_time : float
+        The time at which the chirp starts.
+    end_time : float
+        The time at which the chirp ends.
+    start_freq : float
+        The starting frequency of the chirp in Hz.
+    end_freq : float
+        The ending frequency of the chirp in Hz.
+
+    Returns:
+        Shows the plot.
+
+    """
+
     fig, ax = plot(df, start_time, end_time, start_freq, end_freq)
     return fig.show()
