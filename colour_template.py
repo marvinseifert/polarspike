@@ -1,3 +1,13 @@
+"""
+This module provides a class for creating and managing colour templates for stimuli in plots. It reads
+a DataFrame containing the colours for different stimuli.
+The user can interactively select a stimulus and change the colours of the stimulus. Additional colours can be added
+to the DataFrame and saved for future use. The class provides methods to add the stimulus to a plotly, matplotlib or
+bokeh figure.
+@Author: Marvin Seifert 2024
+"""
+
+
 import numpy as np
 import pandas as pd
 from ipywidgets import widgets, interact, Layout
@@ -19,6 +29,11 @@ from bokeh.models import BoxAnnotation, Label
 
 
 class Colour_template:
+    """
+    This class provides a template for creating and managing colour templates for stimuli in plots.
+
+    """
+
     layout = {"sep": " ", "width": 4}
 
     Save_button = widgets.Button(
@@ -29,6 +44,14 @@ class Colour_template:
     )
 
     def __init__(self, df_file=None):
+        """
+        Initialize the object.
+        Parameters
+        ----------
+        df_file : str, optional
+            The path to the DataFrame containing the colours for the stimuli. The default is None,
+            which refers to: polarspike.__path__[0] + "/stim_colour_df".
+        """
         if df_file is None:
             df_file = polarspike.__path__[0] + "/stim_colour_df"
         self.df_file = df_file
@@ -50,6 +73,16 @@ class Colour_template:
         self.Save_button.on_click(self.add_new_stimulus)
 
     def pick_stimulus(self, name, sub_selection=None):
+        """
+        Pick a stimulus from the DataFrame and display the colours in a Markdown cell.
+        Parameters
+        ----------
+        name : str
+            The name of the stimulus.
+        sub_selection : tuple, optional
+            A tuple containing the start index and the step size for subsetting the colours. The default is None as in
+            no sub-selection.
+        """
         self.stimulus = name
         self.colours = self.get_stimulus_colors(name, sub_selection)
         self.names = self.get_stimulus_names(name, sub_selection)
@@ -57,6 +90,10 @@ class Colour_template:
         return self.colour_to_markdown()
 
     def colour_to_markdown(self):
+        """
+        Display a selected colour template in a Markdown cell.
+
+        """
         display(
             Markdown(
                 self.layout["sep"].join(
@@ -67,6 +104,17 @@ class Colour_template:
         )
 
     def get_stimulus_colors(self, name, sub_selection=None):
+        """
+        Get the colours for a stimulus from the DataFrame without "selecting" it.
+        Parameters
+        ----------
+        name : str
+            The name of the stimulus.
+        sub_selection : tuple, optional
+            A tuple containing the start index and the step size for subsetting the colours. The default is None as in
+            no sub-selection.
+
+        """
         colours = np.asarray(self.plot_colour_dataframe.loc[name]["Colours"])
         if sub_selection is not None:
             colours = colours[sub_selection[0] :: sub_selection[1]]
@@ -74,6 +122,17 @@ class Colour_template:
         return colours
 
     def get_stimulus_names(self, name, sub_selection=None):
+        """
+        Get the names for a stimulus from the DataFrame without "selecting" it.
+        Parameters
+        ----------
+        name : str
+            The name of the stimulus.
+        sub_selection : tuple, optional
+            A tuple containing the start index and the step size for subsetting the names. The default is None as in
+            no sub-selection.
+
+        """
         names = np.asarray(
             self.plot_colour_dataframe.loc[name]["Description"], dtype="<U11"
         )
@@ -83,6 +142,16 @@ class Colour_template:
         return names
 
     def get_stimulus_wavelengths(self, name, sub_selection=None):
+        """
+        Get the wavelengths for a stimulus from the DataFrame without "selecting" it.
+        Parameters
+        ----------
+        name : str
+            The name of the stimulus.
+        sub_selection : tuple, optional
+            A tuple containing the start index and the step size for subsetting the wavelengths. The default is None as in
+            no sub-selection.
+        """
         names = self.get_stimulus_names(name, sub_selection)
         wavelengths = []
         for name in names:
@@ -93,9 +162,25 @@ class Colour_template:
         return wavelengths
 
     def list_stimuli(self):
+        """
+        List all stimuli in the DataFrame.
+
+        Returns
+        -------
+        numpy.ndarray
+            An array containing the names of the stimuli.
+        """
         return self.plot_colour_dataframe.index.to_numpy()
 
     def add_new_stimulus(self, button):
+        """
+        Callback function to add a new stimulus to the DataFrame and save it.
+        Parameters
+        ----------
+        button : ipywidgets.widgets.widget_button.Button
+            The button that was clicked.
+
+        """
         self.plot_colour_dataframe.loc[
             self.template.name, "Colours"
         ] = self.template.colours
@@ -105,9 +190,28 @@ class Colour_template:
         self.plot_colour_dataframe.to_pickle(self.df_file)
 
     def interactive_stimulus(self):
+        """
+        Create an interactive widget for selecting a stimulus and changing the colours temporarily.
+
+        Returns
+        -------
+        ipywidgets.widgets.interaction.interact
+            The widget for selecting a stimulus.
+        """
         interact(self.pickstimcolour, selected_stimulus=self.stimulus_select)
 
     def pickstimcolour(self, selected_stimulus=None, small=False):
+        """
+        Creates RadioButtons for selecting a stimulus and ColorPickers for changing the colours of the stimulus.
+        Parameters
+        ----------
+        selected_stimulus : str, optional
+            The name of the stimulus that is selected. The default is None.
+        small : bool, optional
+            If True, the ColorPickers will be displayed without the hexcolor string next to it.
+            The default is False.
+
+        """
         if not selected_stimulus:
             self.stimulus = self.stimulus_select.value
         else:
@@ -163,32 +267,67 @@ class Colour_template:
 
         return self.picker
 
-    def changed_selection(self):
-        a = 0
-        self.colours = []
-        nr_trigger = len(self.plot_colour_dataframe.loc[self.stimulus]["Colours"])
-        for trigger in range(math.ceil(nr_trigger)):
-            try:
-                self.colours.append(self.picker.children[0].children[trigger].value)
-                a = a + 1
-                # self.colours.append(self.picker.children[1].children[trigger].value)
-                # a = a + 1
-                # self.colours.append(self.picker.children[2].children[trigger].value)
-                # a = a + 1
-                # self.colours.append(self.picker.children[3].children[trigger].value)
-                # a = a + 1
-
-                self.names = self.plot_colour_dataframe.loc[self.stimulus][
-                    "Description"
-                ]
-            except IndexError:
-                break
-        return self.colour_to_markdown()
+    # def changed_selection(self):
+    #     a = 0
+    #     self.colours = []
+    #     nr_trigger = len(self.plot_colour_dataframe.loc[self.stimulus]["Colours"])
+    #     for trigger in range(math.ceil(nr_trigger)):
+    #         try:
+    #             self.colours.append(self.picker.children[0].children[trigger].value)
+    #             a = a + 1
+    #             # self.colours.append(self.picker.children[1].children[trigger].value)
+    #             # a = a + 1
+    #             # self.colours.append(self.picker.children[2].children[trigger].value)
+    #             # a = a + 1
+    #             # self.colours.append(self.picker.children[3].children[trigger].value)
+    #             # a = a + 1
+    #
+    #             self.names = self.plot_colour_dataframe.loc[self.stimulus][
+    #                 "Description"
+    #             ]
+    #         except IndexError:
+    #             break
+    #     return self.colour_to_markdown()
 
     def create_stimcolour(self, name, nr_colours, description):
+        """
+        Interactive widget for creating a new stimulus with colours. The colours will displayed interactively in Jupyter
+        so that the user can choose a custom colour for each stimulus.
+        Parameters
+        ----------
+        name : str
+            The name of the stimulus.
+        nr_colours : int
+            The number of colours for the stimulus.
+        description : list
+            A list of descriptions for the colours.
+
+        Returns
+        -------
+        ipywidgets.widgets.widget_box.VBox
+            Vbox containing other widgets for creating a new stimulus.
+
+        """
         return self.template.create_stimcolour(name, nr_colours, description)
 
     def add_stimulus_to_plot(self, initial_fig, flash_durations, names=True):
+        """
+        This adds a colour stimulus plot under an existing plotly, matplotlib or bokeh figure.
+        In case of Matplotlib, the colour stimulus will be plotted into the last row of subplots.
+        In case of Plotly, the colour stimulus will be plotted into a new subplot below the existing plot.
+        In case of Bokeh, the colour stimulus will be plotted below the existing plot.
+
+        Parameters
+        ----------
+        initial_fig : plotly.graph_objs._figure.Figure or matplotlib.figure.Figure or bokeh.models.plots.GridPlot
+            The initial figure to which the stimulus will be added.
+        flash_durations : list
+            A list of durations for the rectangles, indicating their width.
+        names : bool, optional
+            If True, the names of the stimuli will be displayed on top of each stimulus. The default is True.
+
+
+        """
         if names:
             names = self.names
         else:
@@ -216,6 +355,12 @@ class Colour_template:
 
 
 class Interactive_template:
+    """
+    This class creates a fully interactive widget for creating a new stimulus with colours.
+    Each colour can be changed interactively by the user. Eventually, the user can save the new stimulus to the
+    DataFrame.
+    """
+
     Pick_button = widgets.Button(
         value=False,
         description="Set colours",
@@ -233,6 +378,23 @@ class Interactive_template:
         self.colours = []
 
     def create_stimcolour(self, name, nr_colours, description):
+        """
+
+        Parameters
+        ----------
+        name : str
+            The name of the stimulus.
+        nr_colours : int
+            The number of colours for the stimulus.
+        description : list
+            A list of descriptions for the colours.
+
+        Returns
+        -------
+        ipywidgets.widgets.widget_box.VBox
+            Vbox containing other widgets for creating a new stimulus.
+
+        """
         self.name = name
         self.nr_colours = nr_colours
         self.description = description
@@ -275,6 +437,15 @@ class Interactive_template:
         return self.new_colour_select_box
 
     def get_colours(self, value):
+        """
+        Callback function to get the colours from the widget.
+
+        Parameters
+        ----------
+        value : ipywidgets.widgets.widget_button.Button
+            The button that was clicked.
+
+        """
         self.colours = []
 
         for trigger in range(math.ceil(self.nr_colours / 4)):
@@ -315,11 +486,20 @@ def add_stimulus_to_plotly(initial_fig, colours, flash_durations, names=None):
     """
     Adds a subplot with colored rectangles to an existing figure.
 
-    Parameters:
-        - initial_fig: The initial figure to which the subplot will be added.
-
-    Returns:
-        - A new figure with the original plot and the added rectangle subplot.
+    Parameters
+    ----------
+    initial_fig : plotly.graph_objs._figure.Figure
+        The initial figure to which the subplot will be added.
+    colours : list
+        A list of colors for the rectangles.
+    flash_durations : list
+        A list of durations for the rectangles, indicating their width.
+    names : list, optional
+        A list of names for the rectangles. The default is None.
+    Returns
+    -------
+    plotly.graph_objs._figure.Figure
+        The modified figure with the original plot and the added rectangle subplot.
     """
 
     # Extract data and layout from the initial figure
@@ -452,6 +632,26 @@ def add_stimulus_to_matplotlib(initial_fig, colours, flash_durations, names=None
 
 
 def add_stimulus_to_bokeh(initial_fig, colours, flash_durations, names=None):
+    """
+    Adds a subplot with colored rectangles to an existing Bokeh figure.
+
+    Parameters
+    ----------
+    initial_fig : bokeh.models.plots.GridPlot
+        The initial Bokeh figure to which the subplot will be added.
+    colours : list
+        A list of colors for the rectangles.
+    flash_durations : list
+        A list of durations for the rectangles, indicating their width.
+    names : list, optional
+        A list of names for the rectangles.
+
+    Returns
+    -------
+    bokeh.models.plots.GridPlot
+        The modified figure with the original plot and the added rectangle subplot.
+
+    """
     # Assuming 'height', 'colours', 'flash_durations', and optionally 'names' are defined
     # Create a new plot
     height = 2
@@ -511,11 +711,28 @@ def add_stimulus_to_bokeh(initial_fig, colours, flash_durations, names=None):
 
 
 def hex_to_rgb(hex_color):
+    """
+    Convert a hex color code to an RGB tuple.
+
+    Parameters
+    ----------
+    hex_color : str
+        The hex color code to convert.
+
+    """
     # Convert hex to RGB
     hex_color = hex_color.lstrip("#")
     return tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
 
 
 def calculate_luminance(rgb):
+    """
+    Calculate the luminance of an RGB color.
+
+    Parameters
+    ----------
+    rgb : tuple
+        The RGB color tuple.
+    """
     # Calculate luminance using the formula
     return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]
