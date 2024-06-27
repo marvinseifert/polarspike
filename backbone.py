@@ -1,16 +1,12 @@
-# -*- coding: utf-8 -*-
 """
-Backbone functions, which dont do the actual analysis but some other stuff like
-finding the file ending, creating a file selection button etc.
-@ Marvin Seifert 2021
+Backbone functions, which dont do the actual analysis but are used during the analysis by many other
+functions in this project.
+@ Marvin Seifert 2024
 """
 # Imports
 from ipywidgets import widgets
 import traitlets
 from tkinter import Tk, filedialog
-import numpy as np
-from multiprocessing import Pool
-import pandas as pd
 from sympy import isprime
 from math import gcd
 

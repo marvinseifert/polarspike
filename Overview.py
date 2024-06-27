@@ -17,7 +17,7 @@ from polarspike import stimulus_dfs
 from polarspike import stimulus_spikes
 import polars as pl
 from polarspike.grid import Table
-from polarspike import df_filter
+from polarspike import filter_stimulus
 from dataclasses import dataclass, field
 from polarspike import cells_and_stimuli
 from polarspike import stimulus_trace
@@ -89,6 +89,7 @@ class Recording:
         Updated parameters:
             - nr_stimuli
             - nr_cells
+            - name
 
         """
         if self.dataframes["spikes_df"] is not None:
@@ -105,6 +106,11 @@ class Recording:
             self.nr_cells = 0
 
     def single_recording_assertion(self):
+        """
+        Checks if the loaded dataframes contain only a single recording. If multiple recordings are present, the
+        Recording_s class should be used instead.
+
+        """
         assert (
             self.dataframes["spikes_df"]["recording"].unique().shape[0] == 1
         ), "Dataframe contains multiple recordings use Recording_s class instead"

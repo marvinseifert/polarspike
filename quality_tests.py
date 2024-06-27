@@ -1,8 +1,6 @@
 import polars.exceptions
 from polarspike import binarizer
-from polarspike import stimulus_spikes
 import polars as pl
-import numpy as np
 import pandas as pd
 
 
