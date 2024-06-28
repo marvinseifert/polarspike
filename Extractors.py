@@ -1,3 +1,13 @@
+"""
+Extractor classes for extracting spikes from different spike sorting algorithms results files. At the moment
+Herdingspikes2, Spyking Circus and Kilosort are supported. Kilosort support is experimental at the moment, based on data
+from Schroeder Lab. The Extractor class is a super class that contains the basic methods for extracting the spikes from
+the files. The Extractor_HS2, Extractor_SPC and Extractor_KS are the classes that are used to extract the spikes from the
+respective files.
+@Author: Marvin Seifert 2024
+"""
+
+
 import numpy as np
 import h5py
 import polars as pl
@@ -17,9 +27,15 @@ class Extractor:
     """
     Extractor class
 
-    This class stores methods to read the .hdf5 file which is the output of the spikesorting algorithm Herdingspikes2
-    It allows for loading either all the spikes in the file or just a subset either based on number of cells or with a
-    maximal nr of spikes threshold.
+    This class is the super class for all the extractor classes. It contains the basic methods for extracting the spikes
+    from the files. The Extractor_HS2, Extractor_SPC and Extractor_KS are the classes that are used to extract the spikes
+    from the respective files.
+
+    Extraction is done in two steps. First the spikes are extracted from the file and saved to an arrow file. This is
+    done to avoid memory issues. The second step is to load the spikes from the arrow file and construct a DataFrame
+    containing the spikes and save it to a parquet file as polars.DataFrame. The parquet file is then used to access
+    the spikes in the analysis.
+
     """
 
     spikes = {}
@@ -28,13 +44,17 @@ class Extractor:
 
     def __init__(self, file, stimulus_df=None):
         """
-        Initialize function. Opens the .hdf5 file that contains results of the
-        Herdingspikes2 spikesorting algorithm and assignes them to the object.
+        Constructor for the Extractor class that sets the file location and the stimulus DataFrame if provided.
+
 
         Parameters
         ----------
         file: str
-            The location of the hdf5 results file
+            The location of the spike sorting results file.
+
+        stimulus_df: DataFrame
+            The DataFrame containing the stimulus information. This is optional for accessing the spikes in the results
+            file but must be provided to build the spikes_df in the construct_df method.
 
 
         Returns
@@ -47,11 +67,39 @@ class Extractor:
         self.file_parquet = self.file.with_suffix(".parquet")
 
     def add_stimulus_df(self, stimulus_df):
+        """
+        Add the stimulus DataFrame to the Extractor object.
+        Not all the information from the stimulus_df is required. Here, the begin_fr, end_fr, stimulus_name and
+        sampling_freq columns are used.
+
+        Parameters
+        ----------
+        stimulus_df: DataFrame
+            The DataFrame containing the stimulus information.
+
+        Returns
+        None
+
+        """
         self.trigger = stimulus_df[["begin_fr", "end_fr"]].to_numpy()
         self.stimulus_names = stimulus_df["stimulus_name"].to_list()
         self.spikes["sampling"] = stimulus_df.loc[0, "sampling_freq"].item()
 
     def to_arrow(self, batch_size=100000):
+        """
+        Save the spikes to an arrow file in a chunked manner to avoid memory issues.
+
+        This function creates a schema for an arror file at the location as provided in the constructor.
+        The schema contains the cell_index, times and the waveforms of the spikes. The waveforms are stored in the
+        shapes column. The function then writes the data to the arrow file in chunks of size batch_size.
+
+        Parameters
+        ----------
+        batch_size: int
+            The size of the chunks to write to the arrow file. Unit is number of spikes, refering to int.
+
+
+        """
         nr_batches = int(np.ceil(self.spikes["times"].shape[0] / batch_size))
         print(f"nr of batches: {nr_batches}")
         schema = pa.schema(
@@ -96,14 +144,45 @@ class Extractor:
         df.lazy().sink_parquet(str(self.file.with_suffix(".parquet")))
 
     def load(self, stimulus=True, recording_name=None, pandas=True):
+        """
+        Load the spikes from the parquet file in lazy mode.
+
+        Parameters
+        ----------
+        stimulus: bool
+            If True, the spikes_df is constructed using the construct_df method. If False, the DataFrame is returned
+            raw.
+        recording_name: str
+            The name of the recording. This is optional and only used if stimulus is True to create the spikes_df.
+        pandas: bool
+            If True, the DataFrame is returned as pandas.DataFrame. If False, the DataFrame is returned as polars.DataFrame.
+
+        """
         df = pl.scan_parquet(str(self.file.with_suffix(".parquet")))
         df = df.select(pl.col("cell_index", "times"))
         if stimulus:
             return self.construct_df(df, recording_name, pandas)
         if not stimulus:
-            return df
+            if pandas:
+                return df.to_pandas()
+            else:
+                return df
 
     def construct_df(self, df, recording_name=None, pandas=True):
+        """
+        Construct the spikes_df using the information from the stimulus_df and the parquet file (for nr_of_spikes).
+
+        Parameters
+        ----------
+        df: DataFrame
+            The DataFrame containing the spikes.
+        recording_name: str
+            The name of the recording. This is optional and only used if stimulus is True to create the spikes_df.
+        pandas: bool
+            If True, the DataFrame is returned as pandas.DataFrame. If False, the DataFrame is returned as polars.DataFrame.
+
+
+        """
         dfs = []
         for stimulus in range(self.trigger.shape[0]):
             times = df.filter(
@@ -165,6 +244,10 @@ class Extractor:
 
 
 class Extractor_HS2(Extractor):
+    """
+    Extractor class for HerdingSpikes 2 spikesorting results.
+    """
+
     def __init__(self, file, stimulus_df=None):
         super().__init__(file, stimulus_df)
 
@@ -185,11 +268,22 @@ class Extractor_HS2(Extractor):
             self.spikes["shapes"] = np.array(f["/shapes"], dtype=float)
 
     def get_spikes(self):
+        """
+        Get the spikes from the HerdingSpikes 2 results file.
+        This is a legacy method that allows consistency in function names between older versions of the code and this version.
+        """
         self.to_parquet()
         return
 
 
 class Extractor_SPC(Extractor):
+    """
+    Extractor class for Spyking Circus spikesorting results.
+    Loading results from Spyking-Circus is slightly more complicated than for HerdingSpikes2. This is because we
+    need to use the CircusParser and load_data functions from the circus module to access the data (which are written
+    in an annoying way).
+    """
+
     spikes = {}
 
     def __init__(self, file, stimulus_df=None):
@@ -198,7 +292,8 @@ class Extractor_SPC(Extractor):
     def get_spikes(self):
         # This is a work around. The Spyking Circus code needs to change os directory to work, which is stupid.
         # Here I save the directory that the user was in before calling the function, so that I can change the dir back
-        # to this after the function has run. NEED to be changed in the future.
+        # to this after the function has run. Lesson: Never change the directory in a function using os!
+
         current_dir = os.getcwd()
 
         os.chdir(self.file.parent)
@@ -229,6 +324,16 @@ class Extractor_SPC(Extractor):
         os.chdir(current_dir)
 
     def get_locations(self, params):
+        """
+        Loactions in Spyking-Circus are not stored the same way as in HerdingSpikes2. This is beacuse the algorithm doesnt
+        triangulate the actual location of the spiking signal, but rather the location of the electrode that detected the
+        signal strongest.
+
+        Parameters
+        ----------
+        params: CircusParser
+            The CircusParser object that contains the parameters of the spike sorting results.
+        """
         probe = probes.read_probe(params)
         results = load_data(params, "clusters")
         electrodes = results["electrodes"]
@@ -239,6 +344,11 @@ class Extractor_SPC(Extractor):
 
 
 class Extractor_KS(Extractor):
+    """
+    Extractor class for Kilosort 2 spikesorting results. Written based on data from the Schroeder Lab. Experimental.
+
+    """
+
     spikes = {}
 
     def __init__(self, file, stimulus_df=None):
