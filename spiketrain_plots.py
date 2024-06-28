@@ -603,7 +603,7 @@ def _bokeh_plotting(
     """
 
     df, line_colours, indices = _preprocess_input(df, indices, line_colour)
-    if len(line_colours) == 1:
+    if len(line_colours) == 1 or df[indices[0]].nunique() == 1:
         single_trace = True
     if len(indices) > 1:
         df, repeated_indices, rows_per_index = map_index(df, indices)

@@ -58,6 +58,7 @@ class Stimulus_df_schroeder:
 
 
 def split_triggers(old_triggers, nr_splits=1):
+    # Add dimension if flat array is provided
     new_triggers = np.concatenate(
         (old_triggers, old_triggers[:, :-1] + np.diff(old_triggers, axis=1) / 2),
         axis=1,
@@ -77,39 +78,49 @@ def split_triggers(old_triggers, nr_splits=1):
     return new_triggers, new_intervals
 
 
+def split_triggers_df(
+    df: pd.DataFrame, stimulus_id: list, nr_splits: int = 1
+) -> pd.DataFrame:
+    """
+    Splits the triggers of a stimulus dataframe for a given stimulus id or a number of stimulus ids.
+    :param df : The stimulus dataframe
+    :param stimulus_id: The stimulus id or ids that should be split
+    :param nr_splits: The number of splits
+    :return:
+    """
+
+    array_of_triggers = np.vstack(df.loc[stimulus_id, "trigger_fr_relative"].values)
+    new_triggers, new_intervals = split_triggers(array_of_triggers, nr_splits)
+
+
 def add_triggers(df, stimulus_id, new_trigger, new_logic, new_sublogic):
     if type(stimulus_id[0]) is str and stimulus_id[0] == "all":
         stimulus_id = np.arange(len(df)).tolist()
     else:
-        stimulus_id = df.set_index("stimulus_index").loc[stimulus_id]
-    df = df.copy()
-    trigger = df["trigger_fr_relative"].to_numpy()
-    trigger[stimulus_id] = new_trigger
-    df["trigger_fr_relative"] = trigger
-    trigger_int = df["trigger_int"].values
-    new_ints = []
-    for idx in range(len(stimulus_id)):
-        new_ints.append(np.diff(new_trigger[idx]).astype(int))
-    new_ints_array = np.empty(len(new_ints), dtype=object)
-    new_ints_array[:] = new_ints
-    trigger_int[stimulus_id] = new_ints_array
-    df["trigger_int"] = trigger_int
-    repeat_logic = df["stimulus_repeat_logic"].values
-    repeat_logic[stimulus_id] = new_logic
-    df["stimulus_repeat_logic"] = repeat_logic
-    repeat_sublogic = df["stimulus_repeat_sublogic"].values
-    repeat_sublogic[stimulus_id] = new_sublogic
-    df["stimulus_repeat_sublogic"] = repeat_sublogic
-    df = stimulus_trace.find_ends(df)
-    df = stimulus_trace.get_nr_repeats(df)
+        stimulus_id = df.query("stimulus_index in @stimulus_id").index.tolist()
+    sub_df = df.loc[stimulus_id]
+    sub_df["trigger_fr_relative"] = new_trigger
+    sub_df["trigger_int"] = np.diff(new_trigger)
+    sub_df["stimulus_repeat_logic"] = new_logic
+    sub_df["stimulus_repeat_sublogic"] = new_sublogic
+
     return df
 
 
 def add_trigger_int(df, stimulus_id, interval, new_logic, new_sublogic):
+    """
+    Adds a trigger interval to the stimulus dataframe.
+    :param df : pd.DataFrame : The stimulus dataframe
+    :param stimulus_id : list : The stimulus indices to which the trigger interval will be added
+    :param interval : float : The interval in seconds
+    :param new_logic : int : The new logic for the stimulus
+    :param new_sublogic : int : The new sublogic for the stimulus
+    :return:
+    """
     if type(stimulus_id[0]) is str and stimulus_id[0] == "all":
         stimulus_id = np.arange(len(df)).tolist()
     else:
-        stimulus_id = df.set_index("stimulus_index").loc[stimulus_id]
+        stimulus_id = df.query("stimulus_index in @stimulus_id").index.tolist()
 
     df = df.copy()
     begin_fr = df["begin_fr"].values[stimulus_id]
@@ -120,7 +131,9 @@ def add_trigger_int(df, stimulus_id, interval, new_logic, new_sublogic):
         new_trigger = (
             np.arange(
                 begin_fr[idx],
-                end_fr[idx] + interval * sampling_freq[idx],
+                end_fr[idx]
+                + interval * sampling_freq[idx]
+                - (interval * sampling_freq[idx]),
                 interval * sampling_freq[idx],
             )
             - begin_fr[idx]

@@ -68,9 +68,6 @@ def stimulus_df():
     return widget
 
 
-plt.style.use("dark_background")
-
-
 class Explorer:
     def __init__(self):
         self.ct = colour_template.Colour_template()
@@ -171,10 +168,24 @@ class Explorer:
             )
         )
 
+        uneditable_columns = [
+            "cell_index",
+            "stimulus_index",
+            "stimulus_name",
+            "nr_of_spikes",
+            "centres_x",
+            "centres_y",
+            "recording",
+        ]
+        editors = {
+            col: {"type": "editable", "value": False} for col in uneditable_columns
+        }
+
         self.single_stimulus_df = pn.widgets.Tabulator(
             pd.DataFrame(),
             name="single stimulus",
             theme="simple",
+            editors=editors,
             widths=150,
             width=900,
             height=200,
@@ -184,7 +195,7 @@ class Explorer:
 
         # Color
         self.colour_selector = pn.widgets.Select(
-            name="Select colour set", options=self.ct.list_stimuli().tolist()
+            name="Select colour set", options=["None"] + self.ct.list_stimuli().tolist()
         )
 
         self.colour_selector.param.watch(self.on_colour_change, "value")
@@ -484,48 +495,55 @@ class Explorer:
             print("No overview to save")
 
     def on_colour_change(self, event):
-        self.ct.pick_stimulus(event.new)
-        self.selected_color.object = self.ct.pickstimcolour(event.new)
+        if event.new != "None":
+            self.ct.pick_stimulus(event.new)
+            self.selected_color.object = self.ct.pickstimcolour(event.new, small=True)
+        else:
+            self.ct.unpick_stimulus()
 
     def calculate_qi(self, event):
-        self.status.active = True
-        cell_ids = self.single_stimulus_df.value["cell_index"].unique().tolist()
-        batch_size = min(len(cell_ids), 500)
-        spikes_df = self.overview_df.get_spikes_triggered(
-            [[self.stimulus_select.value]], [cell_ids], time="seconds", pandas=False
-        )
-
-        nr_batches = len(cell_ids) // batch_size
-        df_temp = self.single_stimulus_df.value.set_index("cell_index")
-        df_temp["qi"] = 0
-        for i in range(nr_batches):
-            spikes_df_subset = spikes_df.filter(
-                pl.col("cell_index").is_in(
-                    cell_ids[(i * batch_size) : (i * batch_size) + batch_size]
-                )
+        try:
+            self.status.active = True
+            cell_ids = self.single_stimulus_df.value["cell_index"].unique().tolist()
+            batch_size = min(len(cell_ids), 500)
+            spikes_df = self.overview_df.get_spikes_triggered(
+                [[self.stimulus_select.value]], [cell_ids], time="seconds", pandas=False
             )
-            if len(spikes_df_subset) > 0:
-                # Update the cell indices, to account for cells without responses
-                binary_df = binarizer.timestamps_to_binary_multi(
-                    spikes_df_subset,
-                    0.001,
-                    np.sum(
-                        stimulus_spikes.mean_trigger_times(
-                            self.overview_df.stimulus_df, [self.stimulus_select.value]
-                        )
-                    ),
-                    self.overview_df.stimulus_df.loc[self.stimulus_select.value][
-                        "nr_repeats"
-                    ],
+
+            nr_batches = len(cell_ids) // batch_size
+            df_temp = self.single_stimulus_df.value.set_index("cell_index")
+            df_temp["qi"] = 0
+            for i in range(nr_batches):
+                spikes_df_subset = spikes_df.filter(
+                    pl.col("cell_index").is_in(
+                        cell_ids[(i * batch_size) : (i * batch_size) + batch_size]
+                    )
                 )
-                qis = binarizer.calc_qis(binary_df)
-                cell_ids = binary_df["cell_index"].unique().to_numpy()
+                if len(spikes_df_subset) > 0:
+                    # Update the cell indices, to account for cells without responses
+                    binary_df = binarizer.timestamps_to_binary_multi(
+                        spikes_df_subset,
+                        0.001,
+                        np.sum(
+                            stimulus_spikes.mean_trigger_times(
+                                self.overview_df.stimulus_df,
+                                [self.stimulus_select.value],
+                            )
+                        ),
+                        self.overview_df.stimulus_df.loc[self.stimulus_select.value][
+                            "nr_repeats"
+                        ],
+                    )
+                    qis = binarizer.calc_qis(binary_df)
+                    cell_ids = binary_df["cell_index"].unique().to_numpy()
 
-                df_temp.loc[cell_ids, "qi"] = qis
+                    df_temp.loc[cell_ids, "qi"] = qis
 
-        self.single_stimulus_df.value = df_temp.reset_index(drop=False)
-        # Add the QI to the overview object
-        self.merge_stimulus_df()
+            self.single_stimulus_df.value = df_temp.reset_index(drop=False)
+            # Add the QI to the overview object
+            self.merge_stimulus_df()
+        except Exception as e:
+            print(e)
         self.status.active = False
 
 
@@ -706,7 +724,7 @@ class Recording_explorer:
             "raster_plot": {
                 "func": partial(
                     spiketrain_plots.spikes_and_trace,
-                    line_colour=["white", "red"],
+                    line_colour=["black", "red"],
                     single_psth=False,
                     height=800,
                     width=1500,
@@ -716,7 +734,7 @@ class Recording_explorer:
             "datashader_plot": {
                 "func": partial(
                     spiketrain_plots.whole_stimulus,
-                    cmap="gist_gray",
+                    cmap="Greys",
                     height=8,
                     width=15,
                 ),

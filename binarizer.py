@@ -1,11 +1,39 @@
+"""
+Binarizer module. This module contains functions to convert timestamps to binary signals. This process is basically binning
+the timestamps into bins, so that each bin contains a 1 if a spike occurred in that bin, and a 0 otherwise.
+This module makes heavy use of the Polars library to increase performance.
+@ Marvin Seifert 2024
+"""
+
+
 import polars as pl
 from functools import partial
 import numpy as np
-import multiprocessing
 import scipy.signal as signal
 
 
-def timestamps_to_binary_polars(df_timestamps, sample_rate, max_window):
+def timestamps_to_binary_polars(df_timestamps, sample_rate=None, max_window=None):
+    """
+    This function converts timestamps to binary signals. It takes a DataFrame with timestamps and converts them to binary
+    signals. Conversion is done at a given sample rate and considering a window of a given size.
+    Parameters
+    ----------
+    df_timestamps : pl.DataFrame
+        DataFrame with timestamps
+    sample_rate : int
+        The sample rate at which the timestamps will be binarized
+    max_window : int
+        The maximum window size for the binary signal
+    Returns
+    -------
+    pl.DataFrame
+        DataFrame with the binary signals
+
+    """
+    if sample_rate is None:
+        sample_rate = int(1 / df_timestamps["times_triggered"].sort().diff().min())
+    if max_window is None:
+        max_window = np.ceil(df_timestamps["times_triggered"].max()).astype(int)
     # Create a DataFrame with the timestamps
     # Calculate the indices for the timestamps based on the sampling rate
     df_timestamps = df_timestamps.with_columns(
@@ -51,10 +79,28 @@ def timestamps_to_binary_polars(df_timestamps, sample_rate, max_window):
 
     # If cell didn't spike in a repeat, fill with zeros
 
-    return df_result
+    return df_result[:max_window]
 
 
 def fill_missing_repeats(max_repeat, nr_bins, df_result):
+    """
+    This function fills missing repeats with zeros.
+
+    Parameters
+    ----------
+    max_repeat : int
+        The maximum number of repeats
+    nr_bins : int
+        The number of bins per repeat
+    df_result : pl.DataFrame
+        The DataFrame with the binary signals
+
+    Returns
+    -------
+    pl.DataFrame
+        The DataFrame with the missing repeats filled with zeros
+
+    """
     if len(df_result["repeat"].unique()) == max_repeat:
         return df_result
 
@@ -87,43 +133,96 @@ def fill_missing_repeats(max_repeat, nr_bins, df_result):
 
 
 def apply_on_group(sample_rate, max_window, group_df):
+    """
+    Apply the timestamps_to_binary_polars function on a group of a DataFrame.
+    This is just a wrapper function.
+
+    Parameters
+    ----------
+    sample_rate : int
+        The sample rate at which the timestamps will be binarized
+    max_window : int
+        The maximum window size for the binary signal
+    group_df : pl.GroupBy
+        The group of the DataFrame
+
+    Returns
+    -------
+    pl.DataFrame
+        The DataFrame with the binary signals
+
+    """
     try:
         return timestamps_to_binary_polars(group_df, sample_rate, max_window)
-    except Exception as e:
+    except Exception as e:  # This is broad, but we want to catch all exceptions
         print(group_df)
 
 
 def timestamps_to_binary_multi(df, bin_size, max_window, max_repeat):
-    max_window = np.ceil(max_window / bin_size + bin_size).astype(int)
-
+    max_window = np.ceil(max_window / bin_size).astype(int)
+    nr_cells = df["cell_index"].unique().len()
     # Reject spikes larger than max_window
     df = df.filter(pl.col("times_triggered") <= max_window)
 
     df = reject_single_spikes(
         df
     )  # This filters cells with single spikes or spikes only in one repeat
-    func = partial(apply_on_group, bin_size, max_window)
-    results = df.group_by("cell_index", "repeat").map_groups(func)
+    if nr_cells > 1:  # Special case if we have only one cell.
+        func = partial(apply_on_group, bin_size, max_window)
+        results = df.group_by("cell_index", "repeat").map_groups(func)
+        fill_func = partial(fill_missing_repeats, max_repeat, max_window)
+        results = results.group_by("cell_index").map_groups(fill_func)
+    else:  # One cell
+        results = timestamps_to_binary_polars(df, bin_size, max_window)
+        results = fill_missing_repeats(max_repeat, max_window, results)
 
-    fill_func = partial(fill_missing_repeats, max_repeat, max_window + 1)
-
-    results = results.group_by("cell_index").map_groups(fill_func)
     results = results.sort("cell_index", "repeat", "index")
 
     return results
 
 
-def binary_as_array(repeats, bins, df):
+def binary_as_array(repeats, nr_bins, df):
+    """
+    Extract the binary signal from a DataFrame and reshape it into an array.
+
+    Parameters
+    ----------
+    repeats : int
+        The number of repeats
+    nr_bins : int
+        The number of bins
+    df : pl.DataFrame
+        The DataFrame with the binary signals
+
+    Returns
+    -------
+    np.ndarray
+        The reshaped binary signal
+
+    """
     return np.reshape(
         df["value"].to_numpy().astype(np.uint8),
-        (repeats, bins),
+        (repeats, nr_bins),
     )
 
 
 def calc_qis(result_df):
+    """
+    Calculate the quality index for a DataFrame with binary signals.
+
+    Parameters
+    ----------
+    result_df : pl.DataFrame
+        The DataFrame with the binary signals
+
+    Returns
+    -------
+    np.ndarray
+        The quality indices
+    """
     repeats = result_df["repeat"].max() + 1
     bins_per_repeat = np.ceil(
-        len(result_df.filter(pl.col("cell_index") == result_df["cell_index"][0]))
+        (len(result_df.filter(pl.col("cell_index") == result_df["cell_index"][0])) - 1)
         / repeats
     ).astype(int)
     result_df = result_df.partition_by("cell_index")
@@ -133,9 +232,23 @@ def calc_qis(result_df):
     return qis
 
 
-def quality_index(repeats, bins, df):
+def quality_index(repeats, nr_bins, df):
+    """
+    Calculate the quality index for a single cell.
+
+    Parameters
+    ----------
+    repeats : int
+        The number of repeats
+    nr_bins : int
+        The number of bins
+    df : pl.DataFrame
+        The DataFrame with the binary signals
+
+
+    """
     gauswins = np.tile(kernel_template(sampling_freq=1000)[::-1], (repeats, 1))
-    array = binary_as_array(repeats, bins, df)
+    array = binary_as_array(repeats, nr_bins, df)
     exs = signal.oaconvolve(array, gauswins, mode="valid", axes=1)
     return calc_tradqi(exs)
 
@@ -153,8 +266,15 @@ def calc_tradqi(kernelfits):
     Calculates the Quality_index of the (Gaussian-kernel) fitted spike data. Cell-specific and stimulus-specific,
     but of nr-of-trials length
 
+    Parameters
+    ----------
+    kernelfits : np.ndarray
+        The convolved binary signals
+
     Returns
-    The QI value for the cells-response to this stimulus
+    -------
+    float
+        The quality index
     """
     return np.var(np.mean(kernelfits, 0)) / np.mean(np.var(kernelfits, 0))
 
@@ -164,8 +284,17 @@ def kernel_template(width=0.0100, sampling_freq=17852.767845719834):
     create Gaussian kernel by providing the width (FWHM) value. According to wiki, this is approx. 2.355*std of dist.
     width=given in seconds, converted internally in sampling points.
 
+    Parameters
+    ----------
+    width : float
+        The width of the Gaussian kernel in seconds
+    sampling_freq : float
+        The sampling frequency
+
     Returns
-    Gaussian kernel
+    -------
+    np.ndarray
+        The Gaussian kernel
     """
     fwhm = int((sampling_freq) * width)  # in points
 
@@ -182,6 +311,19 @@ def kernel_template(width=0.0100, sampling_freq=17852.767845719834):
 
 
 def reject_single_spikes(df):
+    """
+    Reject cells with single spikes or spikes only in one repeat.
+
+    Parameters
+    ----------
+    df : pl.DataFrame
+        The DataFrame with the binary signals
+
+    Returns
+    -------
+    pl.DataFrame
+        The DataFrame with the rejected cells removed
+    """
     unique_spikes = df.group_by("cell_index").count().filter(pl.col("count") == 1)
     unique_repeat = df.group_by("repeat").count().filter(pl.col("count") == 1)
     all_unique = np.concatenate(

@@ -1,7 +1,23 @@
-import numpy as np
-
-
 def sort(stimuli, cells, all_cells):
+    """
+    Sorts the stimuli and cells list. If cells is of length 1 and contains the string "all", it will be replaced by all_cells.
+
+    Parameters
+    ----------
+    stimuli : list
+        List of lists of stimuli.
+    cells : list
+        List of lists of cells.
+    all_cells : np.ndarray
+        Array containing the integer indices of all cells.
+
+    Returns
+    -------
+    stimuli : list
+        List of lists of stimuli.
+    cells : list
+        List of lists of cells.
+    """
     nr_stimuli = len(stimuli)
     if len(cells) != len(stimuli):
         if len(cells) == 1:
