@@ -68,9 +68,6 @@ def stimulus_df():
     return widget
 
 
-plt.style.use("dark_background")
-
-
 class Explorer:
     def __init__(self):
         self.ct = colour_template.Colour_template()
@@ -727,7 +724,7 @@ class Recording_explorer:
             "raster_plot": {
                 "func": partial(
                     spiketrain_plots.spikes_and_trace,
-                    line_colour=["white", "red"],
+                    line_colour=["black", "red"],
                     single_psth=False,
                     height=800,
                     width=1500,
@@ -737,7 +734,7 @@ class Recording_explorer:
             "datashader_plot": {
                 "func": partial(
                     spiketrain_plots.whole_stimulus,
-                    cmap="gist_gray",
+                    cmap="Greys",
                     height=8,
                     width=15,
                 ),
