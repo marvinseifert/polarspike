@@ -56,18 +56,12 @@ class Table:
         self.update_filter_widget()
 
         self.stimulus_select.param.watch(
-            lambda event: self.filter_df(
-                self.stimulus_select.value,
-                self.recording_select.value,
-            ),
+            lambda event: self.apply_filters(),
             "value",
         )
 
         self.recording_select.param.watch(
-            lambda event: self.filter_df(
-                self.stimulus_select.value,
-                self.recording_select.value,
-            ),
+            lambda event: self.apply_filters(),
             "value",
         )
 
@@ -172,18 +166,6 @@ class Table:
 
         self.tabulator.value = filtered_df
 
-    def filter_df(self, stimulus, recording):
-        # Handle cases where lower bound is greater than upper bound
-
-        filtered_df = self.df
-
-        # Further filter based on stimulus_name if not 'All'
-        if stimulus != "All":
-            filtered_df = filtered_df[filtered_df["stimulus_name"] == stimulus]
-        if recording != "All":
-            filtered_df = filtered_df[filtered_df["recording"] == recording]
-
-        self.tabulator.value = filtered_df
 
     def get_filtered_df(self):
         return self.tabulator.value
