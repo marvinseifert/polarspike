@@ -89,6 +89,15 @@ class Colour_template:
         self.wavelengths = self.get_stimulus_wavelengths(name, sub_selection)
         return self.colour_to_markdown()
 
+    def unpick_stimulus(self):
+        """
+        Unpick the current stimulus
+        """
+        self.stimulus = None
+        self.colours = []
+        self.names = []
+        self.wavelengths = []
+
     def colour_to_markdown(self):
         """
         Display a selected colour template in a Markdown cell.
