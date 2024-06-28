@@ -128,7 +128,6 @@ class Recording:
         stimulus_df="stimulus_df",
         cell_df="spikes_df",
         carry=None,
-        derandomize=False,
     ):
         """
         This function returns a dataframe that contains the spikes that were recorded during the presentation
@@ -158,9 +157,7 @@ class Recording:
             Name of the cell dataframe that shall be used.
         carry : list
             List of columns that shall be carried over from the cell_df to the final spikes df
-        derandomize : boolean
-            If the spikes shall be derandomized. Needs a column "random_order" in the cell_df containing a look up table
-            with the information about how to derandomize.
+
 
         Returns
         -------
