@@ -50,7 +50,7 @@ class Table:
             ),
             self.tabulator,
             width=width,
-            height=height,
+            height=height + 300,
         )
         # Initial setup
         self.update_filter_widget()
@@ -165,7 +165,6 @@ class Table:
             self.query_error.object = "Invalid Variable, use '' for strings"
 
         self.tabulator.value = filtered_df
-
 
     def get_filtered_df(self):
         return self.tabulator.value
