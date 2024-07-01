@@ -337,7 +337,7 @@ class Recording:
         spikes_numpy = spiketrains.collect_as_arrays(
             spikes, "cell_index", "times_triggered", "spikes"
         )
-        return spikes_numpy
+        return spikes_numpy["cell_index"].to_numpy(), spikes_numpy["spikes"].to_numpy()
 
     def get_spikes_df(
         self,
