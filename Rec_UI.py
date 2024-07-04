@@ -1184,7 +1184,7 @@ class Recording_explorer:
             y=self.stat_y_input.value,
             color=self.stats_colour_column.value,
         )
-        fig.update_layout(template="scatter_template_jupyter")
+        fig.update_layout(template="scatter_template")
         if self.square_plot_radio.value == 1:
             fig.update_layout(height=800, width=800)
 
@@ -1267,7 +1267,7 @@ class Recording_explorer:
 
         elif action_type == "raster_plot":
             fig = func(
-                spikes,
+                df=spikes,
                 indices=self.stimulus_trace_ct.objects[0][0].value,
                 bin_size=self.bin_size_input.value,
             )
