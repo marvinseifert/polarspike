@@ -28,12 +28,12 @@ def psth(df, bin_size=0.05, start=0, end=None):
 
 
 def psth_by_index(
-        df,
-        bin_size=0.05,
-        index="cell_index",
-        to_bin="times_triggered",
-        return_idx=False,
-        window_end=None,
+    df,
+    bin_size=0.05,
+    index="cell_index",
+    to_bin="times_triggered",
+    return_idx=False,
+    window_end=None,
 ):
     try:
         df = pl.from_pandas(df)
@@ -41,13 +41,13 @@ def psth_by_index(
         pass
     if window_end is None:
         window_end = df.max()[to_bin][0]
-    cell_spikes = df.group_by(index).agg(to_bin)[[index, to_bin]].to_numpy()
+    cell_spikes = df.group_by(index).agg(to_bin)[index + [to_bin]].to_numpy()
 
     bins = np.arange(0, window_end, bin_size)
     histograms = np.zeros((cell_spikes[:, 1].shape[0], bins.shape[0] - 1))
-    for idx, spiketrain in enumerate(cell_spikes[:, 1]):
+    for idx, spiketrain in enumerate(cell_spikes[:, -1]):
         histograms[idx], _ = np.histogram(spiketrain, bins=bins)
     if not return_idx:
         return histograms, bins
     else:
-        return histograms, bins, cell_spikes[:, 0]
+        return histograms, bins, cell_spikes[:, : len(index)]
