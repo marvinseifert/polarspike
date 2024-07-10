@@ -941,7 +941,7 @@ class Recording_explorer:
 
     def plot_recording_spike_trains(self):
         fig, ax = recording_overview.spiketrains_from_file(
-            self.recording.parquet_path, self.recording.sampling_freq, cmap="Grey"
+            self.recording.parquet_path, self.recording.sampling_freq, cmap="Greys"
         )
         fig = recording_overview.add_stimulus_df(fig, self.recording.stimulus_df)
         fig.set_size_inches(10, 8)
@@ -1028,7 +1028,7 @@ class Recording_explorer:
         fig, ax = recording_overview.spiketrains_from_file(
             recording.parquet_path,
             recording.sampling_freq,
-            cmap="Grey",
+            cmap="Greys",
         )
         fig = recording_overview.add_stimulus_df(fig, recording.stimulus_df)
         fig.set_size_inches(10, 8)
