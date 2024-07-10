@@ -143,7 +143,7 @@ class Extractor:
         df = pl.from_arrow(loaded_array)
         df.lazy().sink_parquet(str(self.file.with_suffix(".parquet")))
 
-    def load(self, stimulus=True, recording_name=None, pandas=False):
+    def load(self, stimulus=True, recording_name=None, pandas=True):
         """
         Load the spikes from the parquet file in lazy mode.
 
