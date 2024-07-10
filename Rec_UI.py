@@ -2,12 +2,9 @@ from polarspike import Overview
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import holoviews as hv
-import panel as pn
 from polarspike import stimulus_trace
 import plotly.graph_objects as go
 import param
-from bokeh.plotting import figure, curdoc
 from bokeh.models import ColumnDataSource
 import time
 from polarspike.backbone import SelectFilesButton
@@ -20,21 +17,15 @@ from pathlib import Path
 from polarspike import colour_template
 from polarspike import stimulus_spikes
 from polarspike import binarizer, quality_tests
-from math import pi
-from bokeh.palettes import Category20c, Category20
-from bokeh.plotting import figure, output_file, save
-from bokeh.transform import cumsum
+from polarspike import Opsins
+from polarspike import tuning_curves
+from bokeh.plotting import figure
 import panel as pn
-import matplotlib
-from polarspike.grid import Table
-from polarspike import plotly_templates, grid, waveforms
+from polarspike import grid
 from functools import partial
-from panel.theme import Bootstrap, Material, Native
 from bokeh.io import export_png
 import plotly.express as px
 import polars as pl
-from bokeh.plotting import show, curdoc
-from IPython.display import display
 
 
 def stimulus_df():
@@ -740,6 +731,10 @@ class Recording_explorer:
                 ),
                 "type": "datashader_plot",
             },
+            "tuning_curves": {
+                "type": "tuning_curves",
+                "func": partial(tuning_curves.for_ui, bin_size=0.05),
+            },
             "waveforms": {"type": "waveforms"},
             "dataframe": {"type": "dataframe"},
             "quality_tests": {"type": "quality_tests"},
@@ -855,6 +850,24 @@ class Recording_explorer:
             "Square plot",
             self.square_plot_radio,
             self.plot_stats_button,
+        )
+        self.animal_tuning_input = pn.widgets.Select(
+            name="Opsin templates",
+            options=["None"]
+            + [item for item in Opsins.Opsin_template.opsins_types.keys()],
+            width=250,
+        )
+        self.tuning_window_input = pn.widgets.FloatInput(
+            name="Window", value=0.5, width=250
+        )
+
+        self.tuning_curves_ct = pn.Column(
+            "Tuning Curves Menu",
+            self.tuning_window_input,
+            self.animal_tuning_input,
+            self.colour_selector,
+            "Plot",
+            self.action_run_button,
         )
 
         # Main
@@ -1217,6 +1230,9 @@ class Recording_explorer:
             ].columns.tolist()
             self.action_column.clear()
             self.action_column.append(self.plotly_stats_ct)
+        if type == "tuning_curves":
+            self.action_column.clear()
+            self.action_column.append(self.tuning_curves_ct)
 
     def trigger_action(self, event):
         action = self.action_menu.clicked
@@ -1235,11 +1251,10 @@ class Recording_explorer:
             .stimulus_index.unique()
             .tolist()
         )
-        spikes = self.recordings_object.get_spikes_df("cell_selection")
-        if len(spikes) == 0:
-            return
-
         if action_type == "datashader_plot":
+            spikes = self.recordings_object.get_spikes_df("cell_selection")
+            if len(spikes) == 0:
+                return
             fig = func(
                 df=spikes,
                 indices=self.stimulus_trace_ct.objects[0][0].value,
@@ -1266,6 +1281,9 @@ class Recording_explorer:
                 self.output.objects = [fig]
 
         elif action_type == "raster_plot":
+            spikes = self.recordings_object.get_spikes_df("cell_selection")
+            if len(spikes) == 0:
+                return
             fig = func(
                 df=spikes,
                 indices=self.stimulus_trace_ct.objects[0][0].value,
@@ -1276,6 +1294,26 @@ class Recording_explorer:
                 stimulus_spikes.mean_trigger_times(
                     self.recordings_object.dataframes["stimulus_df"], stimulus_indices
                 ),
+            )
+            self.output.clear()
+            self.output.objects = [fig]
+
+        elif action_type == "tuning_curves":
+            spikes = self.recordings_object.get_spikes_df(
+                "cell_selection", pandas=False
+            )
+
+            if len(spikes) == 0:
+                return
+            flash_duration = stimulus_spikes.mean_trigger_times(
+                self.recordings_object.dataframes["stimulus_df"], stimulus_indices
+            )
+            fig = func(
+                spikes=spikes,
+                window=self.tuning_window_input.value,
+                mean_trigger=flash_duration,
+                colour_name=self.colour_selector.value,
+                animal_name=[self.animal_tuning_input.value],
             )
             self.output.clear()
             self.output.objects = [fig]
