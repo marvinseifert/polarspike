@@ -1234,8 +1234,8 @@ class Recording_s(Recording):
     def dummy_objects(self, recordings):
         self.synchronize_dataframes()
         paths = []
-        for recording in recordings:
-            recording = self.recordings[recording]
+        for recording_name in recordings:
+            recording = self.recordings[recording_name]
             new_rec = Recording(
                 recording.parquet_path,
                 "",
