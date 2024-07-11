@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 
 
 def for_ui(spikes, bin_size, mean_trigger, window, colour_name, animal_name):
-    if animal_name is None:
+    if animal_name[0] == "None":
         use_opsin = False
     else:
         use_opsin = True
