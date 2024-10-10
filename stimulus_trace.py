@@ -79,6 +79,7 @@ class Stimulus_Extractor:
             self.channel = pd.DataFrame(
                 np.fromfile(stimulus_file, dtype=np.int16), columns=["Voltage"]
             )
+            self.channel = self.channel[1::2]
             self.sampling_frequency = freq
 
         self.max_Voltage = self.channel.Voltage.max(axis=0)

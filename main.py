@@ -1,25 +1,30 @@
-from Neuroelectropy import electrical_imaging as elpy
 from polarspike import (
     Overview,
-    spiketrain_plots,
     colour_template,
-    stimulus_spikes,
-    recording_overview,
+    spiketrain_plots,
+    Opsins,
+    spiketrains,
+    histograms,
 )
-
-from bokeh.plotting import figure, show
+from group_pca import GroupPCA
 import panel as pn
-import polars as pl
-import numpy as np
 
-pn.extension()
+pn.extension("tabulator")
+from bokeh.io import show
+from importlib import reload
+import numpy as np
+import polars as pl
+from sklearn.decomposition import PCA, FactorAnalysis
+import matplotlib.pyplot as plt
+from sklearn.mixture import GaussianMixture
+
+# Import normalizer
+from sklearn.preprocessing import StandardScaler
 
 if __name__ == "__main__":
-    recordings = Overview.Recording_s.load_from_single(
-        r"B:\Marvin\combined_analysis",
-        "test_analysis",
-        r"B:\Marvin\Zebrafish_20_11_23\ks_sorted\overview",
+    # %%
+    recording = Overview.Recording.load(
+        r"A:\Marvin\chicken_19_07_2024\Phase_00\overview"
     )
-    recordings.add_from_saved("B:\Marvin\Zebrafish_21_11_23\ks_sorted\overview")
-    recordings.dataframes["test"] = recordings.spikes_df.query("stimulus_name == 'FFF'")
-    spikes = recordings.get_spikes_triggered([["all"]], [[[0]]], [[["all"]]])
+    clusters = np.load(r"A:\Marvin\chicken_19_07_2024\Phase_00\rf_clusters.npy")
+    recording.spikes_df

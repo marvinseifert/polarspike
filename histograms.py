@@ -45,9 +45,19 @@ def psth_by_index(
 
     bins = np.arange(0, window_end, bin_size)
     histograms = np.zeros((cell_spikes[:, 1].shape[0], bins.shape[0] - 1))
+    return_index = []
     for idx, spiketrain in enumerate(cell_spikes[:, -1]):
         histograms[idx], _ = np.histogram(spiketrain, bins=bins)
+        return_index.append(cell_spikes[idx, : len(index)])
     if not return_idx:
         return histograms, bins
     else:
-        return histograms, bins, cell_spikes[:, : len(index)]
+        if len(index) == 1:
+            return_index = np.array(return_index).reshape(-1, 1)
+        else:
+            return_index = np.array(return_index)
+        return (
+            histograms,
+            bins,
+            return_index,
+        )
