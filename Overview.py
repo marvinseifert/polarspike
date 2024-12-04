@@ -7,6 +7,7 @@ Created on Thu Jul 15 11:23:06 2021
 
 import contextlib
 import pathlib
+from importlib.resources import files
 
 import pandas as pd
 import numpy as np
@@ -15,18 +16,13 @@ from functools import partial
 import traceback
 import pickle
 
-from polarspike import stimulus_dfs
-from polarspike import stimulus_spikes
+import stimulus_dfs
+import stimulus_spikes
 import polars as pl
-from polarspike.grid import Table
-from polarspike import filter_stimulus
+from grid import Table
+import filter_stimulus
 from dataclasses import dataclass, field
-from polarspike import (
-    cells_and_stimuli,
-    stimulus_trace,
-    recordings_stimuli_cells,
-    spiketrains,
-)
+import cells_and_stimuli, stimulus_trace, recordings_stimuli_cells, spiketrains
 from threading import Thread
 import warnings
 from pathlib import Path
@@ -1047,52 +1043,150 @@ class Recording_s(Recording):
                 "The cell dataframe does not contain the required columns. Accidentally provided a stimulus dataframe?"
             )
             return
+        input_split = input_df.partition_by("recording", as_dict=True, include_key=True)
+
         recordings = [
-            [rec] for rec in input_df.unique("recording")["recording"].to_list()
+            rec for rec in input_df.unique("recording")["recording"].to_list()
         ]
-        input_dict = input_df.partition_by("recording", as_dict=True)
-        input_df = [input_dict[rec[0],] for rec in recordings]
-        input_list = []
-        for df in input_df:
-            rec_input = []
-            rec_input.append(df.unique("recording")["recording"].to_list())
-            stim_list = [
-                [stim_id]
-                for stim_id in df.unique("stimulus_index")["stimulus_index"].to_list()
-            ]
-            rec_input.append(stim_list)
-            stim_df = df.partition_by("stimulus_index")
-            cell_list = [df["cell_index"].to_list() for df in stim_df]
-            rec_input.append(cell_list)
-            input_list.append(rec_input)
-
-        nr_cpus = mp.cpu_count()
-        if nr_cpus > len(recordings):
-            nr_cpus = len(recordings)
-
-        self.synchronize_dataframes()
-
-        paths = self.dummy_objects([rec[0] for rec in recordings])
-
-        with mp.Pool(nr_cpus) as pool:
-            # Pass all required arguments to the worker function
-            dfs = pool.map(
-                spike_load_worker,
-                [
-                    (
-                        path,
-                        rec_input[1],
-                        rec_input[2],
-                        time,
-                        waveforms,
-                        cell_df,
-                        stimulus_df,
-                    )
-                    for path, rec_input in zip(paths, input_list)
-                ],
+        filter_dict = {}
+        for rec in recordings:
+            unique_stimuli = (
+                input_split[(rec),].unique("stimulus_index")["stimulus_index"].to_list()
             )
+            filter_dict[rec] = {}
+            for unique_stimulus in unique_stimuli:
+                # Find the correct start and end times for the stimulus
+                start_frame = self.stimulus_df.query(
+                    "stimulus_index == @unique_stimulus & recording == @rec"
+                )["begin_fr"].values[0]
+                end_frame = self.stimulus_df.query(
+                    "stimulus_index == @unique_stimulus & recording == @rec"
+                )["end_fr"].values[0]
+                trigger = self.stimulus_df.query(
+                    "stimulus_index == @unique_stimulus & recording == @rec"
+                )["trigger_fr_relative"].values
+                stim_repeat_logic = self.stimulus_df.query(
+                    "stimulus_index == @unique_stimulus & recording == @rec"
+                )["stimulus_repeat_logic"].values
 
-        df = pl.concat(dfs)
+                filter_dict[rec][unique_stimulus] = dict(
+                    start=start_frame,
+                    end=end_frame,
+                    trigger=trigger,
+                    stim_repeat_logic=stim_repeat_logic,
+                    cell_indices=input_split[(rec),]
+                    .filter(pl.col("stimulus_index") == unique_stimulus)["cell_index"]
+                    .unique()
+                    .to_list(),
+                )
+
+        files_dict = {rec: self.recordings[rec].parquet_path for rec in recordings}
+
+        combined_lazy_dfs = {}
+
+        for key, path in files_dict.items():
+            filters = filter_dict.get(key, {})
+            filtered_dfs = []
+            for stim_id, filt in filters.items():
+                # Apply filter and add a 'filter_id' column to track the filter origin
+                df_filtered = (
+                    pl.scan_parquet(path)
+                    .filter(
+                        (pl.col("times") > filt["start"])
+                        & (pl.col("times") <= filt["end"])
+                        & pl.col("cell_index").is_in(filt["cell_indices"])
+                    )
+                    .with_columns(pl.lit(stim_id).alias("stimulus_index"))
+                    .with_columns(pl.lit(key).alias("recording"))
+                )
+                df_filtered = df_filtered.with_columns(times_relative=pl.lit(0))
+                df_filtered = df_filtered.with_columns(trigger=pl.lit(0))
+                df_filtered = df_filtered.with_columns(repeat=pl.lit(0))
+                df_filtered = df_filtered.with_columns(times_triggered=pl.lit(0))
+                # Add times relative to the stimulus onset
+                df_filtered = df_filtered.with_columns(
+                    times_relative=pl.col("times") - filt["start"]
+                )
+                rel_trigger = stimulus_spikes.map_triggers(
+                    np.arange(filt["trigger"][0].shape[0]),
+                    filt["stim_repeat_logic"][0],
+                )
+                trigger_sub = stimulus_spikes.sub_trigger(
+                    filt["trigger"][0],
+                    rel_trigger,
+                    filt["stim_repeat_logic"][0],
+                )
+                trigger_start = filt["trigger"][0]
+                trigger_end = filt["trigger"][0][1:]
+
+                repeat = 0
+                for trigg_id, rel_t, sub_t in zip(
+                    range(trigger_end.shape[0]),
+                    rel_trigger,
+                    trigger_sub,
+                ):
+                    df_filtered = df_filtered.with_columns(
+                        times_triggered=pl.when(
+                            pl.col("times_relative") > trigger_start[trigg_id],
+                            pl.col("times_relative") <= trigger_end[trigg_id],
+                        )
+                        .then(pl.col("times_relative") - sub_t)
+                        .otherwise(pl.col("times_triggered"))
+                    )
+                    df_filtered = df_filtered.with_columns(
+                        trigger=pl.when(
+                            pl.col("times_relative") > trigger_start[trigg_id],
+                            pl.col("times_relative") <= trigger_end[trigg_id],
+                        )
+                        .then(rel_t)
+                        .otherwise(pl.col("trigger"))
+                    )
+                    df_filtered = df_filtered.with_columns(
+                        repeat=pl.when(
+                            pl.col("times_relative") > trigger_start[trigg_id],
+                            pl.col("times_relative") <= trigger_end[trigg_id],
+                        )
+                        .then(repeat)
+                        .otherwise(pl.col("repeat"))
+                    )
+                    if rel_t == filt["stim_repeat_logic"] - 1:
+                        repeat += 1
+                if time == "seconds":
+                    df_filtered = df_filtered.with_columns(
+                        times=pl.col("times").truediv(
+                            self.recordings[key].sampling_freq
+                        )
+                    )
+                    df_filtered = df_filtered.with_columns(
+                        times_relative=pl.col("times_relative").truediv(
+                            self.recordings[key].sampling_freq
+                        )
+                    )
+                    df_filtered = df_filtered.with_columns(
+                        times_triggered=pl.col("times_triggered").truediv(
+                            self.recordings[key].sampling_freq
+                        )
+                    )
+                filtered_dfs.append(df_filtered)
+
+            if filtered_dfs:
+                # Concatenate all filtered DataFrames for the current file
+                combined_df = pl.concat(filtered_dfs, how="vertical").unique()
+                combined_lazy_dfs[key] = combined_df
+            else:
+                # If no filters are defined for the file, assign an empty DataFrame
+                combined_lazy_dfs[key] = pl.LazyFrame(schema=pl.Schema([]))
+
+        # %% Collect all filtered DataFrames using collect_all
+        # Prepare a list of LazyFrames to collect
+        lazy_frames = list(combined_lazy_dfs.values())
+
+        # Collect all LazyFrames in parallel
+        df = pl.concat(pl.collect_all(lazy_frames))
+
+        df = df.sort(
+            ["cell_index", "repeat", "stimulus_index", "trigger", "times_triggered"]
+        )
 
         if carry:
             df = df.sort(["recording", "cell_index", "stimulus_index"])
@@ -1269,8 +1363,8 @@ class Recording_s(Recording):
                 recording.dataframes,
                 recording.sampling_freq,
             )
-            new_rec.save(f"{self.store_path}\\{recording.name}")
-            paths.append(f"{self.store_path}\\{recording.name}")
+            new_rec.save(f"{self.store_path}//{recording.name}")
+            paths.append(f"{self.store_path}//{recording.name}")
         return paths
 
     def delete_df(self, df_name):
