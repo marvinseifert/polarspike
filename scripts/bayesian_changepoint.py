@@ -1,11 +1,22 @@
-from polarspike import Overview, stimulus_dfs, stimulus_spikes, colour_template
+import pandas as pd
+from polarspike import (
+    Overview,
+    stimulus_dfs,
+    stimulus_spikes,
+    colour_template,
+    bayesian,
+)
 import numpy as np
 import polars as pl
 import matplotlib.pyplot as plt
+from sklearn.linear_model import RANSACRegressor
+import polars.selectors as cs
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.pipeline import make_pipeline
 
 # %% global variables
-window_neg = -0.1
-window_pos = 0.3
+window_neg = -0.2
+window_pos = 0.2
 shuffle_window = 5
 bin_width = 0.001
 bins = np.arange(window_neg, window_pos + bin_width, bin_width)
@@ -120,6 +131,35 @@ def plot_cell(result_df: pl.DataFrame, cum_bin_df: pl.DataFrame, triggers: list 
 # %%
 all_results_df = pl.read_parquet(r"D:\chicken_analysis\all_results_csteps.parquet")
 binned_spikes = pl.read_parquet(r"D:\chicken_analysis\binned_spikes_csteps.parquet")
+# %%
+break_columns = [f"response_start_{trigger}" for trigger in range(20)]
+score_columns = [f"ssr_score_{trigger}" for trigger in range(20)]
+fastest_cells = (
+    all_results_df.group_by("recording", "cell_index")
+    .agg(pl.mean_horizontal(break_columns).alias("response_start"))
+    .explode("response_start")
+)
+fastest_cells = fastest_cells.with_columns(
+    (pl.col("response_start") * 0.001).alias("response_start")
+)
+consistent_cells = (
+    all_results_df.group_by("recording", "cell_index")
+    .agg(var=pl.concat_list(break_columns).list.std())
+    .explode("var")
+)
+linear_cells = (
+    all_results_df.group_by("recording", "cell_index")
+    .agg(score_mean=pl.concat_list(score_columns).list.mean())
+    .explode("score_mean")
+)
+# %% combine dfs
+all_results_stats = pl.concat(
+    [fastest_cells, consistent_cells, linear_cells], how="align"
+)
+# %%
+fig, ax = plt.subplots()
+ax.hist(fastest_cells["response_start"].to_numpy(), bins=100)
+fig.show()
 
 # %%
 sample_df = all_results_df.sample(10)
@@ -134,10 +174,10 @@ fig, ax = plot_cell(
 )
 fig.show()
 # %%
-cell_idx = 7
+cell_idx = [193]
+recording = ["chicken_30_08_2024_p0"]
 single_cell = binned_spikes.filter(
-    (pl.col("recording").is_in(sample_df[cell_idx]["recording"]))
-    & (pl.col("cell_index").is_in(sample_df[cell_idx]["cell_index"]))
+    (pl.col("recording").is_in(recording)) & (pl.col("cell_index").is_in(cell_idx))
 )
 recordings.dataframes["csteps_single"] = recordings.dataframes["csteps_filtered"].query(
     f"recording == '{single_cell['recording'][0]}' & cell_index == {single_cell['cell_index'][0]}"
@@ -148,17 +188,20 @@ single_cell_spikes = recordings.get_spikes_df(
 max_trigger = single_cell_spikes["trigger"].max()
 
 fig, ax = plot_cell(
-    sample_df[cell_idx],
+    all_results_df.filter(
+        (pl.col("recording").is_in(recording)) & (pl.col("cell_index").is_in(cell_idx))
+    ),
     binned_spikes.filter(
-        (pl.col("recording").is_in(sample_df[cell_idx]["recording"]))
-        & (pl.col("cell_index").is_in(sample_df[cell_idx]["cell_index"]))
+        (pl.col("recording").is_in(recording)) & (pl.col("cell_index").is_in(cell_idx))
     ),
     triggers=np.arange(0, 20, 2).tolist(),
 )
 fig.show()
 
 # %% median start point
-single_cell_results = sample_df[cell_idx]
+single_cell_results = all_results_df.filter(
+    (pl.col("recording") == recording[0]) & (pl.col("cell_index") == cell_idx[0])
+)
 response_starts = []
 response_starts.extend(
     bins[
@@ -210,169 +253,6 @@ fig.show()
 
 
 # %%
-def changepoint_posterior(
-    event_times, lambda1, lambda2, tau_guess=None, prior_std=None
-):
-    """
-    Compute the posterior distribution over changepoint times given the event times,
-    using a Gaussian prior centered at tau_guess if provided.
-
-    Parameters:
-      event_times : array-like
-          Sorted event times (e.g. when events occurred).
-      lambda1 : float
-          Rate parameter of the first process.
-      lambda2 : float
-          Rate parameter of the second process.
-      tau_guess : float, optional
-          A prior guess for the changepoint time.
-      prior_std : float, optional
-          The standard deviation of the Gaussian prior. Lower values imply higher confidence
-          in the guess. If either tau_guess or prior_std is None, a uniform prior is used.
-
-    Returns:
-      candidate_times : np.ndarray
-          Array of candidate changepoint times (each candidate is the time after an event).
-      posterior : np.ndarray
-          Posterior probability for each candidate changepoint.
-    """
-    # Ensure event_times is a numpy array.
-    event_times = np.array(event_times)
-
-    # Assume the process starts at time 0.
-    full_times = np.concatenate(([0.0], event_times))
-    dt = np.diff(full_times)  # interarrival times
-    N = len(dt)  # total number of events
-
-    # Cumulative event times: t_i = sum_{j=0}^{i-1} dt[j]
-    cum_t = np.cumsum(dt)
-
-    # Candidate changepoints: changepoint is assumed to occur immediately after an event.
-    indices = np.arange(1, N)  # candidate indices: 1, 2, ..., N-1
-    candidate_times = cum_t[:-1]  # candidate changepoint times
-
-    # Compute log likelihoods:
-    # For the first segment (first i events): L1 = lambda1^i * exp(-lambda1 * t_candidate)
-    # For the second segment (remaining events): L2 = lambda2^(N-i) * exp(-lambda2 * (t_N - t_candidate))
-    L1_log = indices * np.log(lambda1) - lambda1 * candidate_times
-    L2_log = (N - indices) * np.log(lambda2) - lambda2 * (cum_t[-1] - candidate_times)
-
-    log_likelihood = L1_log + L2_log
-
-    # Compute likelihood in a numerically stable way.
-    max_log = np.max(log_likelihood)
-    likelihood = np.exp(log_likelihood - max_log)
-
-    # Incorporate the prior:
-    if tau_guess is None or prior_std is None:
-        # Uniform prior over candidate changepoints.
-        prior = np.ones_like(candidate_times)
-    else:
-        # Gaussian prior centered at tau_guess with standard deviation prior_std.
-        prior = np.exp(-0.5 * ((candidate_times - tau_guess) / prior_std) ** 2)
-
-    # The unnormalized posterior is likelihood times prior.
-    unnormalized_posterior = likelihood * prior
-
-    # Normalize to sum to 1.
-    posterior = unnormalized_posterior / np.sum(unnormalized_posterior)
-
-    return candidate_times, posterior
-
-
-def credible_interval(candidate_times, posterior, credibility=0.95):
-    """
-    Compute a credible interval (e.g., 95%) from the posterior distribution.
-
-    Parameters:
-      candidate_times : np.ndarray
-          Array of candidate changepoint times.
-      posterior : np.ndarray
-          Posterior probabilities corresponding to candidate_times.
-      credibility : float (default 0.95)
-          The desired credibility level.
-
-    Returns:
-      lower, upper : floats
-          The lower and upper bounds of the credible interval.
-    """
-    cdf = np.cumsum(posterior)
-    lower = candidate_times[np.searchsorted(cdf, (1 - credibility) / 2)]
-    upper = candidate_times[np.searchsorted(cdf, 1 - (1 - credibility) / 2)]
-    return lower, upper
-
-
-def detect_changepoint_single_rate(event_times, lambda2, epsilon=1e-6, threshold=0.9):
-    """
-    Detects the changepoint in a stream of events when the first process has an
-    extremely low rate (approximated by epsilon) and the second process has rate lambda2.
-
-    For each interarrival interval, we compute the probability that it came from the
-    lambda2 process:
-
-        f1(dt) = epsilon * exp(-epsilon * dt)   (background process)
-        f2(dt) = lambda2 * exp(-lambda2 * dt)       (lambda2 process)
-
-    Assuming equal prior probability for either hypothesis for each interval,
-    the probability that the interval dt comes from lambda2 is:
-
-        p = f2(dt) / (f1(dt) + f2(dt))
-
-    The function then identifies the first event (based on the interarrival interval)
-    for which p exceeds the given threshold.
-
-    Parameters:
-        event_times : array-like
-            Sorted event times (e.g. when events occurred).
-        lambda2 : float
-            Rate of the second process.
-        epsilon : float, optional
-            A very small rate to represent the nearly zero rate of the first process.
-            Default is 1e-6.
-        threshold : float, optional
-            The probability threshold to decide that an event is likely from the lambda2 process.
-            Default is 0.9 (i.e. 90% chance).
-
-    Returns:
-        changepoint_time : float or None
-            The time of the first event for which the probability that it comes from lambda2
-            exceeds the threshold. Returns None if no such event is found.
-        p_lambda2 : np.ndarray
-            The array of computed probabilities for each interarrival interval.
-    """
-    event_times = np.asarray(event_times)
-
-    # Include t = 0 as the start time.
-    full_times = np.concatenate(([0.0], event_times))
-
-    # Compute interarrival times.
-    dt = np.diff(full_times)
-
-    # Compute probability densities for each interval.
-    f1 = epsilon * np.exp(
-        -epsilon * dt
-    )  # likelihood under the low-rate (background) model
-    f2 = lambda2 * np.exp(-lambda2 * dt)  # likelihood under the lambda2 model
-
-    # Compute the probability that each interval comes from lambda2.
-    p_lambda2 = f2 / (f1 + f2)
-
-    # Identify the first interval where p_lambda2 exceeds the threshold.
-    indices = np.where(p_lambda2 > threshold)[0]
-
-    if len(indices) == 0:
-        # No interval met the threshold.
-        return None, p_lambda2
-    else:
-        # The changepoint is assumed to occur immediately after this interval.
-        changepoint_index = indices[0]
-        changepoint_time = full_times[
-            changepoint_index + 1
-        ]  # +1 because full_times includes t=0
-        return changepoint_time, p_lambda2
-
-
-# %%
 CT = colour_template.Colour_template()
 CT.pick_stimulus("Contrast_Step")
 # %%
@@ -387,8 +267,9 @@ for trigger_idx, trigger in enumerate(cum_triggers):
         .alias(f"{trigger_idx}_fs")
     )
 
-# %%
-spikes_fs = spikes_fs.filter(pl.col("repeat") == 1)
+
+rep = 0
+spikes_fs = spikes_fs.filter(pl.col("repeat") == rep)
 # %%
 fig_spikes, spikes_axes = plt.subplots(nrows=10, ncols=2, figsize=(15, 20), sharey=True)
 fig_cred, cred_axes = plt.subplots(nrows=10, ncols=2, figsize=(15, 20), sharey=True)
@@ -403,7 +284,9 @@ for test_trigger in range(20):
         .sort(f"{test_trigger}_fs")[f"{test_trigger}_fs"]
         .to_numpy()
     )
-    # %%
+    if len(example_times) < 3:
+        continue
+    #
     spikes_axes[row, col].scatter(
         example_times,
         np.ones_like(example_times),
@@ -419,20 +302,27 @@ for test_trigger in range(20):
     )
 
     # %%
-    if slopes_before[test_trigger] > 0:
-        candidate_times, posterior = changepoint_posterior(
-            example_times,
-            slopes_before[test_trigger] * 1000,
-            slopes_after[test_trigger] * 1000,
-            tau_guess=cum_triggers[test_trigger] + response_starts[test_trigger][0],
-            prior_std=0.1,
-        )
-        credibility_borders = credible_interval(candidate_times, posterior)
+    if not np.all(example_times > [cum_triggers[test_trigger]]):
+        if slopes_before[test_trigger] > 0:
+            candidate_times, posterior = bayesian.changepoint_posterior(
+                example_times,
+                slopes_before[test_trigger] * 1000,
+                slopes_after[test_trigger] * 1000,
+                tau_guess=cum_triggers[test_trigger] + median_response_start,
+                prior_std=0.01,
+            )
+            credibility_borders = bayesian.credible_interval(candidate_times, posterior)
+        else:
+            changepoint_time, posterior = bayesian.detect_changepoint_single_rate(
+                example_times, slopes_after[test_trigger]
+            )
+            candidate_times = example_times
     else:
-        changepoint_time, posterior = detect_changepoint_single_rate(
+        candidate_times = np.array([example_times[0]])
+        changepoint_time, _ = bayesian.detect_changepoint_single_rate(
             example_times, slopes_after[test_trigger]
         )
-        candidate_times = example_times
+        posterior = np.array([1])
 
     # %% plot posterior
 
@@ -444,8 +334,12 @@ for test_trigger in range(20):
         f"change_point = {candidate_times[np.argmax(posterior)]:.3f}",
         (candidate_times[np.argmax(posterior)], np.max(posterior)),
     )
-    cred_axes[row, col].axvline(0 + cum_triggers[test_trigger], c="blue")
-    if slopes_before[test_trigger] > 0:
+    cred_axes[row, col].axvline(
+        cum_triggers[test_trigger] + response_starts[test_trigger][0], c="blue"
+    )
+    if slopes_before[test_trigger] > 0 and not np.all(
+        example_times > [cum_triggers[test_trigger]]
+    ):
         cred_axes[row, col].axvline(credibility_borders[0], c="green")
         cred_axes[row, col].axvline(credibility_borders[1], c="green")
     cred_axes[row, col].set_xlim(
@@ -461,8 +355,8 @@ for test_trigger in range(20):
         row += 1
 
 
-fig_spikes.savefig(r"D:\chicken_analysis\first_spike.png")
-fig_cred.savefig(r"D:\chicken_analysis\changepoint_example.png")
+fig_spikes.savefig(rf"D:\chicken_analysis\first_spike_repeat{rep}.png")
+fig_cred.savefig(rf"D:\chicken_analysis\changepoint_example_repeat{rep}.png")
 
 # %%
 fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(15, 10), sharey=True)
@@ -472,10 +366,22 @@ ax[0].set_title("On time")
 ax[1].set_title("Off time")
 ax[0].set_ylim([0, 0.1])
 fig.show()
-# %%
+
+# %% plotting
 fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(15, 10), sharey=True)
 ax[0].scatter(np.arange(0, 10), on_off_times[:, 0])
+# plot the regression line
+model = make_pipeline(PolynomialFeatures((1, 2)), RANSACRegressor(random_state=0))
+model.fit(np.arange(0, 10).reshape(-1, 1), on_off_times[:, 0])
+ax[0].plot(
+    np.arange(0, 10), model.predict(np.arange(0, 10).reshape(-1, 1)), color="red"
+)
 ax[1].scatter(np.arange(0, 10), on_off_times[:, 1])
+model = make_pipeline(PolynomialFeatures((1, 2)), RANSACRegressor(random_state=0))
+model.fit(np.arange(0, 10).reshape(-1, 1), on_off_times[:, 1])
+ax[1].plot(
+    np.arange(0, 10), model.predict(np.arange(0, 10).reshape(-1, 1)), color="red"
+)
 ax[0].set_ylim([0, 0.1])
 fig.show()
 
@@ -506,7 +412,7 @@ def generate_poisson_spike_train(segments):
 
 
 # %%
-test_trigger = 2
+test_trigger = 0
 breaks = (
     single_cell_results.select(f"breaks_{test_trigger}")[f"breaks_{test_trigger}"]
     .list.to_array(1)
@@ -519,7 +425,6 @@ rates = (
     .to_numpy()
     .flatten()
     * 1000
-    / 3
 )
 rates[rates < 0] = 0
 segments = [(breaks[i], breaks[i + 1], rates[i]) for i in range(len(breaks) - 1)]
@@ -551,31 +456,32 @@ ax[1].plot(bins[:-1], psth_cell, color="black")
 fig.show()
 
 # %% plot isi difference
-isi_real = np.diff(
-    spikes_fs_relative.select(pl.col(f"{test_trigger}_fs"))[
-        f"{test_trigger}_fs"
-    ].to_numpy()
-)
+isi_real = np.diff(spikes_fs_relative[f"{test_trigger}_fs"].to_numpy())
 
 # %%
 isis = []
+spiketimes_generated = []
 for _ in range(1000):
-    isis.append(np.diff(generate_poisson_spike_train(segments)))
-isi_generated = np.mean(np.vstack(isis), axis=0)
+    spiketimes_generated.append(generate_poisson_spike_train(segments))
+    isis.append(np.diff(spiketimes_generated[-1]))
+
+
 # %%
 bins_isi = np.arange(window_neg, window_pos, 0.01)
 fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(15, 10), sharey=True)
 ax[0].hist(isi_real, bins=bins_isi, color="black", density=True)
-ax[1].hist(isi_generated, bins=bins_isi, color="red", density=True)
+ax[1].hist(isis[0], bins=bins_isi, color="red", density=True)
 fig.show()
 # %%
+isis_int = np.interp(spike_times, spiketimes_generated[0][:-1], isis[0])
 fig, ax = plt.subplots(nrows=2, ncols=1, figsize=(20, 10), sharey=True, sharex=True)
 ax[0].plot(
     spikes_fs_relative.select(pl.col(f"{test_trigger}_fs"))[
         f"{test_trigger}_fs"
     ].to_numpy()[:-1],
-    isi_real,color="black"
+    isi_real,
+    color="black",
 )
-ax[1].plot(spike_times[:-1], isi_generated, color="red")
+ax[1].plot(spike_times, isis_int, color="red")
 ax[0].set_xlim([window_neg, window_pos])
 fig.show()
