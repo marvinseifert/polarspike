@@ -1,3 +1,4 @@
+import pandas as pd
 from polarspike import (
     Overview,
     stimulus_spikes,
@@ -7,6 +8,7 @@ from polarspike import (
 import numpy as np
 import polars as pl
 import itertools
+import matplotlib.pyplot as plt
 
 # %%
 window_neg = -0.2
@@ -213,12 +215,7 @@ binned_spikes = pl.scan_parquet(r"D:\chicken_analysis\binned_spikes.parquet")
 recordings = Overview.Recording_s.load(r"A:\Marvin\fff_clustering\records")
 mean_trigger_times = stimulus_spikes.mean_trigger_times(recordings.stimulus_df, [12])
 cum_triggers = np.hstack([np.array([0]), np.cumsum(mean_trigger_times)])
-unique_indices = (
-    pl.scan_parquet(paths["results_df"])
-    .select("cell_index", "recording")
-    .unique()
-    .collect()
-)
+unique_indices = results_df.select("cell_index", "recording").unique().collect()
 recordings = unique_indices["recording"].to_list()
 cell_indices = unique_indices["cell_index"].to_list()
 recs_n_cells = list(zip(recordings, cell_indices))
@@ -260,25 +257,73 @@ median_response = median_response.with_columns(
     median_starts=pl.concat_list(response_start_columns).list.median()
 )
 median_response = median_response.with_columns(
-    median_starts=pl.col("median_starts") * bin_width
+    median_starts=pl.col("median_starts") * bin_width + window_neg
 ).collect()
 
 # %%
 updated_results = pl.concat([results_df, median_response], how="align").lazy()
+dfs = []
+
 for trigger_idx, trigger in enumerate(cum_triggers):
-    updated_results = (
+    dfs.append(
         updated_results.explode(f"breaks_{trigger_idx}")
         .group_by(["recording", "cell_index"])
         .agg(
-            pl.col(f"breaks_{trigger_idx}"),
-            pl.col(f"breaks_{trigger_idx}").filter(
-                pl.col(f"breaks_{trigger_idx}")
-                > pl.col("median_starts").min().alias(f"break_{trigger_idx}")
-            ),
+            (pl.col(f"breaks_{trigger_idx}") > pl.col("median_starts"))
+            .arg_true()
+            .first()
+            .alias(f"break_idx_{trigger_idx}"),
         )
     )
 
-updated_results = updated_results.collect()
+break_positions_df = pl.concat(dfs, how="align")
+break_positions_df = break_positions_df.filter(
+    ~pl.all_horizontal(
+        pl.col(
+            [
+                f"break_idx_{trigger_idx}"
+                for trigger_idx, trigger in enumerate(cum_triggers)
+            ]
+        ).is_null()
+    )
+)
+updated_results = pl.concat([updated_results, break_positions_df], how="align")
+# %%
+dfs = []
+for trigger_idx, trigger in enumerate(cum_triggers):
+    dfs.append(
+        updated_results.explode(f"slopes_{trigger_idx}")
+        .group_by(["recording", "cell_index"])
+        .agg(
+            pl.col(f"slopes_{trigger_idx}")
+            .gather(pl.col(f"break_idx_{trigger_idx}").gather(0) - 1)
+            .alias(f"slope_before{trigger_idx}")
+        )
+        .explode(f"slope_before{trigger_idx}")
+    )
+    dfs.append(
+        updated_results.filter(
+            pl.col(f"slopes_{trigger_idx}").list.len()
+            > pl.col(f"break_idx_{trigger_idx}")
+        )
+        .explode(f"slopes_{trigger_idx}")
+        .group_by(["recording", "cell_index"])
+        .agg(
+            pl.col(f"slopes_{trigger_idx}")
+            .gather(pl.col(f"break_idx_{trigger_idx}").gather(0))
+            .alias(f"slope_after{trigger_idx}")
+        )
+        .explode(f"slope_after{trigger_idx}")
+    )
+slopes_df = pl.concat(dfs, how="align").collect()
+# %%
+updated_results = pl.concat([updated_results, slopes_df], how="align")
+
+# %%
+dfs = []
+for trigger_idx, trigger in enumerate(cum_triggers):
+
+spikes_fs_list = pl.concat(dfs, how="align").collect()
 # %%
 # breaks[trigger_idx] = np.where(
 #             single_cell_results[f"breaks_{trigger_idx}"]
