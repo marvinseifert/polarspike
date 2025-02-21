@@ -16,6 +16,7 @@ window_pos = 0.2
 shuffle_window = 5
 bin_width = 0.001
 bins = np.arange(window_neg, window_pos + bin_width, bin_width)
+prior_std = 0.01
 
 
 # %% functions
@@ -220,15 +221,15 @@ recordings = unique_indices["recording"].to_list()
 cell_indices = unique_indices["cell_index"].to_list()
 recs_n_cells = list(zip(recordings, cell_indices))
 # %%
-for trigger_idx, trigger in enumerate(cum_triggers):
-    spikes_fs = spikes_fs.with_columns(
-        pl.when(
-            (pl.col("times_triggered") > trigger + window_neg)
-            & (pl.col("times_triggered") < trigger + window_pos)
-        )
-        .then(pl.col("times_triggered"))
-        .alias(f"{trigger_idx}_fs")
-    )
+# for trigger_idx, trigger in enumerate(cum_triggers):
+#     spikes_fs = spikes_fs.with_columns(
+#         pl.when(
+#             (pl.col("times_triggered") > trigger + window_neg)
+#             & (pl.col("times_triggered") < trigger + window_pos)
+#         )
+#         .then(pl.col("times_triggered"))
+#         .alias(f"{trigger_idx}_fs")
+#     )
 
 
 # %%
@@ -243,8 +244,8 @@ for trigger_idx, trigger in enumerate(cum_triggers):
         .alias(f"{trigger_idx}_fs")
         .over(["recording", "cell_index"])
     )
-spikes_fs = spikes_fs.collect()
 
+spikes_fs = spikes_fs.collect()
 # %%
 response_start_columns = [
     f"response_start_{trigger}" for trigger in range(len(cum_triggers))
@@ -258,7 +259,7 @@ median_response = median_response.with_columns(
 )
 median_response = median_response.with_columns(
     median_starts=pl.col("median_starts") * bin_width + window_neg
-).collect()
+)
 
 # %%
 updated_results = pl.concat([results_df, median_response], how="align").lazy()
@@ -269,9 +270,11 @@ for trigger_idx, trigger in enumerate(cum_triggers):
         updated_results.explode(f"breaks_{trigger_idx}")
         .group_by(["recording", "cell_index"])
         .agg(
-            (pl.col(f"breaks_{trigger_idx}") > pl.col("median_starts"))
-            .arg_true()
-            .first()
+            (
+                pl.col(f"breaks_{trigger_idx}").abs() - pl.col("median_starts")
+            ).arg_min()  # (pl.col(f"breaks_{trigger_idx}") > pl.col("median_starts"))
+            # .arg_true()
+            # .first()
             .alias(f"break_idx_{trigger_idx}"),
         )
     )
@@ -315,48 +318,177 @@ for trigger_idx, trigger in enumerate(cum_triggers):
         )
         .explode(f"slope_after{trigger_idx}")
     )
-slopes_df = pl.concat(dfs, how="align").collect()
+slopes_df = pl.concat(dfs, how="align")
 # %%
 updated_results = pl.concat([updated_results, slopes_df], how="align")
 
 # %%
+nr_cells = len(unique_indices)
+df_add = unique_indices.clone().lazy()
+fs_columns = []
+for trigger_idx, trigger in enumerate(cum_triggers):
+    df_add = df_add.with_columns(
+        pl.Series(
+            f"{trigger_idx}_fs",
+            [[window_neg + trigger, window_pos + trigger]] * nr_cells,
+        )
+    )
+    fs_columns.append(f"{trigger_idx}_fs")
+
+df_add = df_add.explode(fs_columns).select(["recording", "cell_index"] + fs_columns)
+
+df_add = df_add.collect()
+
+# %%
+spikes_fs_only = spikes_fs.select(["recording", "cell_index"] + fs_columns)
+spikes_fs_only = pl.concat([spikes_fs_only, df_add])
+# %%
 dfs = []
 for trigger_idx, trigger in enumerate(cum_triggers):
+    dfs.append(
+        spikes_fs_only.group_by(["recording", "cell_index"]).agg(
+            pl.col(f"{trigger_idx}_fs").drop_nulls().sort() - trigger
+        )
+    )
 
-spikes_fs_list = pl.concat(dfs, how="align").collect()
+
+spikes_fs_list = pl.concat(dfs, how="align")
 # %%
-# breaks[trigger_idx] = np.where(
-#             single_cell_results[f"breaks_{trigger_idx}"]
-#             .list.to_array(1)
-#             .to_numpy()
-#             .flatten()
-#             > median_response_start
-#         )[0][0]
+updated_results = pl.concat([updated_results, spikes_fs_list], how="align")
 # %%
-# spikes_fs = spikes_fs.with_columns(
-#             pl.when(
-#                 (pl.col("times_triggered") > trigger + window_neg)
-#                 & (pl.col("times_triggered") < trigger + window_pos)
-#             )
-#             .then(pl.col("times_triggered"))
-#             .alias(f"{trigger_idx}_fs")
-#         )
-#         breaks[trigger_idx] = np.where(
-#             single_cell_results[f"breaks_{trigger_idx}"]
-#             .list.to_array(1)
-#             .to_numpy()
-#             .flatten()
-#             > median_response_start
-#         )[0][0]
-#
-#         slopes_before[trigger_idx] = (
-#             single_cell_results[f"breaks_{trigger_idx}"]
-#             .list[breaks[trigger_idx] - 1]
-#             .item()
-#         )
-#
-#         slopes_after[trigger_idx] = (
-#             single_cell_results[f"breaks_{trigger_idx}"]
-#             .list[breaks[trigger_idx]]
-#             .item()
-#         )
+updated_results = updated_results.lazy()
+for trigger_idx, trigger in enumerate(cum_triggers):
+    updated_results = updated_results.with_columns(
+        pl.col(f"{trigger_idx}_fs")
+        .list.diff(null_behavior="drop")
+        .alias(f"{trigger_idx}_diff")
+    )
+updated_results = updated_results.collect()
+# %%
+updated_results = updated_results.lazy()
+dfs = []
+for trigger_idx, trigger in enumerate(cum_triggers):
+    dfs.append(
+        updated_results.explode(pl.col(f"{trigger_idx}_diff"))
+        .group_by(["recording", "cell_index"])
+        .agg(pl.col(f"{trigger_idx}_diff").cum_sum().alias(f"{trigger_idx}_cum_sum"))
+    )
+updated_results = pl.concat([updated_results, pl.concat(dfs, how="align")], how="align")
+updated_results = updated_results.collect()
+
+# %%
+updated_results = updated_results.lazy()
+dfs = []
+for trigger_idx, trigger in enumerate(cum_triggers):
+    dfs.append(
+        updated_results.explode(pl.col(f"{trigger_idx}_fs"))
+        .group_by(["recording", "cell_index"])
+        .agg(
+            (
+                pl.int_range(0, pl.len(), dtype=pl.UInt32)
+                * pl.col(f"slope_before{trigger_idx}")
+                - pl.col(f"slope_before{trigger_idx}")
+                * pl.col(f"{trigger_idx}_fs").slice(
+                    0, pl.col(f"{trigger_idx}_fs").len() - 1
+                )
+            ).alias(f"L1_log_{trigger_idx}")
+        )
+    )
+    dfs.append(
+        updated_results.explode(pl.col(f"{trigger_idx}_fs"))
+        .group_by(["recording", "cell_index"])
+        .agg(
+            (
+                (pl.len() - pl.int_range(0, pl.len(), dtype=pl.UInt32))
+                * pl.col(f"slope_after{trigger_idx}")
+                - pl.col(f"slope_after{trigger_idx}")
+                * (
+                    pl.col(f"{trigger_idx}_cum_sum").list.slice(-1).list.get(0)
+                    - pl.col(f"{trigger_idx}_fs").slice(
+                        0, pl.col(f"{trigger_idx}_fs").len() - 1
+                    )
+                )
+            ).alias(f"L2_log_{trigger_idx}")
+        )
+    )
+updated_results = pl.concat(
+    [updated_results, pl.concat(dfs, how="align")], how="align"
+).collect()
+# %%
+updated_results = updated_results.lazy()
+dfs = []
+for trigger_idx, trigger in enumerate(cum_triggers):
+    dfs.append(
+        updated_results.explode(f"L1_log_{trigger_idx}", f"L2_log_{trigger_idx}")
+        .with_columns(
+            (pl.col(f"L1_log_{trigger_idx}") + pl.col(f"L2_log_{trigger_idx}")).alias(
+                f"log_combined{trigger_idx}"
+            )
+        )
+        .group_by(["recording", "cell_index"])
+        .agg(
+            pl.col(f"log_combined{trigger_idx}"),
+        )
+    )
+
+updated_results = pl.concat(
+    [updated_results, pl.concat(dfs, how="align").collect()], how="align"
+).collect()
+# %%
+updated_results = updated_results.lazy()
+dfs = []
+for trigger_idx, trigger in enumerate(cum_triggers):
+    dfs.append(
+        updated_results.group_by(["recording", "cell_index"])
+        .agg(
+            pl.col(f"log_combined{trigger_idx}")
+            .list.eval(pl.element() - pl.all().max())
+            .list.eval(pl.element().exp())
+            .alias(f"max_log_{trigger_idx}")
+        )
+        .explode(f"max_log_{trigger_idx}")
+    )
+updated_results = pl.concat(
+    [updated_results, pl.concat(dfs, how="align")], how="align"
+).collect()
+# %% Calculate prior
+updated_results = updated_results.lazy()
+dfs = []
+for trigger_idx, trigger in enumerate(cum_triggers):
+    dfs.append(
+        updated_results.select(
+            [
+                "recording",
+                "cell_index",
+                f"{trigger_idx}_fs",
+                f"max_log_{trigger_idx}",
+                f"median_starts",
+            ]
+        )
+        .explode(pl.col(f"{trigger_idx}_fs"), pl.col(f"max_log_{trigger_idx}"))
+        .group_by(["recording", "cell_index"])
+        .agg(
+            (
+                (
+                    -0.5
+                    * (
+                        (pl.col(f"{trigger_idx}_fs") - pl.col("median_starts"))
+                        / prior_std
+                    )
+                    ** 2
+                ).exp()
+                * pl.col(f"max_log_{trigger_idx}")
+            ).alias(f"posterior_{trigger_idx}")
+        )
+    )
+# %%
+updated_results = pl.concat(
+    [updated_results, pl.concat(dfs, how="align")], how="align"
+).collect()
+updated_results.write_parquet(r"D:\chicken_analysis\changepoint_df.parquet")
+# %%
+df_test = updated_results.sample(1)
+fig, ax = plt.subplots()
+ax.plot(df_test.select("0_fs").item(), df_test.select("posterior_0").item())
+ax.scatter(df_test.select("0_fs").item(), np.ones(df_test.select("0_fs").item().len()))
+fig.show()
