@@ -19,7 +19,7 @@ shuffle_window = 5
 bin_width = 0.001
 bins = np.arange(window_neg, window_pos + bin_width, bin_width)
 bin_freq = 1 / bin_width
-
+prior_std = 0.01
 
 # %% global variables
 # Check global parallel variables below
@@ -36,21 +36,34 @@ unique_indices = results_df.select("cell_index", "recording").unique().collect()
 recordings = unique_indices["recording"].to_list()
 cell_indices = unique_indices["cell_index"].to_list()
 recs_n_cells = list(zip(recordings, cell_indices))
+nr_repeats = single_cells_spikes.select("repeat").max().collect().item()
 
-
+all_trigger_times = []
+trigger_indices = []
+for rep in range(nr_repeats):
+    all_trigger_times.append(cum_triggers[:-1] + rep * cum_triggers[-1])
+    trigger_indices.append(np.arange(len(cum_triggers) - 1))
+trigger_indices.append(np.array([20]))
+all_trigger_times.append(
+    np.array([all_trigger_times[-1][-1] + all_trigger_times[0][1]])
+)
+trigger_indices = np.concatenate(trigger_indices)
+all_trigger_times = np.concatenate(all_trigger_times)
 # Here we add columns (called f"{trigger_idx}_fs") to the dataframe that save the spike times relative to the trigger
 # and the window size indicated above.
 spikes_fs = single_cells_spikes.clone().lazy()
-for trigger_idx, trigger in enumerate(cum_triggers):
+for trigger_idx, trigger in zip(trigger_indices, all_trigger_times):
     spikes_fs = spikes_fs.with_columns(
         pl.when(
-            (pl.col("times_triggered") > trigger + window_neg)
-            & (pl.col("times_triggered") < trigger + window_pos)
+            (pl.col("times_relative") > trigger + window_neg)
+            & (pl.col("times_relative") < trigger + window_pos)
         )
-        .then(pl.col("times_triggered"))
+        .then(pl.col("times_relative") - trigger)
         .alias(f"{trigger_idx}_fs")
         .over(["recording", "cell_index", "repeat"])
     )
+
+for trigger_idx, trigger in enumerate(cum_triggers):
     results_df = results_df.with_columns(
         pl.col(f"slopes_{trigger_idx}").list.eval(pl.element() * bin_freq)
     )
@@ -71,8 +84,10 @@ median_response = median_response.with_columns(
 median_response = median_response.with_columns(
     median_starts=pl.col("median_starts") * bin_width + window_neg
 )
-prior_std = median_response.collect()["median_starts"].std()
-
+# median_response.collect()["median_starts"].std()
+median_start = (
+    median_response.select("median_starts").median().collect().item() + window_neg_abs
+)
 # Find the break points for each cell. The break is defined as the break point which is closest to the median response
 # start time.
 updated_results = pl.concat([results_df, median_response], how="align").lazy()
@@ -108,7 +123,7 @@ break_positions_df = break_positions_df.filter(
 updated_results = pl.concat(
     [updated_results, break_positions_df], how="align"
 ).collect()
-median_start = updated_results["median_starts"].median()
+
 
 # Find the firing rates (slopes) before and after the break point for each cell.
 # Unfortunately, some slopes might be negative, which is impossible, as spike rate cannot be negative. It also cannot be
@@ -171,7 +186,7 @@ for trigger_idx, trigger in enumerate(cum_triggers):
     df_add = df_add.with_columns(
         pl.Series(
             f"{trigger_idx}_fs",
-            [[window_neg + trigger]] * nr_unique,
+            [[window_neg]] * nr_unique,
         )
     )
     fs_columns.append(f"{trigger_idx}_fs")
@@ -190,7 +205,7 @@ dfs = []
 for trigger_idx, trigger in enumerate(cum_triggers):
     dfs.append(
         spikes_fs_only.group_by(["recording", "cell_index", "repeat"]).agg(
-            pl.col(f"{trigger_idx}_fs").drop_nulls().sort() - (trigger + window_neg)
+            pl.col(f"{trigger_idx}_fs").drop_nulls().sort() + window_neg_abs
         )
     )
 
@@ -320,7 +335,7 @@ updated_results = pl.concat(
     [updated_results, pl.concat(dfs, how="align")], how="align"
 ).collect()
 
-# %%
+
 updated_results = updated_results.lazy()
 dfs = []
 cum_columns = []
@@ -340,62 +355,121 @@ for trigger_idx, trigger in enumerate(cum_triggers):
 updated_results = updated_results.drop(cum_columns).collect()
 updated_results = pl.concat([updated_results, pl.concat(dfs, how="align")], how="align")
 
-# %%
+
 updated_results = updated_results.lazy()
 dfs = []
 for trigger_idx, trigger in enumerate(cum_triggers):
-    dfs.append(
-        updated_results.select(
-            [
-                "recording",
-                "cell_index",
-                "repeat",
-                f"{trigger_idx}_cum_sum",
-                f"max_log_{trigger_idx}",
-                f"median_starts",
-            ]
-        )
-        .explode(pl.col(f"{trigger_idx}_cum_sum"), pl.col(f"max_log_{trigger_idx}"))
+    df_temp_prior = (
+        updated_results.explode(pl.col(f"{trigger_idx}_fs"))
         .group_by(["recording", "cell_index", "repeat"])
         .agg(
             (
                 (
-                    -0.5
-                    * (
+                    (
                         (
-                            pl.col(f"{trigger_idx}_cum_sum")
-                            - (median_start + window_neg_abs)
+                            pl.col(f"{trigger_idx}_fs").slice(1, pl.len() - 2)
+                            - median_start
                         )
                         / prior_std
                     )
                     ** 2
-                ).exp()
-                * pl.col(f"max_log_{trigger_idx}")
-            ).alias(f"posterior_{trigger_idx}")
+                )
+                * -0.5
+            )
+            .exp()
+            .alias(f"prior_{trigger_idx}")
         )
     )
-updated_results = pl.concat(
-    [updated_results, pl.concat(dfs, how="align")], how="align"
-).collect()
-# %%
-updated_results = updated_results.lazy()
-dfs = []
-for trigger_idx, trigger in enumerate(cum_triggers):
+    df_temp_prior = pl.concat(
+        [
+            df_temp_prior,
+            updated_results.select(
+                ["recording", "cell_index", "repeat", f"max_log_{trigger_idx}"]
+            ),
+        ],
+        how="align",
+    )
     dfs.append(
-        updated_results.explode(
-            pl.col(f"{trigger_idx}_cum_sum"), pl.col(f"posterior_{trigger_idx}")
-        )
+        df_temp_prior.explode(f"prior_{trigger_idx}", f"max_log_{trigger_idx}")
         .group_by(["recording", "cell_index", "repeat"])
         .agg(
-            pl.col(f"{trigger_idx}_cum_sum")
-            .get(pl.col(f"posterior_{trigger_idx}").arg_max())
-            .alias(f"first_spike_{trigger_idx}")
-            + window_neg
+            (pl.col(f"prior_{trigger_idx}") * pl.col(f"max_log_{trigger_idx}")).alias(
+                f"posterior_{trigger_idx}"
+            )
+        )
+        .with_columns(
+            pl.col(f"posterior_{trigger_idx}").list.eval(pl.element() / pl.all().sum())
         )
     )
+    dfs.append(
+        df_temp_prior.select(
+            ["recording", "cell_index", "repeat", pl.col(f"prior_{trigger_idx}")]
+        )
+    )
+
 updated_results = pl.concat(
     [updated_results, pl.concat(dfs, how="align")], how="align"
 ).collect()
+
+
+# Check if there is any spike before the stimulus begin.
+# In that case, we will only consider L2_log to determine the first spike.
+updated_results = updated_results.lazy()
+for trigger_idx, trigger in enumerate(cum_triggers):
+    updated_results = updated_results.with_columns(
+        pl.when(
+            (
+                pl.col(f"{trigger_idx}_fs").list.get(1, null_on_oob=True)
+                < window_neg_abs
+            ).fill_null(False)
+        )
+        .then(True)
+        .otherwise(False)
+        .alias(
+            f"spike_before_0_{trigger_idx}"
+        )  # This new column will be True if there is a spike before the stimulus begin
+    )
+updated_results = updated_results.collect()
+
+
+# Now we can get the predicted first spike and its probability.
+updated_results = updated_results.lazy()
+for trigger_idx, trigger in enumerate(cum_triggers):
+    updated_results = updated_results.with_columns(
+        pl.when(pl.col(f"spike_before_0_{trigger_idx}"))
+        .then(
+            pl.col(f"posterior_{trigger_idx}")
+            .list.arg_max()
+            .alias(f"first_spike_idx_{trigger_idx}")
+        )
+        .otherwise(
+            pl.col(f"L2_log_{trigger_idx}")
+            .list.arg_max()
+            .alias(f"first_spike_idx_{trigger_idx}")
+        )
+    )
+    updated_results = updated_results.with_columns(
+        (
+            pl.col(f"{trigger_idx}_fs").list.get(
+                pl.col(f"first_spike_idx_{trigger_idx}") + 1
+            )
+            - window_neg_abs  # Subtract the window_neg_abs to get the time centered at 0
+        ).alias(f"first_spike_{trigger_idx}")
+    )
+    updated_results = updated_results.with_columns(
+        pl.when(pl.col(f"spike_before_0_{trigger_idx}"))
+        .then(
+            pl.col(f"posterior_{trigger_idx}")
+            .list.get(pl.col(f"first_spike_idx_{trigger_idx}"))
+            .alias(f"first_spike_posterior_{trigger_idx}")
+        )
+        .otherwise(
+            pl.col(f"L2_log_{trigger_idx}")
+            .list.get(pl.col(f"first_spike_idx_{trigger_idx}"))
+            .alias(f"first_spike_posterior_{trigger_idx}")
+        )
+    )
+updated_results = updated_results.collect()
 # %%
 
 updated_results.write_parquet(r"D:\chicken_analysis\changepoint_df.parquet")
@@ -414,14 +488,6 @@ df_test = df_test.with_columns(
     pl.col(f"{trigger}_fs").list.eval(pl.element() + window_neg)
 )
 
-prior = np.exp(
-    -0.5
-    * (
-        (df_test.select(f"{trigger}_fs").item()[1:].to_numpy() - median_start)
-        / prior_std
-    )
-    ** 2
-)
 
 fig, ax = plt.subplots(nrows=5, sharex=True, figsize=(15, 20))
 ax[0].plot(
@@ -457,8 +523,8 @@ ax[3].plot(
 
 ax[4].plot(
     df_test.select(f"{trigger}_fs").item()[1:-1],
-    df_test.select(f"max_log_{trigger}").item(),
-    label="normalized log",
+    df_test.select(f"prior_{trigger}").item(),
+    label="prior",
 )  #
 ax[1].legend()
 ax[2].legend()
@@ -467,9 +533,9 @@ ax[4].legend()
 ax[4].set_xlim([window_neg, window_pos])
 fig.show()
 # %% plot over repeat
-df_test = updated_results.filter(
-    ((pl.col("first_spike_6") < 0.05) & (pl.col("first_spike_6") > 0.07))
-).sample(1)
+df_test = updated_results.sample(
+    1
+)  # ((pl.col("first_spike_6") < 0.05) & (pl.col("first_spike_6") > 0.07)))
 df_test = updated_results.filter(
     (pl.col("recording") == df_test["recording"].item())
     & (pl.col("cell_index") == df_test["cell_index"].item())
@@ -480,8 +546,10 @@ df_test = df_test.with_columns(
 fig, ax = plt.subplots(nrows=4, sharex=True, figsize=(15, 20))
 for rep in range(4):
     df_sub = df_test.filter(pl.col("repeat") == rep)
+    if df_sub.select(f"{trigger}_fs").item().len() <= 2:
+        continue
     ax[rep].plot(
-        df_sub.select(f"{trigger}_fs").item(),
+        df_sub.select(f"{trigger}_fs").item()[1:-1],
         df_sub.select(f"posterior_{trigger}").item(),
     )
     ax[rep].scatter(
@@ -490,31 +558,37 @@ for rep in range(4):
     )
     ax[rep].vlines(
         df_sub.select(f"{trigger}_fs")
-        .item()
+        .item()[1:-1]
         .to_numpy()[np.argmax(df_sub.select(f"posterior_{trigger}").item().to_numpy())],
         0,
         1,
     )
+ax[0].set_xlim([window_neg, window_pos])
 fig.show()
 # %%
 import plotly.express as px
 
-trigger = 3
-plot_df = updated_results.select(
-    pl.col("recording"),
-    pl.col("cell_index"),
-    pl.col("repeat"),
-    pl.col(f"posterior_{trigger}"),
-)
-plot_df = (
-    plot_df.explode(pl.col(f"posterior_{trigger}"))
-    .group_by(["recording", "cell_index", "repeat"])
-    .agg(pl.col(f"posterior_{trigger}").max())
-    .to_pandas()
-)
+updated_results = updated_results.lazy()
+dfs = []
+for trigger_idx, trigger in enumerate(cum_triggers):
+    dfs.append(
+        updated_results.group_by(["recording", "cell_index"]).agg(
+            pl.col(f"first_spike_{trigger_idx}")
+            .mean()
+            .alias(f"av_first_spike_{trigger_idx}"),
+            pl.col(f"first_spike_posterior_{trigger_idx}")
+            .mean()
+            .alias(f"av_posterior_{trigger_idx}"),
+        )
+    )
+
+hist_df = pl.concat(dfs, how="align").collect()
 
 # %%
-fig, ax = plt.subplots(nrows=2, ncols=11, figsize=(30, 7), sharey=("row"))
+# bin the spikes
+
+# %%
+fig, ax = plt.subplots(nrows=2, ncols=11, figsize=(30, 7), sharey=True)
 col = 0
 cs = ["grey", "black"]
 for trigger_idx, trigger in enumerate(cum_triggers):
@@ -522,22 +596,22 @@ for trigger_idx, trigger in enumerate(cum_triggers):
         row = 0
     else:
         row = 1
-    plot_df = updated_results.filter(
-        (pl.col(f"first_spike_{trigger_idx}") > 0)
-        & (pl.col(f"first_spike_{trigger_idx}") < window_pos)
-    )
-    plot_df = plot_df.filter(
-        plot_df[f"posterior_{trigger_idx}"].list.eval(pl.all() > 0.3).list.any()
-    )
+
+    spikes = hist_df[f"av_first_spike_{trigger_idx}"].to_numpy()
+    spikes = spikes[~np.isnan(spikes)]
+    weights = hist_df[f"av_posterior_{trigger_idx}"].to_numpy()
+    weights = weights[~np.isnan(weights)]
+
     values, bins = np.histogram(
-        plot_df[f"first_spike_{trigger_idx}"].to_numpy(),
+        spikes,
         bins=np.linspace(window_neg, window_pos, 70),
+        weights=weights,
     )
     ax[row, col].plot(bins[:-1], values, c=cs[row])
     ax[row, col].set_title(f"Trigger {trigger_idx}")
 
     ax[row, col].vlines(
-        np.median(plot_df[f"first_spike_{trigger_idx}"].to_numpy()),
+        np.median(hist_df[f"av_first_spike_{trigger_idx}"].to_numpy()),
         0,
         100,
         color=cs[row],
