@@ -6,6 +6,8 @@ Created on Thu Jul 15 11:23:06 2021
 """
 
 import contextlib
+import pathlib
+
 import pandas as pd
 import numpy as np
 import multiprocessing as mp
@@ -27,6 +29,7 @@ from polarspike import (
 )
 from threading import Thread
 import warnings
+from pathlib import Path
 
 
 def spike_load_worker(args):
@@ -647,11 +650,11 @@ class Recording:
             pickle.dump(self, f)
 
     @classmethod
-    def load(cls, filename: str) -> "Recording":
+    def load(cls, filename: str | pathlib.Path) -> "Recording":
         """Load a saved object from a file.
         Parameters
         ----------
-        filename : str
+        filename : str or pathlib.Path
             The name of the file to load.
         Returns
         -------
@@ -668,6 +671,11 @@ class Recording:
             obj = version_control(obj)
 
             return obj
+
+    def __delattr__(self, name):
+        if name == "dataframes":
+            raise AttributeError("Cannot delete dataframes")
+        super().__delattr__(name)
 
     def use_view_as_filter(
         self,
@@ -1007,6 +1015,7 @@ class Recording_s(Recording):
         time="seconds",
         waveforms=False,
         pandas=True,
+        carry=None,
     ):
         """
         Returns all spikes from all recordings and all stimuli in the choosen "cell_df" and "stimulus_df".
@@ -1042,7 +1051,7 @@ class Recording_s(Recording):
             [rec] for rec in input_df.unique("recording")["recording"].to_list()
         ]
         input_dict = input_df.partition_by("recording", as_dict=True)
-        input_df = [input_dict[rec[0]] for rec in recordings]
+        input_df = [input_dict[rec[0],] for rec in recordings]
         input_list = []
         for df in input_df:
             rec_input = []
@@ -1084,6 +1093,24 @@ class Recording_s(Recording):
             )
 
         df = pl.concat(dfs)
+
+        if carry:
+            df = df.sort(["recording", "cell_index", "stimulus_index"])
+
+            df = df.to_pandas().set_index(["recording", "cell_index", "stimulus_index"])
+
+            for column in carry:
+                df[column] = 0
+                df[column] = df[column].astype(self.dataframes[cell_df][column].dtype)
+
+            temp_df = self.dataframes[cell_df].set_index(
+                ["recording", "cell_index", "stimulus_index"]
+            )
+            df.update(temp_df[carry])
+
+            df = df.reset_index()
+            df = pl.from_pandas(df)
+
         if pandas:
             return df.to_pandas()
         else:

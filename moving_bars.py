@@ -7,6 +7,19 @@ import matplotlib.patches as mpatches
 import pingouin
 
 
+def normalize_01(arr):
+    """
+    Normalize an array to the range [0, 1].
+
+    Parameters:
+    - arr (array-like): The array to normalize.
+
+    Returns:
+    - array: The normalized array.
+    """
+    return (arr - np.min(arr)) / (np.max(arr) - np.min(arr))
+
+
 def compute_vector_magnitude_direction(observations):
     """
     Compute the magnitude and direction of the resulting vector based on observations.
@@ -171,7 +184,7 @@ class Moving_stats:
             mean_deg = 360 + mean_deg
         z_val, p_val = pingouin.circ_rayleigh(
             np.deg2rad(direction_counts[0]),
-            direction_counts[1],
+            normalize_01(direction_counts[1]),
             np.deg2rad(self.step_size),
         )
 

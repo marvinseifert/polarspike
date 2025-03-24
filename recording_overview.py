@@ -225,3 +225,48 @@ def add_stimulus_df(fig, df):
         )
 
     return fig
+
+
+def plot_isi_new(df, x, cmap="viridis", cutoff=18.0):
+    df = df.sort(["cell_index", "times"], descending=False)
+    df = df.with_columns(pl.col("times").diff(null_behavior="ignore").alias("isi"))
+    df = df.with_columns(pl.when(pl.col("isi") < 0).then(0).alias("diff"))
+    filtered_df = df.filter(pl.col("isi") > 0).collect(streaming=True)
+
+    plot_df = filtered_df.to_pandas()
+    plot_df["log_isi"] = np.log10(plot_df["isi"])
+    max_isi = plot_df["log_isi"].max().astype(int)
+    max_x = plot_df[x].max().astype(int)
+
+    fig, ax = plt.subplots(figsize=(15, 10))
+
+    artist = dsshow(
+        plot_df,
+        ds.Point(x, "log_isi"),
+        norm="eq_hist",
+        cmap=cmap,
+        ax=ax,
+        plot_height=50,
+        plot_width=480,
+    )
+    ax.set_aspect("auto")
+    # define y ticks in log scale from 0.001 to max_isi
+    ax.set_yticks(np.log10([0.0001, 0.001, 0.01, 0.1, 1, 10, 100]))
+    ax.set_yticklabels([0.0001, 0.001, 0.01, 0.1, 1, 10, 100])
+
+    norm = mcolors.LogNorm(vmin=plot_df["isi"].min(), vmax=plot_df["isi"].max())
+
+    ax.legend()
+    sm = ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array(
+        []
+    )  # This line is needed to create the ScalarMappable object but the array is not used
+
+    # Create a colorbar with the ScalarMappable object
+    cbar = plt.colorbar(sm, ax=ax)
+    cbar.set_label("nr spikes")
+
+    ax.set_xlabel(x)
+    ax.set_ylabel("isi")
+    ax.set_title("Recording Overview")
+    return fig, ax

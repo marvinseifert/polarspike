@@ -193,7 +193,10 @@ def _calculate_psth(df, bin_size, single_psth, indices, max_time):
         A tuple containing lists of the calculated PSTHs and corresponding bins.
     """
     if not single_psth:
-        df_split = pl.from_pandas(df).partition_by(indices[0])
+        df_split = pl.from_pandas(df.loc[:, df.columns != "index"]).partition_by(
+            indices[0]
+        )  # This is a quick fix. The bigger problem is that the datatypes in the dataframe are not consistent.
+        # If the dtype is categorical, the conversion to polars will fail here if the index column isnt excluded.
         psth_list = []
         bins_list = []
         for df_cat in df_split:
