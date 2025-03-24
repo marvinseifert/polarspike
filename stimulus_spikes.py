@@ -1,5 +1,19 @@
+import pandas as pd
 import polars as pl
 import numpy as np
+import re
+
+
+def parse_condition(s):
+    match = re.match(r"(>=|<=|>|<|==)?\s*(\d*\.?\d+)", s.strip())
+    if match:
+        operator, number = match.groups()
+        if operator and number:
+            return operator, float(number)
+        else:
+            return "==", float(number)
+    else:
+        return "==", s
 
 
 def load_cells(cell_index, file, waveforms=False):
@@ -67,6 +81,82 @@ def load_triggered(
         dfs.append(times)
     df = pl.concat(dfs)
     return df
+
+
+def filter_dataframe_complex(df, query_conditions):
+    """
+    Filters the DataFrame based on a list of condition dictionaries.
+
+    Each dictionary in query_conditions represents a branch of the query
+    (i.e. conditions joined with AND) and branches are combined with OR.
+
+    For list values, the condition is expanded into an OR of equality checks.
+    """
+    branch_conditions = []
+    for condition in query_conditions:
+        condition_parts = []
+        for col, val in condition.items():
+            if isinstance(val, list):
+                # Expand list into OR conditions: (col==val1 or col==val2 or ...)
+                cond = (
+                    "("
+                    + " or ".join(
+                        f"{col} {parse_condition(item)[0]} {repr(parse_condition(item)[1])}"
+                        for item in val
+                    )
+                    + ")"
+                )
+            else:
+                cond = (
+                    f"{col} {parse_condition(val)[0]} {repr(parse_condition(val)[1])}"
+                )
+            condition_parts.append(cond)
+        # Combine conditions in a branch with AND
+        branch_conditions.append("(" + " and ".join(condition_parts) + ")")
+
+    # Combine branches with OR
+    query_str = " or ".join(branch_conditions)
+    return df.query(query_str)
+
+
+def get_spikes(
+    files_dict: dict,
+    filter_dict: dict,
+    original_df: pd.DataFrame,
+    time: str,
+    waveforms: bool,
+    pandas: bool,
+    carry: list[str],
+):
+    # Next, we create a dictionary with all the filters applied to the lazy dataframes
+    df = load_triggered_lazy(files_dict, filter_dict, time)
+
+    # Sort data in a meaningful way
+    df = df.sort(
+        ["cell_index", "repeat", "stimulus_index", "trigger", "times_triggered"]
+    )
+    # Carry columns if needed
+    if carry:
+        df = df.sort(["recording", "cell_index", "stimulus_index"])
+
+        df = df.to_pandas().set_index(["recording", "cell_index", "stimulus_index"])
+
+        for column in carry:
+            df[column] = 0
+            df[column] = df[column].astype(original_df[cell_df][column].dtype)
+
+        temp_df = original_df[cell_df].set_index(
+            ["recording", "cell_index", "stimulus_index"]
+        )
+        df.update(temp_df[carry])
+
+        df = df.reset_index()
+        df = pl.from_pandas(df)
+
+    if pandas:
+        return df.to_pandas()
+    else:
+        return df
 
 
 def load_triggered_lazy(files_dict, filter_dict, time="seconds"):
