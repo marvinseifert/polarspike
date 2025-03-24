@@ -111,8 +111,8 @@ recordings.dataframes["fff_stim"]["stimulus_repeat_sublogic"] = 1
 recordings.dataframes["sub_df"] = recordings.dataframes["fff_filtered"].sample(10)
 spikes = recordings.get_spikes_df("sub_df", stimulus_df="fff_stim", pandas=False)
 # %% Define the analysis parameters
-window_neg = -0.1
-window_pos = 0.3
+window_neg = -0.2
+window_pos = 0.2
 shuffle_window = 5
 bin_width = 0.001
 max_trigger = spikes["trigger"].max()

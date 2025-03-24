@@ -162,3 +162,15 @@ def detect_changepoint_single_rate(event_times, lambda2, epsilon=1e-6, threshold
             changepoint_index + 1
         ]  # +1 because full_times includes t=0
         return changepoint_time, p_lambda2
+
+
+def generate_line_data(starts, slopes, lengths):
+    x_list = [0]
+    y_list = [0]
+    for start_idx in range(len(starts)):
+        x = np.linspace(starts[start_idx], starts[start_idx] + lengths[start_idx], 10)
+        y = slopes[start_idx] * (x - starts[start_idx]) + y_list[-1]
+        x_list.extend(x)
+        y_list.extend(y)
+
+    return np.asarray(x_list[:-1]).T, np.asarray(y_list[:-1]).T

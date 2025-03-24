@@ -174,8 +174,8 @@ fig, ax = plot_cell(
 )
 fig.show()
 # %%
-cell_idx = [193]
-recording = ["chicken_30_08_2024_p0"]
+cell_idx = [367]
+recording = ["chicken_18_07_2024_p0"]
 single_cell = binned_spikes.filter(
     (pl.col("recording").is_in(recording)) & (pl.col("cell_index").is_in(cell_idx))
 )
