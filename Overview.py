@@ -1050,16 +1050,8 @@ class Recording_s(Recording):
         }
 
         # Next, we create a dictionary with all the filters applied to the lazy dataframes
-        combined_lazy_dfs = stimulus_spikes.load_triggered_lazy(
-            files_dict, filter_dict, time
-        )
+        df = stimulus_spikes.load_triggered_lazy(files_dict, filter_dict, time)
 
-        # %% Collect all filtered DataFrames using collect_all
-        # Prepare a list of LazyFrames to collect
-        lazy_frames = list(combined_lazy_dfs.values())
-
-        # Collect all LazyFrames in parallel
-        df = pl.concat(pl.collect_all(lazy_frames))
         # Sort data in a meaningful way
         df = df.sort(
             ["cell_index", "repeat", "stimulus_index", "trigger", "times_triggered"]

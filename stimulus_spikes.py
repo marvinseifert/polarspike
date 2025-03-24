@@ -108,35 +108,69 @@ def load_triggered_lazy(files_dict, filter_dict, time="seconds"):
             trigger_start = filt["trigger"][0]
             trigger_end = filt["trigger"][0][1:]
             # Align the spikes with the repeats and triggers (still lazy)
+            # add trigger to the filter_dict
+            filter_dict[key][stim_id]["trigger_start"] = trigger_start
+            filter_dict[key][stim_id]["trigger_end"] = trigger_end
+            filter_dict[key][stim_id]["rel_trigger"] = rel_trigger
+            filter_dict[key][stim_id]["trigger_sub"] = trigger_sub
+            filtered_dfs.append(df_filtered)
+
+            # load the filtered dataframes into memory
+        if filtered_dfs:
+            # Concatenate all filtered DataFrames for the current file
+            combined_df = pl.concat(filtered_dfs, how="vertical").unique()
+            combined_lazy_dfs[key] = combined_df
+        else:
+            # If no filters are defined for the file, assign an empty DataFrame
+            combined_lazy_dfs[key] = pl.LazyFrame(schema=pl.Schema([]))
+
+    lazy_frames = list(combined_lazy_dfs.values())
+
+    # Collect all LazyFrames in parallel
+    df = pl.concat(pl.collect_all(lazy_frames)).lazy()
+    combined_dfs = []
+    filtered_dfs = []
+    for key, path in files_dict.items():
+        filters = filter_dict.get(key, {})
+        for stim_id, filt in filters.items():
+            df_filtered = df.filter(
+                (pl.col("stimulus_index") == stim_id) & (pl.col("recording") == key)
+            )
             repeat = 0
             for trigg_id, rel_t, sub_t in zip(
-                range(trigger_end.shape[0]),
-                rel_trigger,
-                trigger_sub,
+                range(filter_dict[key][stim_id]["trigger_end"].shape[0]),
+                filter_dict[key][stim_id]["rel_trigger"],
+                filter_dict[key][stim_id]["trigger_sub"],
             ):
-                df_filtered = df_filtered.with_columns(
-                    times_triggered=pl.when(
-                        pl.col("times_relative") > trigger_start[trigg_id],
-                        pl.col("times_relative") <= trigger_end[trigg_id],
+                df_filtered = (
+                    df_filtered.with_columns(
+                        times_triggered=pl.when(
+                            pl.col("times_relative")
+                            > filter_dict[key][stim_id]["trigger_start"][trigg_id],
+                            pl.col("times_relative")
+                            <= filter_dict[key][stim_id]["trigger_end"][trigg_id],
+                        )
+                        .then(pl.col("times_relative") - sub_t)
+                        .otherwise(pl.col("times_triggered")),
+                        trigger=pl.when(
+                            pl.col("times_relative")
+                            > filter_dict[key][stim_id]["trigger_start"][trigg_id],
+                            pl.col("times_relative")
+                            <= filter_dict[key][stim_id]["trigger_end"][trigg_id],
+                        )
+                        .then(rel_t)
+                        .otherwise(pl.col("trigger")),
+                        repeat=pl.when(
+                            pl.col("times_relative")
+                            > filter_dict[key][stim_id]["trigger_start"][trigg_id],
+                            pl.col("times_relative")
+                            <= filter_dict[key][stim_id]["trigger_end"][trigg_id],
+                        )
+                        .then(repeat)
+                        .otherwise(pl.col("repeat")),
                     )
-                    .then(pl.col("times_relative") - sub_t)
-                    .otherwise(pl.col("times_triggered"))
-                )
-                df_filtered = df_filtered.with_columns(
-                    trigger=pl.when(
-                        pl.col("times_relative") > trigger_start[trigg_id],
-                        pl.col("times_relative") <= trigger_end[trigg_id],
-                    )
-                    .then(rel_t)
-                    .otherwise(pl.col("trigger"))
-                )
-                df_filtered = df_filtered.with_columns(
-                    repeat=pl.when(
-                        pl.col("times_relative") > trigger_start[trigg_id],
-                        pl.col("times_relative") <= trigger_end[trigg_id],
-                    )
-                    .then(repeat)
-                    .otherwise(pl.col("repeat"))
+                    .collect()
+                    .lazy()
                 )
                 if rel_t == filt["stim_repeat_logic"] - 1:
                     repeat += 1
@@ -154,17 +188,12 @@ def load_triggered_lazy(files_dict, filter_dict, time="seconds"):
                         filt["sampling_freq"]
                     )
                 )
-            filtered_dfs.append(df_filtered)
+            filtered_dfs.append(df_filtered.collect())
 
-        if filtered_dfs:
-            # Concatenate all filtered DataFrames for the current file
-            combined_df = pl.concat(filtered_dfs, how="vertical").unique()
-            combined_lazy_dfs[key] = combined_df
-        else:
-            # If no filters are defined for the file, assign an empty DataFrame
-            combined_lazy_dfs[key] = pl.LazyFrame(schema=pl.Schema([]))
+        # Concatenate all filtered DataFrames for the current file
+        combined_dfs.append(pl.concat(filtered_dfs, how="vertical").unique())
 
-    return combined_lazy_dfs
+    return pl.concat(combined_dfs)
 
 
 def stimulus_relative(cell_index, stim_begin, stim_end, file, waveforms=False):
