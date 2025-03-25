@@ -101,15 +101,13 @@ def filter_dataframe_complex(df, query_conditions):
                 cond = (
                     "("
                     + " or ".join(
-                        f"{col} {parse_condition(item)[0]} {repr(parse_condition(item)[1])}"
+                        f"{col} {parse_condition(str(item))[0]} {repr(parse_condition(str(item))[1])}"
                         for item in val
                     )
                     + ")"
                 )
             else:
-                cond = (
-                    f"{col} {parse_condition(val)[0]} {repr(parse_condition(val)[1])}"
-                )
+                cond = f"{col} {parse_condition(str(val))[0]} {repr(parse_condition(str(val))[1])}"
             condition_parts.append(cond)
         # Combine conditions in a branch with AND
         branch_conditions.append("(" + " and ".join(condition_parts) + ")")
