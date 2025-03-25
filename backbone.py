@@ -9,12 +9,13 @@ import traitlets
 from tkinter import Tk, filedialog
 from sympy import isprime
 from math import gcd
+from pathlib import Path
 
 
-def get_file_ending(any_file):
+def get_file_ending(any_file: str) -> str:
     """
     File ending function
-    This function finds the ending of a file and returns the characters after the dot.
+    This function finds the ending of a file and returns the file suffix.
 
     Parameters
     ----------
@@ -22,15 +23,16 @@ def get_file_ending(any_file):
         The file you want to get the file ending from
     Returns
     -------
-    format: str: The str which contains only the part of the input string that is the
-    after the dot.
+    format: str: The file suffix including the dot, or 0 if no suffix is found.
     """
-    dot_position = any_file.find(".")
-    if dot_position == -1:
+    path = Path(any_file)
+    suffix = path.suffix
+
+    if not suffix:
         print("Named file is not a file, (maybe folder?), return 0")
         return 0
-    ending = any_file[dot_position:]
-    return ending
+
+    return suffix
 
 
 class SelectFilesButton(widgets.Button):
@@ -42,7 +44,7 @@ class SelectFilesButton(widgets.Button):
 
     out = widgets.Output()
 
-    def __init__(self, text, button_width="200px"):
+    def __init__(self, text: str, button_width: str = "200px") -> None:
         """
         Initialize the object
 
@@ -200,7 +202,7 @@ class SelectFilesButton(widgets.Button):
 #     return df
 
 
-def nr_rowcol_subplt(nr_plots):
+def nr_rowcol_subplt(nr_plots: int) -> tuple:
     """Returns an optimal arangement of subplot rows and columns, depending on
     the nr of total plots. Example: If nr_plots = 20, returns col=4, row=5
 
@@ -244,7 +246,7 @@ def nr_rowcol_subplt(nr_plots):
     return p, nr_plots
 
 
-def factorization(n):
+def factorization(n: int) -> list:
     """Returns factorization of the input integer
 
     Parameters
@@ -337,7 +339,7 @@ def hex_to_rgb(hex_color: str) -> tuple:
     return int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
 
 
-def enumerate2(xs, start=0, step=1):
+def enumerate2(xs: list, start: int = 0, step: int = 1):
     """Enumerate function that allows to set a start and step value
     Parameters
     ----------
