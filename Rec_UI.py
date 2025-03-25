@@ -448,7 +448,13 @@ class Explorer:
             cell_indices = [self.single_stimulus_df.value.loc[indices]["cell_index"]]
 
         plot_df = self.overview_df.get_spikes_triggered(
-            [[self.stimulus_select.value]], [cell_indices], time="seconds"
+            [
+                {
+                    "stimulus_index": self.stimulus_select.value,
+                    "cell_index": cell_indices,
+                }
+            ],
+            time="seconds",
         )
         if len(plot_df) != 0:
             raster_plot = spiketrain_plots.spikes_and_trace(
@@ -498,7 +504,14 @@ class Explorer:
             cell_ids = self.single_stimulus_df.value["cell_index"].unique().tolist()
             batch_size = min(len(cell_ids), 500)
             spikes_df = self.overview_df.get_spikes_triggered(
-                [[self.stimulus_select.value]], [cell_ids], time="seconds", pandas=False
+                [
+                    {
+                        "stimulus_index": self.stimulus_select.value,
+                        "cell_index": cell_ids,
+                    }
+                ],
+                time="seconds",
+                pandas=False,
             )
 
             nr_batches = len(cell_ids) // batch_size
