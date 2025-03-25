@@ -7,6 +7,7 @@ file formate.
 
 @author: Marvin
 """
+import pandas
 
 from polarspike import backbone, stimulus_spikes
 import h5py
@@ -344,6 +345,66 @@ def create_stim_df():
         }
     )
     return stimuli_df
+
+
+def create_filter_dict(
+    spikes_df: pandas.DataFrame, stimulus_df: pandas.DataFrame
+) -> dict:
+    """
+    Create a dictionary that contains the start and end times, cell indices and trigger for each stimulus in each recording.
+    Parameters
+    ----------
+    spikes_df: pandas.DataFrame
+        The DataFrame containing the spike information.
+    stimulus_df: pandas.DataFrame
+        The DataFrame containing the stimulus information.
+
+    Returns
+    -------
+    dict: The dictionary containing the filter information.
+    -------
+
+    """
+    input_split = spikes_df.partition_by("recording", as_dict=True, include_key=True)
+
+    recordings = [rec for rec in spikes_df.unique("recording")["recording"].to_list()]
+    filter_dict = {}
+    for rec in recordings:
+        unique_stimuli = (
+            input_split[(rec),].unique("stimulus_index")["stimulus_index"].to_list()
+        )
+        filter_dict[rec] = {}
+        for unique_stimulus in unique_stimuli:
+            # Find the correct start and end times for the stimulus
+            start_frame = stimulus_df.query(
+                "stimulus_index == @unique_stimulus & recording == @rec"
+            )["begin_fr"].values[0]
+            end_frame = stimulus_df.query(
+                "stimulus_index == @unique_stimulus & recording == @rec"
+            )["end_fr"].values[0]
+            trigger = stimulus_df.query(
+                "stimulus_index == @unique_stimulus & recording == @rec"
+            )["trigger_fr_relative"].values
+            stim_repeat_logic = stimulus_df.query(
+                "stimulus_index == @unique_stimulus & recording == @rec"
+            )["stimulus_repeat_logic"].values
+            sampling_freq = stimulus_df.query(
+                "stimulus_index == @unique_stimulus & recording == @rec"
+            )["sampling_freq"].values[0]
+            # Create the dict
+            filter_dict[rec][unique_stimulus] = dict(
+                start=start_frame,
+                end=end_frame,
+                trigger=trigger,
+                sampling_freq=sampling_freq,
+                stim_repeat_logic=stim_repeat_logic,
+                cell_indices=input_split[(rec),]
+                .filter(pl.col("stimulus_index") == unique_stimulus)["cell_index"]
+                .unique()
+                .to_list(),
+            )
+
+    return filter_dict
 
 
 # def correct_last_trigger(df):

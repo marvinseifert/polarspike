@@ -7,6 +7,7 @@ Created on Thu Jul 15 11:23:06 2021
 
 import contextlib
 import pathlib
+from importlib.resources import files
 
 import pandas as pd
 import numpy as np
@@ -15,40 +16,26 @@ from functools import partial
 import traceback
 import pickle
 
-from polarspike import stimulus_dfs
-from polarspike import stimulus_spikes
 import polars as pl
-from polarspike.grid import Table
-from polarspike import filter_stimulus
+
+
 from dataclasses import dataclass, field
 from polarspike import (
     cells_and_stimuli,
     stimulus_trace,
     recordings_stimuli_cells,
     spiketrains,
+    stimulus_spikes,
+    stimulus_dfs,
+    filter_stimulus,
 )
+from polarspike.grid import Table
 from threading import Thread
 import warnings
 from pathlib import Path
 
 
-def spike_load_worker(args):
-    path, stimuli, cells, time, waveforms, cell_df, stimulus_df = args
-    obj = Recording.load(path)
-    df = obj.get_spikes_triggered(
-        stimuli,
-        cells,
-        time,
-        waveforms,
-        stimulus_df=stimulus_df,
-        cell_df=cell_df,
-        pandas=False,
-    )
-    df = df.with_columns(recording=pl.lit(obj.name))
-    return df
-
-
-def version_control(obj):
+def version_control(obj: "Recording") -> "Recording":
     try:
         obj.parquet_path = obj.path
         del obj.path
@@ -121,235 +108,78 @@ class Recording:
             self.dataframes["spikes_df"]["recording"].unique().shape[0] == 1
         ), "Dataframe contains multiple recordings use Recording_s class instead"
 
-    def get_spikes_triggered(  # Function works on single recording only
+    def get_spikes_triggered(
         self,
-        stimuli,
-        cells,
-        time="seconds",
-        waveforms=False,
-        pandas=True,
-        stimulus_df="stimulus_df",
-        cell_df="spikes_df",
-        carry=None,
-    ):
-        """
-        This function returns a dataframe that contains the spikes that were recorded during the presentation
-        of a specific stimulus. Spikes are loaded from the connected parquet file.
-        len(cells) must be equal to len(stimuli) or 1.
-        len(stimuli) must be equal to len(cells) or 1.
-
-        Parameters
-        ----------
-        stimuli : list of lists of strings or integers
-            List of lists that contains the stimulus indices, or names that shall be loaded. The first list contains the stimulus
-            indices of the first stimulus, the second list contains the stimulus indices of the second stimulus and so
-            on. If a single list is provided, the same stimuli are used for all cells.
-        cells : list of lists
-            List of lists that contains the cell indices that shall be loaded. The first list contains the cell indices
-            of the first stimulus, the second list contains the cell indices of the second stimulus and so on.
-            If a single list is provided, the same cells are used for all stimuli.
-        time : str
-            Defines the time unit of the returned dataframe. Can be "seconds" or "frames".
-        waveforms : boolean
-            If the waveforms shall be loaded as well. Only possible if the parquet file contains the waveforms.
-        pandas : boolean
-            If the returned dataframe shall be a pandas dataframe or a polars dataframe.
-        stimulus_df : str
-            Name of the stimulus dataframe that shall be used.
-        cell_df : str
-            Name of the cell dataframe that shall be used.
-        carry : list
-            List of columns that shall be carried over from the cell_df to the final spikes df
-
-
-        Returns
-        -------
-        df : polars.DataFrame or pandas.DataFrame
-            A dataframe that contains the spikes (and waveforms) that were recorded during the presentation of a specific
-            stimulus and information about trigger and stimulus repeats.
-            Carefull: If a single stimulus was provided as string, the returned dataframe may contain multiple
-            stimuli, if the same stimulus was presented multiple times.
-            Use obj.find_stim_indices([stimulus_str]) to find all indices referring to a single name.
-
-            Carefull, cells, that did not spike during the presentation of a stimulus are not included in the dataframe.
-        """
-
-        # Check if the stimuli are strings or integers. If they are strings, they need to be converted to integers.
-        stimuli = filter_stimulus.stim_names_to_indices(
-            stimuli, self.dataframes[stimulus_df]
+        filter_conditions: list[dict],
+        time: str = "seconds",
+        waveforms: bool = False,
+        pandas: bool = True,
+        cell_df: str = "spikes_df",
+        stimulus_df: str = "stimulus_df",
+        carry: list[str] = None,
+    ) -> pd.DataFrame | pl.DataFrame:
+        # get the filtered spikes_df
+        input_df = stimulus_spikes.filter_dataframe_complex(
+            self.dataframes[cell_df], filter_conditions
         )
-        # Check if len(stimuli) is equal to len(cells). If not, match the stimuli to the cells.
-        stimuli, cells = cells_and_stimuli.sort(
-            stimuli, cells, self.dataframes[cell_df]["cell_index"].unique()
+        # convert to polars
+        input_df = pl.from_pandas(input_df)
+        # get the filter parameters
+        filter_dict = stimulus_trace.create_filter_dict(
+            input_df, self.dataframes[stimulus_df]
         )
-
-        dfs = []
-        # Loop over all stimuli and all cells and load the spikes (and waveforms):
-        for stimulus, cell in zip(stimuli, cells):
-            df = self.get_triggered(cell, stimulus, time, waveforms, stimulus_df)
-            df = df.with_columns(stimulus_index=pl.lit(stimulus[0]))
-            dfs.append(df)
-        df = pl.concat(dfs)  # Create one polars dataframe
-        if len(df) == 0:
-            warnings.warn("No spikes found for the provided parameters.")
-        if carry:
-            df = df.sort(["cell_index", "stimulus_index"])
-            cell_stimuli = df[["cell_index", "stimulus_index"]].to_numpy()
-            # Create multiindex for panadas
-            index = pd.MultiIndex.from_arrays(
-                cell_stimuli.T, names=["cell_index", "stimulus_index"]
-            )
-            df_temp = self.dataframes[cell_df].set_index("stimulus_index")
-            df_temp = df_temp.loc[np.asarray(stimuli).flatten()]
-            df_temp = df_temp.reset_index(drop=False).set_index(
-                ["cell_index", "stimulus_index"]
-            )
-            df_add = pl.from_pandas(df_temp.loc[index][carry])
-            df = pl.concat([df, df_add], how="horizontal")
-        if pandas:
-            return df.to_pandas()
+        # Store all the file paths in a dictionary
+        if getattr(self, "recordings", None) == None:
+            # Need to check if recordings is present, if not, the recording is a single recording
+            # if single recording, the self.name is the recording name
+            files_dict = {self.name: self.parquet_path}
         else:
-            return df
-
-    def spike_loading_assertions(self, stimuli, cells):
-        if len(stimuli[0]) > 1:
-            assert (
-                len(stimuli[0]) == len(cells[0]) or len(cells[0]) == 1
-            ), "If a list with multiple stimuli is provided the len of the cells list must be 1 or equal to len of stimuli."
-        if len(cells) > 1:
-            assert len(cells) == len(
-                stimuli
-            ), "If multiple cells are provided, the same amount of stimuli must be provided as well."
-
-    def get_triggered(  # Function works on single recording only
-        self,
-        cells,
-        stimulus,
-        time="seconds",
-        waveforms=False,
-        stimulus_df="stimulus_df",
-    ):
-        """
-
-        This function returns a dataframe that contains the spikes that were recorded during the presentation
-        of a specific stimulus. Spikes are loaded from the connected parquet file.
-
-        Parameters
-        ----------
-        cells : list of integers
-            List of cell indices that shall be loaded.
-        stimulus : list of integers
-            List of stimulus indices that shall be loaded.
-        time : str
-            Defines the time unit of the returned dataframe. Can be "seconds" or "frames".
-        waveforms : boolean
-            If the waveforms shall be loaded as well. Only possible if the parquet file contains the waveforms.
-        stimulus_df : str
-            Name of the stimulus dataframe that shall be used. (spikes_df is not need, because cell indices are absolute)
-
-        Returns
-        -------
-        df : polars.DataFrame
-            A dataframe that contains the spikes (and waveforms) that were recorded during the presentation of a specific
-        """
-        # Get the stimulus information for the specific stimulus:
-        sub_df = filter_stimulus.find_stimuli(self.dataframes[stimulus_df], stimulus[0])
-        # Extract the necessary information from the stimulus dataframe:
-        begin_end, trigger, trigger_end, stim_logic = filter_stimulus.get_stimulus_info(
-            sub_df
-        )
-        # Load the spikes from the parquet file, sorted by trigger and repeats:
-        df = stimulus_spikes.load_triggered(
-            cells,
-            begin_end[0, 0],
-            begin_end[0, 1],
-            trigger,
-            trigger_end,
-            stim_logic,
-            self.parquet_path,
+            # if multiple recordings are present, the recordings attribute is present
+            # each recording's name is stored in the recordings attribute
+            files_dict = {
+                rec: self.recordings[rec].parquet_path
+                for rec in list(filter_dict.keys())
+            }
+        # get spikes from files
+        return stimulus_spikes.get_spikes(
+            files_dict,
+            filter_dict,
+            self.dataframes[cell_df],
+            time,
             waveforms,
+            pandas,
+            carry,
         )
-        # Convert the times to seconds if necessary:
-        if time == "seconds":
-            df = df.with_columns(
-                pl.col("times").truediv(self.sampling_freq).alias("times")
-            )
-            df = df.with_columns(
-                pl.col("times_relative")
-                .truediv(self.sampling_freq)
-                .alias("times_relative")
-            )
-            df = df.with_columns(
-                pl.col("times_triggered")
-                .truediv(self.sampling_freq)
-                .alias("times_triggered")
-            )
-        return df
 
-    def get_spikes_as_numpy(  # Function works with single recording only
+    def _check_spikes_df(
         self,
-        stimulus,
-        cells,
-        time="seconds",
-        waveforms=False,
-        relative=True,
-        stimulus_df="stimulus_df",
-        cell_df="spikes_df",
-    ):
-        """
-        This function returns the spikes that were recorded during the presentation of a specific stimulus as a numpy array.
-        Spikes are loaded from the connected parquet file.
-        Only a single stimulus can be loaded at a time.
+        df_name: str = "spikes_df",
+        return_columns: list[str] = None,
+        pandas: bool = True,
+    ) -> pd.DataFrame | pl.DataFrame:
+        if return_columns is None:
+            return_columns = ["recording", "stimulus_index", "cell_index"]
+        try:
+            temp_df = self.dataframes[df_name][return_columns]
 
-        Parameters
-        ----------
-         stimulus : list, single integer
-            The stimulus index that shall be loaded.
-        cells : list of integers
-            List of cell indices that shall be loaded.
-        time : str
-            Defines the time unit of the returned dataframe. Can be "seconds" or "frames".
-        waveforms : boolean
-            If the waveforms shall be loaded as well. Only possible if the parquet file contains the waveforms.
-        relative : boolean
-            If the spikes shall be returned relative to the stimulus onset or absolute (begin of the recording).
-        stimulus_df : str
-            Name of the stimulus dataframe that shall be used.
-        cell_df : str
-            Name of the cell dataframe that shall be used, only use case is if cells == "all"
-
-        Returns
-        -------
-        spikes_numpy : numpy array
-            A numpy array that contains the spikes that were recorded during the presentation of a specific stimulus.
-            The array is structured as follows: [cell_index, spikes]
-
-        """
-
-        # The number of cells that are supposed to be loaded, used below to ensure empty cells are returned as empty arrays
-        assert (
-            len(stimulus) == 1
-        ), "Only a single stimulus can be loaded at a time and returned as array."
-        assert (
-            len(cells) == 1
-        ), "Only a single stimulus can be loaded at a time and returned as array."
-
-        spikes = self.get_spikes_triggered(
-            stimulus, cells, time, waveforms, False, stimulus_df, cell_df
-        )
-        spikes_numpy = spiketrains.collect_as_arrays(
-            spikes, "cell_index", "times_triggered", "spikes"
-        )
-        return spikes_numpy["cell_index"].to_numpy(), spikes_numpy["spikes"].to_numpy()
+        except KeyError:
+            warnings.warn(
+                "The cell dataframe does not contain the required columns. Accidentally provided a stimulus dataframe?"
+            )
+        if pandas:
+            return temp_df
+        else:
+            return pl.from_pandas(temp_df)
 
     def get_spikes_df(
         self,
-        cell_df="spikes_df",
-        stimulus_df="stimulus_df",
-        time="seconds",
-        waveforms=False,
-        pandas=True,
-    ):
+        cell_df: str = "spikes_df",
+        stimulus_df: str = "stimulus_df",
+        time: str = "seconds",
+        waveforms: bool = False,
+        pandas: bool = True,
+        carry: list[str] = None,
+    ) -> pd.DataFrame | pl.DataFrame:
         """
         Returns all spikes from all recordings and all stimuli in the choosen "cell_df" and "stimulus_df".
         This is equal to calling get_spikes_triggered with recordings = "all", cells = "all" and stimuli = "all",
@@ -370,78 +200,26 @@ class Recording:
 
         """
 
-        # Create the inputs to the get_spikes_triggered function:
-        try:
-            input_df = pl.from_pandas(
-                self.dataframes[cell_df][["recording", "stimulus_index", "cell_index"]]
-            )
-        except KeyError:
-            warnings.warn(
-                "The cell dataframe does not contain the required columns. Accidentally provided a stimulus dataframe?"
-            )
-            return
-
-        stimuli = input_df["stimulus_index"].unique().to_list()
-
-        stim_list = [
-            [stim_id]
-            for stim_id in pl.from_pandas(self.dataframes[stimulus_df])
-            .unique("stimulus_index")
-            .filter(pl.col("stimulus_index").is_in(stimuli))["stimulus_index"]
-            .to_list()
-        ]
-        input_df = input_df.filter(
-            pl.col("stimulus_index").is_in(np.asarray(stim_list).flatten().tolist())
+        # Check if provided dataframe is the right dataframe
+        input_df = self._check_spikes_df(df_name=cell_df, pandas=False)
+        # Create filter parameters for which cells and stimuli to load
+        filter_dict = stimulus_trace.create_filter_dict(
+            input_df, self.dataframes[stimulus_df]
         )
-        stim_df = input_df.partition_by("stimulus_index")
-        cell_list = [df["cell_index"].to_list() for df in stim_df]
-
-        # Call the get_spikes_triggered function:
-
-        df = self.get_spikes_triggered(
-            stim_list,
-            cell_list,
-            time=time,
-            waveforms=waveforms,
-            pandas=pandas,
-            stimulus_df=stimulus_df,
-            cell_df=cell_df,
+        # Store all the file paths in a dictionary
+        files_dict = {
+            rec: self.recordings[rec].parquet_path for rec in list(filter_dict.keys())
+        }
+        # get spikes from files
+        return stimulus_spikes.get_spikes(
+            files_dict,
+            filter_dict,
+            self.dataframes[cell_df],
+            time,
+            waveforms,
+            pandas,
+            carry,
         )
-
-        return df
-
-    def organize_recording_parameters(
-        self, recordings, stimuli, cells, stimulus_df="stimulus_df", all_recordings=None
-    ):
-        # Get the input in the correct format:
-        # Check if the nr of recordings is equal to the nr of stimuli and cells:
-        # If either list is a single list, use the same stimuli and cells for all recordings.
-
-        input_new = recordings_stimuli_cells.sort(
-            [recordings, stimuli, cells], all_recordings
-        )
-        recordings, stimuli, cells = input_new
-        new_stimuli = []
-        new_cells = []
-        for recording, stimulus, cell in zip(recordings, stimuli, cells):
-            sub_stim_list = []
-            sub_cell_list = []
-            all_stimuli = [
-                [item]
-                for item in self.dataframes[stimulus_df].query(
-                    "recording == @recording"
-                )["stimulus_index"]
-            ]
-            for sub_stim in stimulus:
-                if sub_stim[0] == "all":
-                    sub_stim_list.append(all_stimuli)
-                    sub_cell_list.append(cell * len(all_stimuli))
-                else:
-                    sub_stim_list.append(sub_stim)
-                    sub_cell_list.append(cell * len(sub_stim))
-            new_stimuli.append(sub_stim_list)
-            new_cells.append(sub_cell_list[0])
-        return recordings, new_stimuli, new_cells
 
     def get_stimulus_subset(self, stimulus=None, name=None, dataframes=None):
         """Returns a subset of the dataframe that only contains the spikes that
@@ -498,7 +276,13 @@ class Recording:
             out.append(pd.concat(dfs))
         return out
 
-    def show_df(self, name="spikes_df", level=False, condition=False, viewname=None):
+    def show_df(
+        self,
+        name: str = "spikes_df",
+        level: str = False,
+        condition: str = False,
+        viewname: str = None,
+    ) -> Table:
         """Main function to interactively view the dataframes.
 
         Parameters
@@ -556,7 +340,7 @@ class Recording:
         # Keeping track of which cells the user might select:
         return self.views[viewname].show()
 
-    def filtered_df(self, df_name):
+    def filtered_df(self, df_name: str) -> pd.DataFrame:
         """
         Returns the filtered dataframe of a specific view.
 
@@ -568,22 +352,24 @@ class Recording:
         return self.views[df_name].tabulator.value
 
     def find_stim_indices(
-        self, stimulus_names, stimulus_df="stimulus_df", recording=None
-    ):
+        self,
+        stimulus_names: list[str],
+        stimulus_df: str = "stimulus_df",
+    ) -> list[list[int]]:
         """Returns the stimulus indices that correspond to the stimulus names.
 
         Parameters
         ----------
         stimulus_names : list of strings
             List of stimulus names that shall be converted to stimulus indices.
-        Returns
+        stimulus_df : str
+            Name of the stimulus dataframe that shall be used.
         -------
         stim_indices : list of lists
             List of stimulus indices that correspond to the stimulus names.
 
         """
-        if recording is None:
-            recording = self.name
+
         stim_indices = []
         for stimulus in stimulus_names:
             if type(stimulus) is str:
@@ -601,7 +387,7 @@ class Recording:
         stim_indices = [[item] for sublist in stim_indices for item in sublist]
         return stim_indices
 
-    def delete_df(self, df_name):
+    def delete_df(self, df_name: str):
         """Deletes a dataframe from the recording object.
 
         Parameters
@@ -616,18 +402,18 @@ class Recording:
     @property
     def spikes_df(self):
         """Returns the spikes_df dataframe. Shortcut version
-        Warning: You cannot update this dataframe, use self.dataframes["spikes_df"] instead
+        Warning: You cannot update this attribute, use self.dataframes["spikes_df"] instead
         """
         return self.dataframes["spikes_df"]
 
     @property
     def stimulus_df(self):
         """Returns the stimulus_df dataframe. Shortcut version
-        Warning: You cannot update this dataframe, use self.dataframes["stimulus_df"] instead
+        Warning: You cannot update this attribute, use self.dataframes["stimulus_df"] instead
         """
         return self.dataframes["stimulus_df"]
 
-    def save(self, filename):
+    def save(self, filename: str | pathlib.Path):
         """
         Save function that is doing the actual saving after non-picklable attributes have been removed.
         Parameters
@@ -644,7 +430,9 @@ class Recording:
             pickle.dump(self, f)
 
     def save_save(self):
-        """ """
+        """
+        Save the object to the path that was used to load the object.
+        """
         self.views = {}
         with open(self.load_path, "wb") as f:
             pickle.dump(self, f)
@@ -675,6 +463,23 @@ class Recording:
     def __delattr__(self, name):
         if name == "dataframes":
             raise AttributeError("Cannot delete dataframes")
+        elif name == "views":
+            raise AttributeError("Cannot delete views")
+        elif name == "nr_stimuli":
+            raise AttributeError("Cannot delete nr_stimuli")
+        elif name == "nr_cells":
+            raise AttributeError("Cannot delete nr_cells")
+        elif name == "name":
+            raise AttributeError("Cannot delete name")
+        elif name == "analysis":
+            raise AttributeError("Cannot delete analysis")
+        elif name == "parquet_path":
+            raise AttributeError("Cannot delete parquet_path")
+        elif name == "raw_path":
+            raise AttributeError("Cannot delete raw_path")
+        elif name == "load_path":
+            raise AttributeError("Cannot delete load_path")
+
         super().__delattr__(name)
 
     def use_view_as_filter(
@@ -750,52 +555,25 @@ class Recording:
 
     def extract_df_subset(
         self,
-        cell_index=None,
-        stimulus_index=None,
-        stimulus_name=None,
-        recording=None,
         dataframe="spikes_df",
+        query_conditions: list[dict] = None,
     ):
         """
         Returns a subset of the dataframe depending on the filter parameters.
 
         Parameters
         ----------
-        cell_index : list of integers
-            List of cell indices that shall be included in the subset.
-        stimulus_index : list of integers
-            List of stimulus indices that shall be included in the subset.
-        stimulus_name : list of strings
-            List of stimulus names that shall be included in the subset.
-        recording : list of strings
-            List of recording names that shall be included in the subset.
         dataframe : str
             Name of the dataframe that shall be used to create the subset.
-
+        query_conditions : list of dictionaries
+            List of dictionaries that contain the filter parameters.
+            Example:
+            query_conditions = [{"stimulus_name": "fff", "stimulus_index": 1},
 
         """
 
-        if cell_index is None:
-            cell_index = self.dataframes[dataframe]["cell_index"].unique().tolist()
-        if stimulus_index is None:
-            stimulus_index = (
-                self.dataframes[dataframe]["stimulus_index"].unique().tolist()
-            )
-        if stimulus_name is None:
-            stimulus_name = (
-                self.dataframes[dataframe]["stimulus_name"].unique().tolist()
-            )
-        if recording is None:
-            recording = self.dataframes[dataframe]["recording"].unique().tolist()
-
-        df_temp = pl.from_pandas(self.dataframes[dataframe])
-        df_temp = df_temp.filter(
-            pl.col("cell_index").is_in(cell_index)
-            & pl.col("stimulus_index").is_in(stimulus_index)
-            & pl.col("stimulus_name").is_in(stimulus_name)
-            & pl.col("recording").is_in(recording)
-        )
-        return df_temp.to_pandas()
+        df = stimulus_spikes.filter_dataframe_complex(query_conditions)
+        return df
 
     def add_column(self, series, dataframe="spikes_df", fill_value=0):
         """
@@ -1008,114 +786,6 @@ class Recording_s(Recording):
                         [self.dataframes[df], recording.dataframes[df]]
                     ).reset_index(drop=True)
 
-    def get_spikes_df(
-        self,
-        cell_df="spikes_df",
-        stimulus_df="stimulus_df",
-        time="seconds",
-        waveforms=False,
-        pandas=True,
-        carry=None,
-    ):
-        """
-        Returns all spikes from all recordings and all stimuli in the choosen "cell_df" and "stimulus_df".
-        This is equal to calling get_spikes_triggered with recordings = "all", cells = "all" and stimuli = "all",
-        pointing at the same dataframes.
-
-        Parameters
-        ----------
-        cell_df : str
-            Name of the cell dataframe that shall be used.
-        stimulus_df : str
-            Name of the stimulus dataframe that shall be used.
-        time : str
-            Defines the time unit of the returned dataframe. Can be "seconds" or "frames".
-        waveforms : boolean
-            If the waveforms shall be loaded as well. Only possible if the parquet file contains the waveforms.
-        pandas : boolean
-            If the returned dataframe shall be a pandas dataframe or a polars dataframe.
-
-        """
-
-        # Create the inputs to the get_spikes_triggered function:
-        try:
-            input_df = pl.from_pandas(
-                self.dataframes[cell_df][["recording", "stimulus_index", "cell_index"]]
-            )
-        except KeyError:
-            warnings.warn(
-                "The cell dataframe does not contain the required columns. Accidentally provided a stimulus dataframe?"
-            )
-            return
-        recordings = [
-            [rec] for rec in input_df.unique("recording")["recording"].to_list()
-        ]
-        input_dict = input_df.partition_by("recording", as_dict=True)
-        input_df = [input_dict[rec[0],] for rec in recordings]
-        input_list = []
-        for df in input_df:
-            rec_input = []
-            rec_input.append(df.unique("recording")["recording"].to_list())
-            stim_list = [
-                [stim_id]
-                for stim_id in df.unique("stimulus_index")["stimulus_index"].to_list()
-            ]
-            rec_input.append(stim_list)
-            stim_df = df.partition_by("stimulus_index")
-            cell_list = [df["cell_index"].to_list() for df in stim_df]
-            rec_input.append(cell_list)
-            input_list.append(rec_input)
-
-        nr_cpus = mp.cpu_count()
-        if nr_cpus > len(recordings):
-            nr_cpus = len(recordings)
-
-        self.synchronize_dataframes()
-
-        paths = self.dummy_objects([rec[0] for rec in recordings])
-
-        with mp.Pool(nr_cpus) as pool:
-            # Pass all required arguments to the worker function
-            dfs = pool.map(
-                spike_load_worker,
-                [
-                    (
-                        path,
-                        rec_input[1],
-                        rec_input[2],
-                        time,
-                        waveforms,
-                        cell_df,
-                        stimulus_df,
-                    )
-                    for path, rec_input in zip(paths, input_list)
-                ],
-            )
-
-        df = pl.concat(dfs)
-
-        if carry:
-            df = df.sort(["recording", "cell_index", "stimulus_index"])
-
-            df = df.to_pandas().set_index(["recording", "cell_index", "stimulus_index"])
-
-            for column in carry:
-                df[column] = 0
-                df[column] = df[column].astype(self.dataframes[cell_df][column].dtype)
-
-            temp_df = self.dataframes[cell_df].set_index(
-                ["recording", "cell_index", "stimulus_index"]
-            )
-            df.update(temp_df[carry])
-
-            df = df.reset_index()
-            df = pl.from_pandas(df)
-
-        if pandas:
-            return df.to_pandas()
-        else:
-            return df
-
     def spikes_for_analysis(self, analysis_name, **kwargs):
         """
         Returns the spikes that are used for a specific analysis.
@@ -1134,77 +804,6 @@ class Recording_s(Recording):
         cell_df = analysis["cell_df"]
         stimulus_df = analysis["stimulus_df"]
         return self.get_spikes_df(cell_df, stimulus_df, **kwargs)
-
-    def get_spikes_triggered(
-        self,
-        recordings,
-        stimuli,
-        cells,
-        time="seconds",
-        waveforms=False,
-        pandas=True,
-        cell_df="spikes_df",
-        stimulus_df="stimulus_df",
-    ):
-        # self.synchronize_dataframes()
-
-        all_recordings = [[recording] for recording in self.recordings.keys()]
-        recordings, stimuli, cells = self.organize_recording_parameters(
-            recordings, stimuli, cells, stimulus_df, all_recordings
-        )
-        nr_cpus = mp.cpu_count()
-        if nr_cpus > len(recordings):
-            nr_cpus = len(recordings)
-        # Now we have lists of list matching the recordings, cells and stimuli. But, we still need to fill in
-        # the "all" cells:
-        new_cells = []
-        for recording, cell_list in zip(recordings, cells):
-            stim_cells_new = []
-            for stim_cell_list in cell_list:
-                cell_sub_list = []
-                for cell in stim_cell_list[:1]:
-                    if cell == "all":
-                        cell_sub_list.append(
-                            self.dataframes[cell_df]
-                            .query("recording == @recording")["cell_index"]
-                            .unique()
-                            .tolist()
-                        )
-
-                    else:
-                        cell_sub_list.append(stim_cell_list)
-                stim_cells_new.append(cell_sub_list[0])
-            new_cells.append(stim_cells_new)
-        cells = new_cells
-
-        # Identify the stimulus indices in the recordings if stimulus name was provided.
-        paths = self.dummy_objects([rec[0] for rec in recordings])
-
-        with mp.Pool(nr_cpus) as pool:
-            # Pass all required arguments to the worker function
-            dfs = pool.map(
-                spike_load_worker,
-                [
-                    (
-                        rec,
-                        stimulus_list,
-                        cell_list,
-                        time,
-                        waveforms,
-                        cell_df,
-                        stimulus_df,
-                    )
-                    for rec, stimulus_list, cell_list in zip(paths, stimuli, cells)
-                ],
-            )
-
-        df = pl.concat(dfs)
-        if len(df) == 0:
-            warnings.warn("No spikes found for the provided parameters.")
-        if pandas:
-            return df.to_pandas()
-        else:
-            return df
 
     def get_spikes_chunked(
         self,
@@ -1269,8 +868,8 @@ class Recording_s(Recording):
                 recording.dataframes,
                 recording.sampling_freq,
             )
-            new_rec.save(f"{self.store_path}\\{recording.name}")
-            paths.append(f"{self.store_path}\\{recording.name}")
+            new_rec.save(f"{self.store_path}//{recording.name}")
+            paths.append(f"{self.store_path}//{recording.name}")
         return paths
 
     def delete_df(self, df_name):
@@ -1287,3 +886,12 @@ class Recording_s(Recording):
         for recording in self.recordings.values():
             recording.delete_df(df_name)
             recording.save(recording.load_path)
+
+    def __delattr__(self, name):
+        super().__delattr__(name)
+        if name == "recordings":
+            raise AttributeError("Cannot delete recordings")
+        elif name == "nr_recordings":
+            raise AttributeError("Cannot delete nr_recordings")
+        elif name == "store_path":
+            raise AttributeError("Cannot delete store_path")

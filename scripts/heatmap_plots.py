@@ -1,3 +1,5 @@
+import sys
+sys.path.extend(['/home/marvin-seifert/PycharmProjects'])
 from polarspike import Overview, spiketrain_plots, colour_template, histograms, chirps
 import numpy as np
 import pandas as pd
