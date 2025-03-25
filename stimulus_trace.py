@@ -9,7 +9,7 @@ file formate.
 """
 import pandas
 
-import backbone, stimulus_spikes
+from polarspike import backbone, stimulus_spikes
 import h5py
 import pandas as pd
 import numpy as np
