@@ -1,3 +1,9 @@
+"""
+This module contains functions to update old dataframes saved before the polarspike project was started into the new format
+Which is used in the polarspike project. There is one function for each dataframe (spikes_df, stimulus_df).
+@ Marvin Seifert 2024
+"""
+
 
 def stimulus_column_name_corrections(df):
     if "stimulus_name" in df.columns:
@@ -17,9 +23,7 @@ def stimulus_column_name_corrections(df):
         df.rename(columns={"End_Fr": "end_fr"}, inplace=True)
         print("End_Fr corrected")
     if "Trigger_Fr_relative" in df.columns:
-        df.rename(
-            columns={"Trigger_Fr_relative": "trigger_fr_relative"}, inplace=True
-        )
+        df.rename(columns={"Trigger_Fr_relative": "trigger_fr_relative"}, inplace=True)
         print("Trigger_Fr_relative corrected")
     if "Trigger_int" in df.columns:
         df.rename(columns={"Trigger_int": "trigger_int"}, inplace=True)
@@ -31,12 +35,14 @@ def stimulus_column_name_corrections(df):
         print("Stimulus_repeat_logic corrected")
     if "Stimulus_repeat_sublogic" in df.columns:
         df.rename(
-            columns={"Stimulus_repeat_sublogic": "stimulus_repeat_sublogic"}, inplace=True
+            columns={"Stimulus_repeat_sublogic": "stimulus_repeat_sublogic"},
+            inplace=True,
         )
         print("Stimulus_repeat_sublogic corrected")
 
     return df
     # End of column name corrections
+
 
 def spikes_df_column_name_corrections(df):
     # Correct column names. First in spikes_df
