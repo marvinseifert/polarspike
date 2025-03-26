@@ -1,10 +1,21 @@
+"""
+This module contains functions to calculate quality indices for spiketrains.
+Currently, only the quality index according to Baden et al. 2016 is implemented.
+@ Marvin Seifert 2024
+"""
+
 import polars.exceptions
 from polarspike import binarizer
 import polars as pl
 import pandas as pd
 
 
-def spiketrain_qi(spikes, max_window=1, bin_size=0.001, max_repeat=24):
+def spiketrain_qi(
+    spikes: pl.DataFrame,
+    max_window: int = 1,
+    bin_size: float = 0.001,
+    max_repeat: int = 24,
+) -> pd.DataFrame:
     """
     Calculate the quality index of a spiketrain or multiple spiketrains from multiple cells/ recordings.
     Warning! This function does not split the spiketrains by stimulus. Provide a single stimulus or multiple stimuli.
