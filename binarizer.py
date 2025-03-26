@@ -229,7 +229,7 @@ def binary_as_array(repeats: int, nr_bins: int, df: pl.DataFrame) -> np.ndarray:
     )
 
 
-def calc_qis(result_df: p.DataFrame) -> np.ndarray:
+def calc_qis(result_df: pl.DataFrame) -> np.ndarray:
     """
     Calculate the quality index for a DataFrame with binary signals.
 
