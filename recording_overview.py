@@ -1,3 +1,10 @@
+"""
+This module provides functions to plot spike counts, interspike intervals, spike trains and spike amplitudes from a parquet file.
+This enables the user to visualize the data of a single recording fast and easy to get a quick overview.
+@ Marvin Seifert 2024
+"""
+
+
 import polars as pl
 import numpy as np
 import matplotlib.pyplot as plt
@@ -6,15 +13,67 @@ import datashader as ds
 import matplotlib.colors as mcolors
 from matplotlib.cm import ScalarMappable
 from bokeh.plotting import figure, show
+from pathlib import Path
 
 
-def spike_counts_from_file(file_parquet, cmap="Oranges"):
+def spike_counts_from_file(
+    file_parquet: str | Path, cmap: str = "Oranges"
+) -> tuple[plt.Figure, plt.Axes]:
+    """
+    Plot the number of spikes for each cell in a recording using DataShader.
+
+    Parameters
+    ----------
+    file_parquet : str | Path
+        The path to the parquet file containing the spike times.
+    cmap : str, optional
+        The colormap to use for the plot. The default is "Oranges".
+
+    Returns
+    -------
+    fig : plt.Figure
+        The figure containing the plot.
+    ax : plt.Axes
+        The axes containing the plot.
+
+    """
     df = pl.scan_parquet(file_parquet)
     df = df.select(pl.col("cell_index"), pl.col("times"))
     return plot_spike_counts(df, cmap=cmap)
 
 
-def isi_from_file(file_parquet, freq=1, x="times", cmap="viridis", cutoff=0.001):
+def isi_from_file(
+    file_parquet: str | Path,
+    freq: float = 1,
+    x: str = "times",
+    cmap: str = "viridis",
+    cutoff: float = 0.001,
+) -> tuple[plt.Figure, plt.Axes]:
+    """
+    Plot the interspike intervals for a recording using DataShader.
+
+    Parameters
+    ----------
+    file_parquet : str | Path
+        The path to the parquet file containing the spike times.
+    freq : float, optional
+        The frequency of the recording in Hz. The default is 1 (which is essentially plotting on a frame base).
+    x : str, optional
+        The x-axis to plot the data on. The default is "times".
+    cmap : str, optional
+        The colormap to use for the plot. The default is "viridis".
+    cutoff : float, optional
+        The cutoff value in seconds. The default is 0.001.
+
+    Returns
+    -------
+    fig : plt.Figure
+        The figure containing the plot.
+    ax : plt.Axes
+        The axes containing the plot.
+
+
+    """
     cutoff = (1 / freq) * cutoff
     df = pl.scan_parquet(file_parquet)
     df = df.select(pl.col("cell_index"), pl.col("times"))
@@ -22,14 +81,66 @@ def isi_from_file(file_parquet, freq=1, x="times", cmap="viridis", cutoff=0.001)
     return plot_isi(df, x, cmap=cmap, cutoff=cutoff)
 
 
-def spiketrains_from_file(file_parquet, freq=1, cmap="Greys", height=None, width=None):
+def spiketrains_from_file(
+    file_parquet: str | Path,
+    freq: float = 1,
+    cmap: str = "Greys",
+    height: int = None,
+    width: int = None,
+) -> tuple[plt.Figure, plt.Axes]:
+    """
+    Plot the spike trains per cell in a recording using DataShader.
+
+    Parameters
+    ----------
+    file_parquet : str | Path
+        The path to the parquet file containing the spike times.
+    freq : float, optional
+        The frequency of the recording in Hz. The default is 1 (which is essentially plotting on a frame base).
+    cmap : str, optional
+        The colormap to use for the plot. The default is "Greys".
+    height : int, optional
+        The height of the plot. The default is None, which defaults to nr_cells.
+    width : int, optional
+        The width of the plot. The default is None, which defaults to nr_bins.
+
+    Returns
+    -------
+    fig : plt.Figure
+        The figure containing the plot.
+    ax : plt.Axes
+        The axes containing the plot.
+    """
     df = pl.scan_parquet(file_parquet)
     df = df.select(pl.col("cell_index"), pl.col("times"))
     df = df.with_columns(pl.col("times").truediv(freq).alias("times"))
     return plot_spiketrains(df, cmap=cmap, height=height, width=width)
 
 
-def spike_amplitudes_from_file(file_parquet, freq=1, cmap="viridis"):
+def spike_amplitudes_from_file(
+    file_parquet: str | Path, freq: float = 1, cmap: str = "viridis"
+) -> tuple[plt.Figure, plt.Axes]:
+    """
+    Plot the spike amplitudes for a recording using DataShader. This plots the amplitude of the waveforms of the individual
+    cells.
+
+    Parameters
+    ----------
+    file_parquet : str | Path
+        The path to the parquet file containing the spike times.
+    freq : float, optional
+        The frequency of the recording in Hz. The default is 1 (which is essentially plotting on a frame base).
+    cmap : str, optional
+        The colormap to use for the plot. The default is "viridis".
+
+    Returns
+    -------
+    fig : plt.Figure
+        The figure containing the plot.
+    ax : plt.Axes
+        The axes containing the plot.
+
+    """
     df = pl.scan_parquet(file_parquet)
     df = df.with_columns(pl.col("times").truediv(freq).alias("times"))
     waves = df.columns[2:]
@@ -47,7 +158,24 @@ def spike_amplitudes_from_file(file_parquet, freq=1, cmap="viridis"):
     )
 
 
-def plot_spike_counts(df, cmap):
+def plot_spike_counts(df: pl.DataFrame, cmap: str) -> tuple[plt.Figure, plt.Axes]:
+    """
+    Plot the number of spikes for each cell in a recording using DataShader.
+
+    Parameters
+    ----------
+    df : pl.DataFrame
+        The DataFrame containing the spike times.
+    cmap : str
+        The colormap to use for the plot.
+
+    Returns
+    -------
+    fig : plt.Figure
+        The figure containing the plot.
+    ax : plt.Axes
+        The axes containing the plot.
+    """
     results_df = df.group_by("cell_index").agg(
         pl.col("times").count().alias("nr_spikes")
     )
@@ -77,7 +205,31 @@ def plot_spike_counts(df, cmap):
     return fig, ax
 
 
-def plot_isi(df, x, cmap="viridis", cutoff=18.0):
+def plot_isi(
+    df: pl.DataFrame, x: str, cmap: str = "viridis", cutoff: float = 18.0
+) -> tuple[plt.Figure, plt.Axes]:
+    """
+    Plot the interspike intervals for a recording using DataShader.
+
+    Parameters
+    ----------
+    df : pl.DataFrame
+        The DataFrame containing the spike times.
+    x : str
+        x variable to plot the data on in y.
+    cmap : str, optional
+        The colormap to use for the plot. The default is "viridis".
+    cutoff : float, optional
+        The cutoff value in seconds. The default is 18.0.
+
+    Returns
+    -------
+    fig : plt.Figure
+        The figure containing the plot.
+    ax : plt.Axes
+        The axes containing the plot.
+
+    """
     df = df.sort(["cell_index", "times"], descending=False)
     df = df.with_columns(pl.col("times").diff(null_behavior="ignore").alias("isi"))
     df = df.with_columns(pl.when(pl.col("isi") < 0).then(0).alias("diff"))
@@ -126,7 +278,30 @@ def plot_isi(df, x, cmap="viridis", cutoff=18.0):
     return fig, ax
 
 
-def plot_spiketrains(df, cmap, height=None, width=None):
+def plot_spiketrains(
+    df: pl.DataFrame, cmap: str, height: int = None, width: int = None
+) -> tuple[plt.Figure, plt.Axes]:
+    """
+    Plot the spike trains per cell in a recording using DataShader.
+
+    Parameters
+    ----------
+    df : pl.DataFrame
+        The DataFrame containing the spike times.
+    cmap : str
+        The colormap to use for the plot.
+    height : int, optional
+        The height of the plot. The default is None, which defaults to nr_cells.
+    width : int, optional
+        The width of the plot. The default is None, which defaults to nr_bins.
+
+    Returns
+    -------
+    fig : plt.Figure
+        The figure containing the plot.
+    ax : plt.Axes
+        The axes containing the plot.
+    """
     if height is None:
         height = int(df.select(pl.max("cell_index")).collect().item())
     if width is None:
@@ -160,7 +335,25 @@ def plot_spiketrains(df, cmap, height=None, width=None):
     return fig, ax
 
 
-def plot_spike_amplitudes(df, cmap):
+def plot_spike_amplitudes(df: pl.DataFrame, cmap: str) -> tuple[plt.Figure, plt.Axes]:
+    """
+    Plot the spike amplitudes for a recording using DataShader. This plots the amplitude of the waveforms of the individual
+    cells.
+
+    Parameters
+    ----------
+    df : pl.DataFrame
+        The DataFrame containing the spike times.
+    cmap : str
+        The colormap to use for the plot.
+
+    Returns
+    -------
+    fig : plt.Figure
+        The figure containing the plot.
+    ax : plt.Axes
+        The axes containing the plot.
+    """
     plot_df = df.to_pandas()
     fig, ax = plt.subplots(figsize=(20, 10))
 
@@ -188,7 +381,16 @@ def plot_spike_amplitudes(df, cmap):
     return fig, ax
 
 
-def empty_spike_counts_figure():
+def empty_spike_counts_figure() -> tuple[plt.Figure, plt.Axes]:
+    """
+    Create an empty figure for the spike counts plot.
+    Returns
+    -------
+    fig : plt.Figure
+        The figure containing the plot.
+    ax : plt.Axes
+        The axes containing the plot.
+    """
     fig, ax = plt.subplots(figsize=(15, 10))
     ax.set_xlabel("Cell Index")
     ax.set_ylabel("Number of Spikes")
@@ -196,7 +398,22 @@ def empty_spike_counts_figure():
     return fig, ax
 
 
-def add_stimulus_df(fig, df):
+def add_stimulus_df(fig: plt.Figure, df: plt.DataFrame) -> plt.Figure:
+    """
+    Add stimulus information to a spike count plot as vertical shaded areas.
+
+    Parameters
+    ----------
+    fig : plt.Figure
+        The figure containing the plot.
+    df : plt.DataFrame
+        The DataFrame containing the stimulus information.
+
+    Returns
+    -------
+    fig : plt.Figure
+        The figure containing the plot with the stimulus information.
+    """
     colours = ["green", "orange"]
     nr_stimuli = len(df)
     if nr_stimuli > len(colours):
@@ -227,7 +444,10 @@ def add_stimulus_df(fig, df):
     return fig
 
 
-def plot_isi_new(df, x, cmap="viridis", cutoff=18.0):
+def plot_isi_new(df: pl.DataFrame, x: str, cmap: str = "viridis", cutoff: float = 18.0):
+    """
+    Under construction
+    """
     df = df.sort(["cell_index", "times"], descending=False)
     df = df.with_columns(pl.col("times").diff(null_behavior="ignore").alias("isi"))
     df = df.with_columns(pl.when(pl.col("isi") < 0).then(0).alias("diff"))
