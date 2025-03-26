@@ -1,3 +1,14 @@
+"""
+This module contains custom templates for Plotly plots. You can use them by importing this module and setting the template
+of your plotly figure to one of the templates defined in this module.
+Templates:
+- scatter_template: A white template with black axes and white ticks.
+- scatter_template_black: A black template with white axes and black ticks.
+- scatter_template_jupyter: A template for Jupyter notebooks with a transparent background and white axes.
+- bar_template: A white template with black axes and white ticks for bar plots.
+@Marvin Seifert 2024
+"""
+
 import plotly.graph_objects as go
 import plotly.io as pio
 import plotly.express as px
