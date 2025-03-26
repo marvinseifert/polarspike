@@ -1,9 +1,27 @@
+"""
+This module contains functions to create and an interactive table using the Panel library in Jupiter notebooks, Panel server, or JupyterLab.
+@ Marvin Seifert 2024
+"""
+
 import pandas as pd
 import panel as pn
 
 
 class Table:
-    def __init__(self, df, width=1000, height=500):
+    """
+    Class to create an interactive table using the Panel library in Jupiter notebooks, Panel server, or JupyterLab.
+    This is based on the Tabulator widget from Panel.
+    Parameters
+    ----------
+    df : DataFrame
+        The DataFrame to be displayed in the table.
+    width : int, optional
+        The width of the table in pixels. The default is 1000.
+    height : int, optional
+        The height of the table in pixels. The default is 500.
+    """
+
+    def __init__(self, df: pd.DataFrame, width: int = 1000, height: int = 500):
         self.df = df
         self.tabulator = pn.widgets.Tabulator(
             df,
@@ -67,10 +85,23 @@ class Table:
 
         self.query_widget.param.watch(self.apply_filters, "value")
 
-    def show(self):
+    def show(self) -> pn.pane.Pane:
+        """
+        Returns the Panel object to be displayed.
+        Call this method to display the table in a Jupyter notebook, Panel server, or JupyterLab.
+        """
         return self.panel.servable()
 
     def update_filter_widget(self, event=None):
+        """
+        Updates the filter widgets based on the active column.
+        Parameters
+        ----------
+        event : Event, optional
+            The event that triggered the update. The default is None.
+
+
+        """
         # Remove any previous widget
         self.filter_placeholder[:] = []
 
@@ -117,6 +148,15 @@ class Table:
             self.filter_placeholder.append(self.filter_widget)
 
     def apply_filters(self, event=None):
+        """
+        Applies the filters to the DataFrame and updates the Tabulator widget.This function depends on the state of
+        the filter widgets and the selected column.
+
+        Parameters
+        ----------
+        event : Event, optional
+            The event that triggered the update. The default is None.
+        """
         filtered_df = self.df.copy()
 
         # Boolean
@@ -166,10 +206,18 @@ class Table:
 
         self.tabulator.value = filtered_df
 
-    def get_filtered_df(self):
+    def get_filtered_df(self) -> pd.DataFrame:
+        """
+        Returns the DataFrame after applying the filters. This effectively returns a pandas DataFrame equivalent to the
+        current state of the Tabulator widget, including all filters and queries.
+
+        """
         return self.tabulator.value
 
-    def get_selected_rows(self, event):
+    def get_selected_rows(self, event) -> pd.DataFrame | None:
+        """
+        Returns the selected rows as a DataFrame. This function depends on the state of the Tabulator widget.
+        """
         selected_indices = self.tabulator.selection
         if selected_indices:
             selected_rows_df = self.tabulator.value.iloc[selected_indices]
@@ -177,5 +225,12 @@ class Table:
         else:
             return None
 
-    def get_changed_df(self):
+    def get_changed_df(self) -> pd.DataFrame:
+        """
+
+        Returns the DataFrame after applying the filters. This effectively returns a pandas DataFrame equivalent to the
+        current state of the Tabulator widget, including all filters and queries.
+        Legacy function for compatibility with previous versions.
+
+        """
         return self.tabulator.value
