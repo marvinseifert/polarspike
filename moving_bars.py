@@ -1,3 +1,6 @@
+""" This module is under construction and will contain functions for analyzing the responses of cells to moving bars."""
+
+
 import numpy as np
 import polars as pl
 import math

@@ -14,6 +14,7 @@ import matplotlib.colors as mcolors
 from matplotlib.cm import ScalarMappable
 from bokeh.plotting import figure, show
 from pathlib import Path
+import pandas as pd
 
 
 def spike_counts_from_file(
@@ -398,7 +399,7 @@ def empty_spike_counts_figure() -> tuple[plt.Figure, plt.Axes]:
     return fig, ax
 
 
-def add_stimulus_df(fig: plt.Figure, df: plt.DataFrame) -> plt.Figure:
+def add_stimulus_df(fig: plt.Figure, df: pd.DataFrame) -> plt.Figure:
     """
     Add stimulus information to a spike count plot as vertical shaded areas.
 

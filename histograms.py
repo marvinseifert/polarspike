@@ -38,10 +38,6 @@ def psth(
         The bin edges of the PSTH.
 
     """
-    try:
-        df = pl.from_pandas(df)
-    except TypeError:
-        pass
     if end is not None:
         bins = np.arange(start, end, bin_size)
     else:

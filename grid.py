@@ -85,7 +85,7 @@ class Table:
 
         self.query_widget.param.watch(self.apply_filters, "value")
 
-    def show(self) -> pn.pane.Pane:
+    def show(self) -> pn.viewable.ServableMixin:
         """
         Returns the Panel object to be displayed.
         Call this method to display the table in a Jupyter notebook, Panel server, or JupyterLab.

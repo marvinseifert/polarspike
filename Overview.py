@@ -22,7 +22,6 @@ import polars as pl
 from dataclasses import dataclass, field
 from polarspike import (
     stimulus_trace,
-    recordings_stimuli_cells,
     spiketrains,
     stimulus_spikes,
     stimulus_dfs,
