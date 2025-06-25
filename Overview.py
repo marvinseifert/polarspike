@@ -30,7 +30,7 @@ from polarspike import (
 from polarspike.grid import Table
 from threading import Thread
 import warnings
-from pathlib import Path
+from pathlib import Path, PurePath
 
 
 def version_control(obj: "Recording") -> "Recording":
@@ -39,6 +39,24 @@ def version_control(obj: "Recording") -> "Recording":
         del obj.path
     except AttributeError:
         pass
+
+    # Need to correct old parquet path to new format. Old format was a windows path unfortunately with two slashes \\
+    # which cannot be converted to a pathlib.Path object. Thus, need to do this by hand. The new path should just be
+    # the filename without the path.
+    if isinstance(obj.parquet_path, str):
+        # Check if the path is a windows path with double slashes
+        if "\\" in obj.parquet_path and obj.parquet_path.count("\\") > 1:
+            # Convert to pathlib.Path object
+            obj.parquet_path = Path(obj.parquet_path.split("\\")[-1])
+        else:
+            # Convert to pathlib.Path object
+            obj.parquet_path = Path(obj.parquet_path)
+
+    # Luckily, while the raw_path attribute is also a Windows path, it is not a double slash path. So we can use
+    # pathlib.PurePath to get the last part of the path.
+    if isinstance(obj.raw_path, str):
+        # Convert to pathlib.PurePath object
+        obj.raw_path = Path(pathlib.PurePath(obj.raw_path).name)
 
     try:
         for df in obj.dataframes.values():
@@ -53,8 +71,8 @@ def version_control(obj: "Recording") -> "Recording":
 
 @dataclass
 class Recording:
-    parquet_path: str  # Path, pointing to the parquet file which stores the spiketimestamps
-    raw_path: str  # Path, pointing to the raw file which stores the raw data
+    parquet_path: str | Path  # Path, pointing to the parquet file which stores the spiketimestamps
+    raw_path: str | Path  # Path, pointing to the raw file which stores the raw data
     dataframes: dict = field(
         default_factory=lambda: {}, init=True
     )  # Dictionary that stores the dataframes
@@ -64,8 +82,8 @@ class Recording:
     views: dict = field(
         default_factory=lambda: {}, init=True
     )  # Dictionary that stores the views of dataframes
-    load_path: str = field(
-        default_factory=lambda: "", init=True
+    load_path: str | Path = field(
+        default_factory=lambda: Path(), init=True
     )  # If a class instance was saved, the path to the saved file is stored here.
     nr_stimuli: int = field(init=False)  # Nr of stimuli in the recording
     nr_cells: int = field(init=False)  # Nr of cells in the recording
@@ -205,9 +223,12 @@ class Recording:
             input_df, self.dataframes[stimulus_df]
         )
         # Store all the file paths in a dictionary
-        files_dict = {
-            rec: self.recordings[rec].parquet_path for rec in list(filter_dict.keys())
-        }
+        if getattr(self, "recordings", None) == None:
+            files_dict = {self.name: self.parquet_path}
+        else:
+            files_dict = {
+                rec: self.recordings[rec].parquet_path for rec in list(filter_dict.keys())
+            }
         # get spikes from files
         return stimulus_spikes.get_spikes(
             files_dict,
@@ -451,10 +472,30 @@ class Recording:
 
         with open(filename, "rb") as f:
             obj = pickle.load(f)
-            obj.load_path = filename
+            obj.load_path = Path(filename)
 
             # Update earlier versions of the recording class:
             obj = version_control(obj)
+
+            # Define the full paths based on the load_path
+            obj.parquet_path = obj.load_path.parent / obj.parquet_path
+            obj.raw_path = obj.load_path.parent / obj.raw_path
+
+            # %% Check if all paths have the same parent directory
+            if not obj.parquet_path.parent == obj.raw_path.parent:
+                raise ValueError(
+                    "The parquet_path and raw_path must have the same parent directory."
+                )
+            if not obj.raw_path.parent == obj.parquet_path.parent:
+                raise ValueError(
+                    "The raw_path and parquet_path must have the same parent directory."
+                )
+
+            # Check if the files exist
+            if not obj.parquet_path.exists():
+                raise FileNotFoundError(f"Parquet file {obj.parquet_path} does not exist.")
+            if not obj.raw_path.exists():
+                raise FileNotFoundError(f"Raw file {obj.raw_path} does not exist.")
 
             return obj
 

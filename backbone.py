@@ -6,10 +6,12 @@ functions in this project.
 # Imports
 from ipywidgets import widgets
 import traitlets
-from tkinter import Tk, filedialog
 from sympy import isprime
 from math import gcd
 from pathlib import Path
+from PyQt5.QtWidgets import QFileDialog, QApplication
+import sys
+import os
 
 
 def get_file_ending(any_file: str) -> str:
@@ -34,82 +36,55 @@ def get_file_ending(any_file: str) -> str:
 
     return suffix
 
-
 class SelectFilesButton(widgets.Button):
     """
-    File selection Button
-    This class creates a file selection Button which on click opens a Windows explorer window
-    for file selection
+    File selection Button using PyQt5
+    Opens a native OS file selection dialog and returns selected file paths.
     """
 
     out = widgets.Output()
 
     def __init__(self, text: str, button_width: str = "200px") -> None:
-        """
-        Initialize the object
-
-        Parameters
-        ----------
-        text: str: The text that should appear on the button
-        button_width: str: The width of the button (CSS width value as string, e.g., '150px')
-        """
-
         super().__init__()
-        # Add the selected_files trait
-        self.add_traits(files=traitlets.traitlets.List())
-        # Create the button.
+        self.add_traits(files=traitlets.List())
         self.description = "Select " + text
         self.icon = "square-o"
         self.style.button_color = "red"
-        # Set button width
         self.layout = widgets.Layout(width=button_width)
-        # Set on click behavior.
         self.on_click(self.select_files)
         self.loaded = False
 
+        # Ensure QApplication exists
+        if not QApplication.instance():
+            self._app = QApplication(sys.argv)
+        else:
+            self._app = QApplication.instance()
+
     def select_files(self, b):
-        """Generate instance of tkinter.filedialog.
-
-        Parameters
-        ----------
-        b : obj:
-            An instance of ipywidgets.widgets.Button
-        """
-
-        with b.out:
+        """Open PyQt5 file dialog and store selected files."""
+        with self.out:
             try:
-                # Create Tk root
-                root = Tk()
-                # Hide the main window
-                root.withdraw()
-                # Raise the root to the top of all windows.
-                root.call("wm", "attributes", ".", "-topmost", True)
-                # List of selected files will be set to b.files
-                b.files = filedialog.askopenfilename(multiple=True)
+                dialog = QFileDialog()
+                dialog.setFileMode(QFileDialog.ExistingFiles)
+                dialog.setWindowTitle("Select files")
+                if dialog.exec_():
+                    selected_files = dialog.selectedFiles()
+                    self.files = list(selected_files)
 
-                # Convert b.files to a list if it is not one
-                if not isinstance(b.files, list):
-                    b.files = root.tk.splitlist(b.files)
-
-                # Check if a file actually was selected
-                if (
-                    b.files and b.files[0]
-                ):  # This checks if the first element is not an empty string
-                    b.description = "File Selected"
-                    b.icon = "check-square-o"
-                    b.style.button_color = "lightgreen"
-                    self.loaded = True
+                    if self.files:
+                        self.description = "Files Selected"
+                        self.icon = "check-square-o"
+                        self.style.button_color = "lightgreen"
+                        self.loaded = True
+                    else:
+                        self.loaded = False
                 else:
-                    # Reset the button style or do nothing
                     self.loaded = False
 
             except Exception as e:
-                # Handle other exceptions if necessary
                 self.loaded = False
                 print(f"Error: {e}")
-            finally:
-                # Ensure the Tk window is destroyed
-                root.destroy()
+
 
 
 # def bisection(array, value):
