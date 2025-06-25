@@ -26,7 +26,7 @@ from functools import partial
 from bokeh.io import export_png
 import plotly.express as px
 import polars as pl
-
+import pickle
 
 def stimulus_df():
     uneditable_columns = [
@@ -301,7 +301,7 @@ class Explorer:
     def _on_stimulus_selected(self, change):
         self.stimulus_file = change["new"][0] if change["new"] else ""
         self.recording_name.value = (
-            "".join(Path(self.stimulus_file).parts[1:-1])
+            "_".join(Path(self.stimulus_file).parts[1:-1])
         ).lower()
         # print(f"File selected: {self.stimulus_file}")
 
@@ -331,8 +331,8 @@ class Explorer:
         dataframes["spikes_df"]["filter"] = True
 
         self.overview_df = Overview.Recording(
-            str(self.recording.file.with_suffix(".parquet")),
-            self.recording_file,
+            Path(self.recording.file.with_suffix(".parquet")),
+            Path(self.recording_file),
             dataframes,
             self.frequency_input.value,
         )
@@ -1066,9 +1066,9 @@ class Recording_explorer:
         new_df = pd.DataFrame(
             {
                 "name": recording.name,
-                "save_path": recording.load_path,
-                "raw_path": recording.raw_path,
-                "parquet_path": recording.parquet_path,
+                "save_path": str(recording.load_path),
+                "raw_path": str(recording.raw_path),
+                "parquet_path": str(recording.parquet_path),
                 "sampling_freq": recording.sampling_freq,
             },
             index=pd.Index([self.nr_added_recordings]),

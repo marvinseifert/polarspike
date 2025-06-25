@@ -42,7 +42,7 @@ class Extractor:
     trigger = np.array([])
     stimulus_names = []
 
-    def __init__(self, file, stimulus_df=None):
+    def __init__(self, file: str, stimulus_df: pd.DataFrame = None):
         """
         Constructor for the Extractor class that sets the file location and the stimulus DataFrame if provided.
 
@@ -66,7 +66,7 @@ class Extractor:
         self.file = Path(file)
         self.file_parquet = self.file.with_suffix(".parquet")
 
-    def add_stimulus_df(self, stimulus_df):
+    def add_stimulus_df(self, stimulus_df: pd.DataFrame):
         """
         Add the stimulus DataFrame to the Extractor object.
         Not all the information from the stimulus_df is required. Here, the begin_fr, end_fr, stimulus_name and
@@ -85,7 +85,7 @@ class Extractor:
         self.stimulus_names = stimulus_df["stimulus_name"].to_list()
         self.spikes["sampling"] = stimulus_df.loc[0, "sampling_freq"].item()
 
-    def to_arrow(self, batch_size=100000):
+    def to_arrow(self, batch_size: int = 100000):
         """
         Save the spikes to an arrow file in a chunked manner to avoid memory issues.
 
@@ -143,7 +143,9 @@ class Extractor:
         df = pl.from_arrow(loaded_array)
         df.lazy().sink_parquet(str(self.file.with_suffix(".parquet")))
 
-    def load(self, stimulus=True, recording_name=None, pandas=True):
+    def load(
+        self, stimulus: bool = True, recording_name: str = None, pandas: bool = True
+    ) -> pd.DataFrame | pl.DataFrame:
         """
         Load the spikes from the parquet file in lazy mode.
 
@@ -168,7 +170,9 @@ class Extractor:
             else:
                 return df
 
-    def construct_df(self, df, recording_name=None, pandas=True):
+    def construct_df(
+        self, df: pl.DataFrame, recording_name: str = None, pandas: bool = True
+    ) -> pd.DataFrame | pl.DataFrame:
         """
         Construct the spikes_df using the information from the stimulus_df and the parquet file (for nr_of_spikes).
 
@@ -248,7 +252,7 @@ class Extractor_HS2(Extractor):
     Extractor class for HerdingSpikes 2 spikesorting results.
     """
 
-    def __init__(self, file, stimulus_df=None):
+    def __init__(self, file: str, stimulus_df: pd.DataFrame = None):
         super().__init__(file, stimulus_df)
 
         with h5py.File(file, "r") as f:
@@ -286,13 +290,13 @@ class Extractor_SPC(Extractor):
 
     spikes = {}
 
-    def __init__(self, file, stimulus_df=None):
+    def __init__(self, file: str, stimulus_df: pd.DataFrame = None):
         super().__init__(file, stimulus_df)
 
     def get_spikes(self):
         # This is a work around. The Spyking Circus code needs to change os directory to work, which is stupid.
         # Here I save the directory that the user was in before calling the function, so that I can change the dir back
-        # to this after the function has run. Lesson: Never change the directory in a function using os!
+        # to this after the function has run. Lesson: Never change the directory in a function using OS @Spyking Circus!
 
         current_dir = os.getcwd()
 
@@ -323,7 +327,7 @@ class Extractor_SPC(Extractor):
         df.write_parquet(str(self.file.with_suffix(".parquet")))
         os.chdir(current_dir)
 
-    def get_locations(self, params):
+    def get_locations(self, params: CircusParser):
         """
         Loactions in Spyking-Circus are not stored the same way as in HerdingSpikes2. This is beacuse the algorithm doesnt
         triangulate the actual location of the spiking signal, but rather the location of the electrode that detected the
@@ -351,7 +355,7 @@ class Extractor_KS(Extractor):
 
     spikes = {}
 
-    def __init__(self, file, stimulus_df=None):
+    def __init__(self, file: str, stimulus_df: pd.DataFrame = None):
         super().__init__(file, stimulus_df)
 
     def get_spikes(self):
@@ -366,7 +370,9 @@ class Extractor_KS(Extractor):
         )
         df.write_parquet(str(self.file.with_suffix(".parquet")))
 
-    def construct_df(self, df, recording_name=None, pandas=True):
+    def construct_df(
+        self, df: pd.DataFrame, recording_name: str = None, pandas: bool = True
+    ) -> pd.DataFrame | pl.DataFrame:
         dfs = []
         for stimulus in range(self.trigger.shape[0]):
             times = df.filter(

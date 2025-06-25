@@ -6,15 +6,18 @@ functions in this project.
 # Imports
 from ipywidgets import widgets
 import traitlets
-from tkinter import Tk, filedialog
 from sympy import isprime
 from math import gcd
+from pathlib import Path
+from PyQt5.QtWidgets import QFileDialog, QApplication
+import sys
+import os
 
 
-def get_file_ending(any_file):
+def get_file_ending(any_file: str) -> str:
     """
     File ending function
-    This function finds the ending of a file and returns the characters after the dot.
+    This function finds the ending of a file and returns the file suffix.
 
     Parameters
     ----------
@@ -22,92 +25,66 @@ def get_file_ending(any_file):
         The file you want to get the file ending from
     Returns
     -------
-    format: str: The str which contains only the part of the input string that is the
-    after the dot.
+    format: str: The file suffix including the dot, or 0 if no suffix is found.
     """
-    dot_position = any_file.find(".")
-    if dot_position == -1:
+    path = Path(any_file)
+    suffix = path.suffix
+
+    if not suffix:
         print("Named file is not a file, (maybe folder?), return 0")
         return 0
-    ending = any_file[dot_position:]
-    return ending
 
+    return suffix
 
 class SelectFilesButton(widgets.Button):
     """
-    File selection Button
-    This class creates a file selection Button which on click opens a Windows explorer window
-    for file selection
+    File selection Button using PyQt5
+    Opens a native OS file selection dialog and returns selected file paths.
     """
 
     out = widgets.Output()
 
-    def __init__(self, text, button_width="200px"):
-        """
-        Initialize the object
-
-        Parameters
-        ----------
-        text: str: The text that should appear on the button
-        button_width: str: The width of the button (CSS width value as string, e.g., '150px')
-        """
-
+    def __init__(self, text: str, button_width: str = "200px") -> None:
         super().__init__()
-        # Add the selected_files trait
-        self.add_traits(files=traitlets.traitlets.List())
-        # Create the button.
+        self.add_traits(files=traitlets.List())
         self.description = "Select " + text
         self.icon = "square-o"
         self.style.button_color = "red"
-        # Set button width
         self.layout = widgets.Layout(width=button_width)
-        # Set on click behavior.
         self.on_click(self.select_files)
         self.loaded = False
 
+        # Ensure QApplication exists
+        if not QApplication.instance():
+            self._app = QApplication(sys.argv)
+        else:
+            self._app = QApplication.instance()
+
     def select_files(self, b):
-        """Generate instance of tkinter.filedialog.
-
-        Parameters
-        ----------
-        b : obj:
-            An instance of ipywidgets.widgets.Button
-        """
-
-        with b.out:
+        """Open PyQt5 file dialog and store selected files."""
+        with self.out:
             try:
-                # Create Tk root
-                root = Tk()
-                # Hide the main window
-                root.withdraw()
-                # Raise the root to the top of all windows.
-                root.call("wm", "attributes", ".", "-topmost", True)
-                # List of selected files will be set to b.files
-                b.files = filedialog.askopenfilename(multiple=True)
+                dialog = QFileDialog()
+                dialog.setFileMode(QFileDialog.ExistingFiles)
+                dialog.setWindowTitle("Select files")
+                if dialog.exec_():
+                    selected_files = dialog.selectedFiles()
+                    self.files = list(selected_files)
 
-                # Convert b.files to a list if it is not one
-                if not isinstance(b.files, list):
-                    b.files = root.tk.splitlist(b.files)
-
-                # Check if a file actually was selected
-                if (
-                    b.files and b.files[0]
-                ):  # This checks if the first element is not an empty string
-                    b.description = "File Selected"
-                    b.icon = "check-square-o"
-                    b.style.button_color = "lightgreen"
-                    self.loaded = True
+                    if self.files:
+                        self.description = "Files Selected"
+                        self.icon = "check-square-o"
+                        self.style.button_color = "lightgreen"
+                        self.loaded = True
+                    else:
+                        self.loaded = False
                 else:
-                    # Reset the button style or do nothing
                     self.loaded = False
 
             except Exception as e:
-                # Handle other exceptions if necessary
                 self.loaded = False
                 print(f"Error: {e}")
-            finally:
-                # Ensure the Tk window is destroyed
-                root.destroy()
+
 
 
 # def bisection(array, value):
@@ -200,7 +177,7 @@ class SelectFilesButton(widgets.Button):
 #     return df
 
 
-def nr_rowcol_subplt(nr_plots):
+def nr_rowcol_subplt(nr_plots: int) -> tuple:
     """Returns an optimal arangement of subplot rows and columns, depending on
     the nr of total plots. Example: If nr_plots = 20, returns col=4, row=5
 
@@ -244,7 +221,7 @@ def nr_rowcol_subplt(nr_plots):
     return p, nr_plots
 
 
-def factorization(n):
+def factorization(n: int) -> list:
     """Returns factorization of the input integer
 
     Parameters
@@ -337,7 +314,7 @@ def hex_to_rgb(hex_color: str) -> tuple:
     return int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
 
 
-def enumerate2(xs, start=0, step=1):
+def enumerate2(xs: list, start: int = 0, step: int = 1):
     """Enumerate function that allows to set a start and step value
     Parameters
     ----------

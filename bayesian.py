@@ -1,10 +1,20 @@
-# Imports
+"""
+This module contains functions for computing the posterior distribution over changepoint times using a Bayesian approach.
+@ Marvin Seifert 2025
+"""
+
+# %% Imports
 import numpy as np
+from numpy.typing import ArrayLike
 
 
 def changepoint_posterior(
-    event_times, lambda1, lambda2, tau_guess=None, prior_std=None
-):
+    event_times: np.ndarray,
+    lambda1: float,
+    lambda2: float,
+    tau_guess: float = None,
+    prior_std: float = None,
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Compute the posterior distribution over changepoint times given the event times,
     using a Gaussian prior centered at tau_guess if provided.
@@ -72,7 +82,9 @@ def changepoint_posterior(
     return candidate_times, posterior
 
 
-def credible_interval(candidate_times, posterior, credibility=0.95):
+def credible_interval(
+    candidate_times: np.ndarray, posterior: np.ndarray, credibility: float = 0.95
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Compute a credible interval (e.g., 95%) from the posterior distribution.
 
@@ -94,7 +106,12 @@ def credible_interval(candidate_times, posterior, credibility=0.95):
     return lower, upper
 
 
-def detect_changepoint_single_rate(event_times, lambda2, epsilon=1e-6, threshold=0.9):
+def detect_changepoint_single_rate(
+    event_times: np.ndarray,
+    lambda2: float,
+    epsilon: float = 1e-6,
+    threshold: float = 0.9,
+) -> tuple[float, np.ndarray]:
     """
     Detects the changepoint in a stream of events when the first process has an
     extremely low rate (approximated by epsilon) and the second process has rate lambda2.
@@ -164,7 +181,20 @@ def detect_changepoint_single_rate(event_times, lambda2, epsilon=1e-6, threshold
         return changepoint_time, p_lambda2
 
 
-def generate_line_data(starts, slopes, lengths):
+def generate_line_data(
+    starts: ArrayLike, slopes: ArrayLike, lengths: ArrayLike
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Generates a list of x and y coordinates for a piecewise linear function, given starting points, slopes, and lengths.
+    For each point, the function is defined as y = slope * (x - start) + y_prev, where y_prev is the previous y value.
+    Parameters:
+        starts : array-like
+            Starting x-coordinates of each segment.
+        slopes : array-like
+            Slopes of each segment.
+        lengths : array-like
+            Lengths of each segment.
+    """
     x_list = [0]
     y_list = [0]
     for start_idx in range(len(starts)):

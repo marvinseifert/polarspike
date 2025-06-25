@@ -12,7 +12,9 @@ import numpy as np
 import scipy.signal as signal
 
 
-def timestamps_to_binary_polars(df_timestamps, sample_rate=None, max_window=None):
+def timestamps_to_binary_polars(
+    df_timestamps: pl.DataFrame, sample_rate: int = None, max_window: int = None
+) -> pl.DataFrame:
     """
     This function converts timestamps to binary signals. It takes a DataFrame with timestamps and converts them to binary
     signals. Conversion is done at a given sample rate and considering a window of a given size.
@@ -82,9 +84,12 @@ def timestamps_to_binary_polars(df_timestamps, sample_rate=None, max_window=None
     return df_result[:max_window]
 
 
-def fill_missing_repeats(max_repeat, nr_bins, df_result):
+def fill_missing_repeats(
+    max_repeat: int, nr_bins: int, df_result: pl.DataFrame
+) -> pl.DataFrame:
     """
-    This function fills missing repeats with zeros.
+    This function fills missing repeats with zeros. This is necessary to have a consistent DataFrame that is all
+    zeros for missing repeats.
 
     Parameters
     ----------
@@ -132,10 +137,12 @@ def fill_missing_repeats(max_repeat, nr_bins, df_result):
     return df_result
 
 
-def apply_on_group(sample_rate, max_window, group_df):
+def apply_on_group(
+    sample_rate: int, max_window: int, group_df: pl.DataFrame
+) -> pl.DataFrame:
     """
     Apply the timestamps_to_binary_polars function on a group of a DataFrame.
-    This is just a wrapper function.
+    This is just a wrapper function for parallelization.
 
     Parameters
     ----------
@@ -158,7 +165,23 @@ def apply_on_group(sample_rate, max_window, group_df):
         print(group_df)
 
 
-def timestamps_to_binary_multi(df, bin_size, max_window, max_repeat):
+def timestamps_to_binary_multi(
+    df: pl.DataFrame, bin_size: int, max_window: int, max_repeat: int
+) -> pl.DataFrame:
+    """
+    Convert timestamps to binary signals for multiple cells.
+    Warning: Cannot handle multiple recordings in one DataFrame.
+    Parameters
+    ----------
+    df : pl.DataFrame
+        The DataFrame with the timestamps
+    bin_size : int
+        The bin size
+    max_window : int
+        The maximum window size of the binary signal
+    max_repeat : int
+        The maximum number of repeats of the stimulus
+    """
     max_window = np.ceil(max_window / bin_size).astype(int)
     nr_cells = df["cell_index"].unique().len()
     # Reject spikes larger than max_window
@@ -181,7 +204,7 @@ def timestamps_to_binary_multi(df, bin_size, max_window, max_repeat):
     return results
 
 
-def binary_as_array(repeats, nr_bins, df):
+def binary_as_array(repeats: int, nr_bins: int, df: pl.DataFrame) -> np.ndarray:
     """
     Extract the binary signal from a DataFrame and reshape it into an array.
 
@@ -206,7 +229,7 @@ def binary_as_array(repeats, nr_bins, df):
     )
 
 
-def calc_qis(result_df):
+def calc_qis(result_df: pl.DataFrame) -> np.ndarray:
     """
     Calculate the quality index for a DataFrame with binary signals.
 
@@ -232,7 +255,7 @@ def calc_qis(result_df):
     return qis
 
 
-def quality_index(repeats, nr_bins, df):
+def quality_index(repeats: int, nr_bins: int, df: pl.DataFrame) -> float:
     """
     Calculate the quality index for a single cell.
 
@@ -261,14 +284,14 @@ def quality_index(repeats, nr_bins, df):
 #
 
 
-def calc_tradqi(kernelfits):
+def calc_tradqi(kernel_fits: np.ndarray) -> float:
     """
     Calculates the Quality_index of the (Gaussian-kernel) fitted spike data. Cell-specific and stimulus-specific,
     but of nr-of-trials length
 
     Parameters
     ----------
-    kernelfits : np.ndarray
+    kernel_fits : np.ndarray
         The convolved binary signals
 
     Returns
@@ -276,12 +299,14 @@ def calc_tradqi(kernelfits):
     float
         The quality index
     """
-    return np.var(np.mean(kernelfits, 0)) / np.mean(np.var(kernelfits, 0))
+    return np.var(np.mean(kernel_fits, 0)) / np.mean(np.var(kernel_fits, 0))
 
 
-def kernel_template(width=0.0100, sampling_freq=17852.767845719834):
+def kernel_template(
+    width: float = 0.0100, sampling_freq: float = 17852.767845719834
+) -> np.ndarray:
     """
-    create Gaussian kernel by providing the width (FWHM) value. According to wiki, this is approx. 2.355*std of dist.
+    Create Gaussian kernel by providing the width (FWHM) value. According to wiki, this is approx. 2.355*std of dist.
     width=given in seconds, converted internally in sampling points.
 
     Parameters
@@ -310,9 +335,10 @@ def kernel_template(width=0.0100, sampling_freq=17852.767845719834):
     return gauswin
 
 
-def reject_single_spikes(df):
+def reject_single_spikes(df: pl.DataFrame) -> pl.DataFrame:
     """
-    Reject cells with single spikes or spikes only in one repeat.
+    Reject cells with single spikes or spikes only in one repeat. Calculating a quality index for these cells is not
+    possible.
 
     Parameters
     ----------

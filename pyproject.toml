@@ -1,12 +1,13 @@
-[tool.poetry]
+[project]
 name = "polarspike"
 version = "0.1.0"
 description = ""
-authors = ["Your Name <you@example.com>"]
 readme = "README.md"
+requires-python = "3.10.18"
+authors = [{name = "Marvin Seifert", email = "m.seifert@gmx.de"}]
 
 [tool.poetry.dependencies]
-python = "^3.10"
+python = "3.10.18"
 datashader = "^0.15.2"
 h5py = "^3.9.0"
 jupyterlab = "4.0.6"
@@ -20,7 +21,6 @@ matplotlib = "^3.8.0"
 pyarrow = "14.0.1"
 holoviews = "^1.17.1"
 ipympl = "^0.9.3"
-spyking-circus = "^1.1.0"
 zstandard = "^0.21.0"
 tslearn = "^0.6.2"
 seaborn = "^0.13.0"
@@ -42,6 +42,8 @@ ipywidgets-bokeh = "^1.6.0"
 pywavelets = "^1.7.0"
 ipyvizzu-story = "0.2.1"
 sporco = "^0.2.1"
+spyking-circus = "^1.1.0"
+pyqt5 = "^5.15.11"
 
 [build-system]
 requires = ["poetry-core"]
