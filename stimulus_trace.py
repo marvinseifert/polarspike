@@ -145,7 +145,7 @@ class Stimulus_Extractor:
             if limits_temp[1] < 0:
                 limits_temp[1] = 0
             limits_int = limits_temp.astype(int)
-            channel_cut = channel[limits_int[0]: limits_int[1]]
+            channel_cut = channel[limits_int[0] : limits_int[1]]
             channel_log = channel_cut.Voltage > self.half_Voltage
             peaks = sg.find_peaks(channel_log, height=1, plateau_size=2)
 
@@ -195,7 +195,7 @@ class Stimulus_Extractor:
         channel: The cut out trigger channel for one stimulus
         """
         for i in range(0, self.nr_stim_input.value):
-            channel = self.channel.Voltage[limits[i, 0]: limits[i, 1]]
+            channel = self.channel.Voltage[limits[i, 0] : limits[i, 1]]
             return channel
 
     def get_changed_names(self):
@@ -346,7 +346,7 @@ def create_stim_df():
 
 
 def create_filter_dict(
-        spikes_df: pandas.DataFrame, stimulus_df: pandas.DataFrame
+    spikes_df: pandas.DataFrame, stimulus_df: pandas.DataFrame
 ) -> dict:
     """
     Create a dictionary that contains the start and end times, cell indices and trigger for each stimulus in each recording.
@@ -403,6 +403,7 @@ def create_filter_dict(
             )
 
     return filter_dict
+
 
 # def correct_last_trigger(df):
 #     sampling_freq = df["sampling_freq"].values[0]
