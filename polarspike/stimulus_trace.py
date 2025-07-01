@@ -27,7 +27,7 @@ class Stimulus_Extractor:
 
     """
 
-    def __init__(self, stimulus_file, freq=1, stream=0):
+    def __init__(self, stimulus_file, freq=1, second_trigger=False):
         """
         Initialize function. Opens the stimulus file and extracts the important
         data for further analysis. It also initializes object attributes which
@@ -37,6 +37,13 @@ class Stimulus_Extractor:
         Parameters
         ----------
             stimulus_file: str: The file location of the stimulus trace.
+            freq: int: The sampling frequency of the stimulus trace.
+            second_trigger: bool: If True, the stimulus trace is assumed to be
+            recorded with a second trigger channel, which is used to combine
+            the two channels into one. If False, the stimulus trace is assumed to
+            be recorded with a single trigger channel, which is used to extract
+            the stimulus frames directly.
+
 
 
 
@@ -55,32 +62,23 @@ class Stimulus_Extractor:
                 )[0]
 
         if format == ".h5":
-            with h5py.File(stimulus_file, "r") as f:
-                try:
-                    self.channel = pd.DataFrame(
-                        np.array(
-                            f["Data//Recording_0//AnalogStream//Stream_2//ChannelData"][
-                                :
-                            ][stream]
-                        ),
-                        columns=["Voltage"],
-                    )
-                except KeyError:
-                    self.channel = pd.DataFrame(
-                        np.asarray(
-                            f["Data//Recording_0//AnalogStream//Stream_0//ChannelData"][
-                                0, :
-                            ]
-                        ),
-                        columns=["Voltage"],
-                    )
-                self.sampling_frequency = freq
+            raise NotImplementedError(
+                "Stimulus trace extraction from .h5 files depraacted due to timing differences between trigger channel and recording channel, use .dat files instead."
+            )
 
         if format == ".dat":
             self.channel = pd.DataFrame(
                 np.fromfile(stimulus_file, dtype=np.int16), columns=["Voltage"]
             )
-            self.channel = self.channel[1::2]
+            if second_trigger:
+                voltage = self.channel["Voltage"].values
+                even = voltage[0::2]
+                odd = voltage[1::2]
+
+                length = min(len(even), len(odd))
+                combined = np.maximum(even[:length], odd[:length])
+                self.channel = pd.DataFrame({"Voltage": combined})
+
             self.sampling_frequency = freq
 
         self.max_Voltage = self.channel.Voltage.max(axis=0)

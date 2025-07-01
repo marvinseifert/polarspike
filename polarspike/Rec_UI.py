@@ -85,6 +85,9 @@ class Explorer:
         self.save_button = pn.widgets.Button(
             name="Save to Overview", button_type="primary", width=200
         )
+        self.second_trigger_checkbox = pn.widgets.Checkbox(
+            name="Second Trigger Channel?", value=False, width=200
+        )
         self.save_button.on_click(self.save_to_overview)
         self.load_button.on_click(self.load_data)
 
@@ -196,6 +199,7 @@ class Explorer:
             pn.pane.Markdown(self.text, margin=(0, 10)),
             "Stimulus File",
             self.stimulus_input,
+            self.second_trigger_checkbox,
             "Recording File",
             self.recording_input,
             "Sorting File </br> (only for herdingspikes2)",
@@ -288,7 +292,7 @@ class Explorer:
     def load_data(self, event):
         if self.stimulus_input.loaded:
             self.status.active = True
-            self.load_stimulus()
+            self.load_stimulus(second_trigger = self.second_trigger_checkbox.value)
             self.stimulus_input.loaded = False
             self.status.active = False
         if self.recording_input.loaded:
@@ -340,9 +344,9 @@ class Explorer:
         options_dict = {f"{name}_{idx}": idx for idx, name in enumerate(stimulus_names)}
         self.stimulus_select.options = options_dict
 
-    def load_stimulus(self):
+    def load_stimulus(self, second_trigger=False):
         self.stimulus = stimulus_trace.Stimulus_Extractor(
-            self.stimulus_file, self.frequency_input.value, 0
+            self.stimulus_file, self.frequency_input.value, second_trigger=second_trigger
         )
         channel = self.stimulus.downsample("500ms")
 
