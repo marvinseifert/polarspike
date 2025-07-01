@@ -1,39 +1,14 @@
 from polarspike import (
     Overview,
-    spiketrain_plots,
-    moving_bars,
-    quality_tests,
-    stimulus_spikes,
-    binarizer,
-    colour_template,
     histograms,
-    Opsins,
 )
 from pathlib import Path
 
-from sklearn.cluster import HDBSCAN, MeanShift
-
-from sklearn.preprocessing import StandardScaler
-
 import pandas as pd
 
-from sklearn.decomposition import PCA
-
-from scipy.stats import zscore
-import numpy as np
-from sklearn.metrics import euclidean_distances, pairwise_distances
-import matplotlib.pyplot as plt
 from polarspike.analysis import response_peaks, count_spikes
-from matplotlib.patches import Rectangle
-import polars as pl
-from tslearn.barycenters import softdtw_barycenter, dtw_barycenter_averaging
-from tslearn.neighbors import KNeighborsTimeSeries
 import numpy as np
-from sklearn.metrics import euclidean_distances, pairwise_distances
 import matplotlib.pyplot as plt
-from scipy.cluster.hierarchy import dendrogram, linkage
-from scipy.cluster.hierarchy import fcluster
-from sklearn.preprocessing import StandardScaler
 
 # %%
 root = Path(r"A:\Marvin\fff_clustering")
@@ -126,25 +101,24 @@ for i in range(12):
         transient_sum + sustained_sum
     )
 
-
 epoch_sustained[np.isnan(epoch_sustained)] = 0
 
 # %% Check for any NaN values
 print(
     f"""NaN values detected: {np.any(
-    np.isnan(
-        np.concatenate(
-            [
-                epoch_max,
-                epoch_argmax,
-                epoch_sparsity,
-                epoch_medium_firing_rate,
-                epoch_sum,
-            ],
-            axis=1,
+        np.isnan(
+            np.concatenate(
+                [
+                    epoch_max,
+                    epoch_argmax,
+                    epoch_sparsity,
+                    epoch_medium_firing_rate,
+                    epoch_sum,
+                ],
+                axis=1,
+            )
         )
-    )
-)}"""
+    )}"""
 )
 
 # %% Add to dataframe
@@ -170,7 +144,6 @@ for i, name in enumerate(feature_names):
     feature_df[f"{name}_medium_firing_rate"] = epoch_medium_firing_rate[:, i]
     feature_df[f"{name}_sum"] = epoch_sum[:, i]
     feature_df[f"{name}_tr_sus_index"] = epoch_sustained[:, i]
-
 
 # %% save df
 feature_df.to_pickle(root / "feature_df")

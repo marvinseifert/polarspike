@@ -1,14 +1,9 @@
 from polarspike import (
     Overview,
-    spiketrain_plots,
-    moving_bars,
     quality_tests,
-    stimulus_spikes,
-    binarizer,
     colour_template,
     histograms,
 )
-from bokeh.io import show
 import numpy as np
 from sklearn.cluster import AffinityPropagation, AgglomerativeClustering
 import matplotlib.pyplot as plt

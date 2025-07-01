@@ -1,6 +1,4 @@
-from polarspike import Overview, binarizer, quality_tests
-import polars as pl
-from importlib import reload
+from polarspike import Overview, quality_tests
 
 recording = Overview.Recording.load(r"A:\Marvin\toy_example\Phase_0\overview")
 

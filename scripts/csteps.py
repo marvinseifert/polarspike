@@ -1,14 +1,10 @@
 from polarspike import Overview, histograms, colour_template, spiketrain_plots
 import numpy as np
 import pandas as pd
-import polars as pl
 import plotly.express as px
 import plotly_templates
-import seaborn as sns
 from sklearn import linear_model
 import matplotlib.pyplot as plt
-from quality_tests import spiketrain_qi
-
 
 # %%
 CT = colour_template.Colour_template()

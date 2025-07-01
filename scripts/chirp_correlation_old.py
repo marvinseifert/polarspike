@@ -1,4 +1,4 @@
-from polarspike import Overview, spiketrain_plots, colour_template, histograms, chirps
+from polarspike import Overview, histograms
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -7,7 +7,7 @@ from matplotlib.ticker import FixedLocator
 from skimage.feature import peak_local_max, canny
 from sklearn.cluster import HDBSCAN
 from plotly.subplots import make_subplots
-from scipy.signal import butter, sosfilt
+from scipy.signal import butter
 
 
 # %%
@@ -184,7 +184,6 @@ axs.plot(time, c_freqs, c="k")
 # axs.plot(bins[:-1], c_freqs_positions, c="r")
 fig.show()
 
-
 # %%
 fig, axs = plt.subplots(1, 1, figsize=(20, 10), sharex=True)
 pcm = axs.pcolormesh(bins[:-1], np.arange(300), cwtmatr)
@@ -199,7 +198,6 @@ ax.hlines(np.max(np.abs(max_power) * 0.1), 0, 35, color="r")
 ax.plot(bins[:-401], moving_average(np.abs(max_power), 400))
 ax.hlines(np.max(filtered_signal) * 0.10, 0, 35, color="k")
 fig.show()
-
 
 # %% downsample
 fig, ax = plt.subplots(1, 1, figsize=(20, 10))
@@ -262,7 +260,7 @@ fig.show()
 # %%
 from sklearn.linear_model import Ridge
 from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import PolynomialFeatures, SplineTransformer
+from sklearn.preprocessing import PolynomialFeatures
 
 # %% fit spline
 spline = make_pipeline(PolynomialFeatures(3), Ridge())

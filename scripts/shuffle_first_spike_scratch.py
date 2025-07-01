@@ -1,24 +1,15 @@
 import numpy as np
-from polarspike import Overview
-from polarspike import histograms
-from polarspike import Opsins
-from polarspike import colour_template
+from polarspike import Overview, stimulus_dfs, colour_template
 from polarspike import stimulus_spikes
 from polarspike import spiketrain_plots
-from polarspike import stimulus_dfs
-import pandas as pd
 import polars as pl
 import matplotlib.pyplot as plt
-from functools import reduce
-import operator
 import ruptures as rpt
-from sklearn.linear_model import LinearRegression, RANSACRegressor
+from sklearn.linear_model import LinearRegression
 from sklearn.metrics import (
-    mean_squared_error,
-    mean_absolute_error,
     root_mean_squared_error,
 )
-from scipy.spatial.distance import euclidean, cdist
+from scipy.spatial.distance import euclidean
 import plotly.graph_objects as go
 
 
@@ -143,7 +134,6 @@ recordings.dataframes["fff_stim"]["stimulus_repeat_sublogic"] = 1
 # %%
 recordings.dataframes["sub_df"] = recordings.dataframes["fff_filtered"].sample(20)
 spikes = recordings.get_spikes_df("sub_df", stimulus_df="fff_stim", pandas=False)
-
 
 # %% plot the spiketrain
 fig, ax = spiketrain_plots.whole_stimulus(spikes, indices=["cell_index", "repeat"])
@@ -299,7 +289,6 @@ breakpoint_x_off, model1_off, model2_off, best_error_off = piecewise_linear_regr
     cum_bins[:-1], cum_times_off, min_points=10, plot=True
 )
 
-
 # %% plot the two segments
 fig, ax = plt.subplots(figsize=(10, 10))
 ax.plot(bins_before, random_times[cum_bins[:-1] < breakpoint_x], label="real")
@@ -348,7 +337,6 @@ ax.legend()
 fig.show()
 # %%
 import pwlf
-from scipy.optimize import minimize
 
 # %%
 my_pwlf = pwlf.PiecewiseLinFit(cum_bins[:-1], cum_times)

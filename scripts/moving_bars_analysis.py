@@ -2,17 +2,10 @@ from polarspike import (
     Overview,
     spiketrain_plots,
     moving_bars,
-    quality_tests,
-    stimulus_spikes,
-    binarizer,
 )
-from bokeh.plotting import show, curdoc
-import panel as pn
 import matplotlib.pyplot as plt
 import polars as pl
-import plotly.express as px
 import numpy as np
-import pandas as pd
 import plotly.express as px
 
 
@@ -42,11 +35,9 @@ def bin_angle(angle):
 # %%
 recording = Overview.Recording.load(r"A:\Marvin\chicken_04_09_2024\Phase_00\overview")
 
-
 # %%
 
 spikes = recording.get_spikes_triggered([[0]], [["all"]], pandas=False)
-
 
 # # %%
 # spikes = spikes.with_columns(recording=pl.lit(recording.name))
@@ -121,7 +112,6 @@ axs[1].set_rlabel_position(-22.5)
 axs[1].set_theta_zero_location("N")
 axs[1].set_theta_direction(-1)
 
-
 fig.show()
 # %%
 
@@ -146,7 +136,6 @@ fig = px.histogram(
 )
 fig.update_layout(barmode="overlay")
 fig.show(renderer="browser")
-
 
 # %%
 rf_df = pl.read_parquet(

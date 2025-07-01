@@ -1,12 +1,8 @@
-from polarspike import Overview, spiketrain_plots, colour_template, histograms, chirps
+from polarspike import Overview, histograms
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import pywt
-from matplotlib.ticker import FixedLocator
-from skimage.feature import peak_local_max, canny
-from sklearn.cluster import HDBSCAN
-from plotly.subplots import make_subplots
 import polars as pl
 import multiprocessing as mp
 import plotly.express as px
@@ -306,7 +302,6 @@ fig.update_layout(template="simple_white")
 fig.show(renderer="browser")
 fig.write_html(r"A:\Marvin\chirps\threshold_freq_power.html")
 
-
 # %%
 fig = px.box(
     results_pf_filtered.to_pandas(),
@@ -356,7 +351,6 @@ combined = chirp_460.join(
 )
 combined = combined.with_columns(index=np.arange(combined.height))
 
-
 # %%
 
 fig = px.scatter(
@@ -373,7 +367,6 @@ fig = px.scatter(
 
 fig.update_layout(template="simple_white")
 fig.show(renderer="browser")
-
 
 # %%
 import seaborn as sns

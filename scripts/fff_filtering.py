@@ -1,12 +1,6 @@
 from polarspike import (
     Overview,
-    spiketrain_plots,
-    moving_bars,
     quality_tests,
-    stimulus_spikes,
-    binarizer,
-    colour_template,
-    histograms,
 )
 from pathlib import Path
 import polars as pl

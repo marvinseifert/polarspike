@@ -4,15 +4,11 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 from polarspike import colour_template, Overview, histograms
-from tslearn.neighbors import KNeighborsTimeSeries
-from sklearn.mixture import GaussianMixture
-from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from sklearn.manifold import TSNE
-from sklearn.cluster import HDBSCAN, MeanShift
+from sklearn.cluster import HDBSCAN
 from sklearn.metrics import pairwise_distances
 from sklearn import linear_model
-from quality_tests import spiketrain_qi
 
 # %%
 CT = colour_template.Colour_template()
@@ -42,7 +38,6 @@ drop_columns = [
 ]
 feauture_df = feauture_df.drop(drop_columns, axis=1)
 
-
 # %% add chirp data
 chirp_features = pd.read_pickle(r"A:\Marvin\chirps\chirp_analysis_df_mean.pkl")
 for column in chirp_features.columns:
@@ -50,7 +45,6 @@ for column in chirp_features.columns:
         feauture_df[column] = 0.0
     else:
         continue
-
 
 # %%
 # add chirp data
@@ -317,7 +311,6 @@ fig.subplots_adjust(left=0.3)
 fig.subplots_adjust(right=0.7)
 
 fig.show()
-
 
 # %%
 cluster_subset = feauture_df.query("labels == 9")

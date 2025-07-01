@@ -1,12 +1,8 @@
-import pandas as pd
-from polarspike import Overview, stimulus_spikes, bayesian, colour_template
+from polarspike import Overview, stimulus_spikes, colour_template
 
 import numpy as np
 import polars as pl
-import itertools
 import matplotlib.pyplot as plt
-from scipy.signal.windows import gaussian
-from functools import reduce
 from sklearn.linear_model import RANSACRegressor
 
 # %%
@@ -149,7 +145,6 @@ updated_results = pl.concat(
     [updated_results, break_positions_df], how="align"
 ).collect()
 
-
 # Find the firing rates (slopes) before and after the break point for each cell.
 # Unfortunately, some slopes might be negative, which is impossible, as spike rate cannot be negative. It also cannot be
 # zero, as we are working with the log of the spike rate. We will set these values to the smallest float value.
@@ -241,12 +236,9 @@ for trigger_idx, trigger in enumerate(cum_triggers):
         )
     )
 
-
 slopes_df = pl.concat(dfs, how="align")
 
-
 updated_results = pl.concat([updated_results, slopes_df], how="align").collect()
-
 
 # # We save the trigger times for each cell in a new dataframe. This is useful for the parallel processing later.
 df_add = spikes_fs.select(["recording", "cell_index", "repeat"]).unique().lazy()
@@ -267,7 +259,6 @@ df_add = df_add.explode(fs_columns).select(
 
 df_add = df_add.collect()
 
-
 spikes_fs_only = spikes_fs.select(["recording", "cell_index", "repeat"] + fs_columns)
 spikes_fs_only = pl.concat([spikes_fs_only, df_add]).lazy()
 
@@ -278,7 +269,6 @@ for trigger_idx, trigger in enumerate(cum_triggers):
             pl.col(f"{trigger_idx}_fs").drop_nulls().sort() + window_neg_abs
         )
     )
-
 
 spikes_fs_list = pl.concat(dfs, how="align").collect()
 
@@ -303,7 +293,6 @@ for trigger_idx, trigger in enumerate(cum_triggers):
     )
 updated_results = pl.concat([updated_results, pl.concat(dfs, how="align")], how="align")
 updated_results = updated_results.collect()
-
 
 updated_results = updated_results.lazy()
 dfs = []
@@ -366,7 +355,6 @@ for trigger_idx, trigger in enumerate(cum_triggers):
     )
 updated_results = updated_results.collect()
 
-
 updated_results = updated_results.lazy()
 dfs = []
 for trigger_idx, trigger in enumerate(cum_triggers):
@@ -405,7 +393,6 @@ updated_results = pl.concat(
     [updated_results, pl.concat(dfs, how="align")], how="align"
 ).collect()
 
-
 updated_results = updated_results.lazy()
 dfs = []
 cum_columns = []
@@ -421,10 +408,8 @@ for trigger_idx, trigger in enumerate(cum_triggers):
     )
     cum_columns.append(f"{trigger_idx}_cum_sum")
 
-
 updated_results = updated_results.drop(cum_columns).collect()
 updated_results = pl.concat([updated_results, pl.concat(dfs, how="align")], how="align")
-
 
 updated_results = updated_results.lazy()
 dfs = []
@@ -481,7 +466,6 @@ updated_results = pl.concat(
     [updated_results, pl.concat(dfs, how="align")], how="align"
 ).collect()
 
-
 # Check if there is any spike before the stimulus begin.
 # In that case, we will only consider L2_log to determine the first spike.
 updated_results = updated_results.lazy()
@@ -500,7 +484,6 @@ for trigger_idx, trigger in enumerate(cum_triggers):
         )  # This new column will be True if there is a spike before the stimulus begin
     )
 updated_results = updated_results.collect()
-
 
 # Now we can get the predicted first spike and its probability.
 updated_results = updated_results.lazy()
@@ -565,7 +548,6 @@ trigger = 11
 df_test = df_test.with_columns(
     pl.col(f"{trigger}_fs").list.eval(pl.element() + window_neg)
 )
-
 
 fig, ax = plt.subplots(nrows=5, sharex=True, figsize=(15, 20))
 ax[0].plot(
@@ -668,7 +650,6 @@ ax[-1].set_xlabel("Time (s)")
 ax[-1].set_ylabel("Posterior and spikes")
 fig.show()
 # %%
-import plotly.express as px
 
 updated_results = updated_results.lazy()
 dfs = []
@@ -733,7 +714,6 @@ for trigger_idx, trigger in enumerate(cum_triggers):
         col = col + 1
 fig.show()
 
-
 # %%
 peaks = bins[np.argmax(all_binned, axis=1)]
 heights = np.max(all_binned, axis=1)
@@ -779,7 +759,6 @@ for trigger_idx, trigger in enumerate(cum_triggers[:-1]):
     else:
         first_spike_off.extend(hist_df[f"av_first_spike_{trigger_idx}"].to_numpy())
 
-
 # %%
 fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(10, 10))
 ax.scatter(first_spike_on, first_spike_off, c=colours, alpha=0.5)
@@ -802,7 +781,6 @@ minus_index = first_spike < 0
 trigger_indices = trigger_indices[~minus_index]
 first_spike = first_spike[~minus_index]
 weights = weights[~minus_index]
-
 
 model = RANSACRegressor()
 model.fit(trigger_indices[:, np.newaxis], first_spike, weights)

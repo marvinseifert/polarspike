@@ -1,22 +1,12 @@
 from polarspike import (
     Overview,
-    colour_template,
-    spiketrain_plots,
-    Opsins,
-    spiketrains,
     histograms,
 )
-from group_pca import GroupPCA
 import panel as pn
 
 pn.extension("tabulator")
-from bokeh.io import show
-from importlib import reload
 import numpy as np
-import polars as pl
-from sklearn.decomposition import PCA, FactorAnalysis
 import matplotlib.pyplot as plt
-from sklearn.mixture import GaussianMixture
 import pandas as pd
 
 # Import normalizer
@@ -79,7 +69,6 @@ for stimulus_name, s_end in zip(stimuli, stim_end):
     new_df[stimulus_name] = np.split(psths, psths.shape[0], axis=0)
     store_df.update(new_df)
 
-
 # %% fill all zeros with medians
 
 for stimulus in stimuli:
@@ -110,7 +99,6 @@ psths = np.hstack(store)
 # %%
 from cdb_clustering import clustering
 
-
 # %%
 Cl = clustering.CompressionBasedDissimilarity(psths, np.arange(0, 189, 30), 22)
 # Cl = Cl.normalize_01("all")
@@ -122,7 +110,6 @@ Cl.pair_wise_distances()
 # %%
 fig, ax = Cl.dendrogram(color_threshold=1.5)
 fig.show()
-
 
 # %%
 labels = Cl.get_clusters(1.5)

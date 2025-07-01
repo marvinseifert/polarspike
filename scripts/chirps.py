@@ -1,20 +1,15 @@
-from polarspike import Overview, spiketrain_plots, colour_template, histograms, chirps
+from polarspike import Overview, colour_template, histograms, chirps
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-from scipy.fft import fft, fftfreq
 from scipy.signal import welch
-from matplotlib.ticker import LogLocator
 import pywt
 from matplotlib.ticker import FixedLocator
 from sklearn.decomposition import PCA
-from skimage.transform import hough_line, hough_line_peaks
 from skimage.feature import peak_local_max
 from sklearn.linear_model import LinearRegression
-from sklearn.cluster import HDBSCAN
 from scipy.interpolate import interp1d
 from sklearn.linear_model import SGDClassifier
-import polars as pl
 
 # %%
 CT = colour_template.Colour_template()
@@ -89,7 +84,6 @@ for cluster in spikes["labels"].unique():
     ax[cluster, 0].set_title(f"Cluster {cluster}")
 fig.show()
 
-
 # %% Look at fourrier transform
 example_cluster = 28
 spikes_temp = spikes.query(f"labels == {cluster}")
@@ -150,7 +144,6 @@ upper_idx = np.where(freqs > 120)[0][0]
 
 cwtmatr = cwtmatr[upper_idx : lower_idx - 1, :]
 freqs = freqs[upper_idx:lower_idx]
-
 
 # plot result using matplotlib's pcolormesh (image with annoted axes)
 fig, axs = plt.subplots(2, 1, figsize=(20, 10), sharex=True)
@@ -263,7 +256,7 @@ gmm = GaussianMixture(n_components=np.argmin(bics) + 1, covariance_type="tied")
 labels = gmm.fit_predict(data_combined_scaled)
 
 # %%
-from sklearn.cluster import HDBSCAN, AffinityPropagation
+from sklearn.cluster import HDBSCAN
 from sklearn.mixture import BayesianGaussianMixture
 
 # %%
@@ -512,7 +505,6 @@ upper_idx = np.where(freqs > 120)[0][0]
 
 cwtmatr = cwtmatr[upper_idx : lower_idx - 1, :]
 freqs = freqs[upper_idx:lower_idx]
-
 
 # plot result using matplotlib's pcolormesh (image with annoted axes)
 fig, axs = plt.subplots(2, 1, figsize=(20, 10), sharex=True)
