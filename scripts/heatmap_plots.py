@@ -1,12 +1,13 @@
 import sys
-sys.path.extend(['/home/marvin-seifert/PycharmProjects'])
-from polarspike import Overview, spiketrain_plots, colour_template, histograms, chirps
+
+sys.path.extend(["/home/marvin-seifert/PycharmProjects"])
+from polarspike import Overview, spiketrain_plots, colour_template, histograms
 import numpy as np
 import pandas as pd
 from pathlib import Path
 from tslearn.metrics import dtw_limited_warping_length
 import matplotlib.pyplot as plt
-from sklearn.metrics import euclidean_distances, pairwise_distances
+from sklearn.metrics import pairwise_distances
 from scipy.cluster.hierarchy import dendrogram, linkage
 from scipy.cluster.hierarchy import fcluster
 

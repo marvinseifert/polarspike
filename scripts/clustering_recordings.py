@@ -1,20 +1,13 @@
 from polarspike import (
     Overview,
-    colour_template,
-    spiketrain_plots,
-    Opsins,
-    spiketrains,
     histograms,
 )
-from group_pca import GroupPCA
+from polarspike.group_pca import GroupPCA
 import panel as pn
 
 pn.extension("tabulator")
-from bokeh.io import show
-from importlib import reload
 import numpy as np
-import polars as pl
-from sklearn.decomposition import PCA, FactorAnalysis
+from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 from sklearn.mixture import GaussianMixture
 import pandas as pd
@@ -88,7 +81,6 @@ for stimulus_name, s_end in zip(stimuli, stim_end):
     new_df[stimulus_name] = np.split(psths, psths.shape[0], axis=0)
     store_df.update(new_df)
 
-
 # %% fill all zeros with medians
 
 for stimulus in stimuli:
@@ -119,7 +111,6 @@ for rec in recordings.recordings.keys():
                 rf_df[f"{key}_{channel}"] = np.vsplit(
                     rf_dict[channel][key], len(rf_dict[channel][key])
                 )
-
 
 # %%
 store_scaled = []
@@ -154,11 +145,9 @@ psths = np.hstack(store)
 group_pca = GroupPCA(n_components=20)
 reduced_data = group_pca.fit_transform(store_scaled)
 
-
 # %% Normal PCA
 pca = PCA(n_components=20)
 reduced_data = pca.fit_transform(np.hstack(store_scaled))
-
 
 # %% Direction selective
 ds_vals = np.zeros((ds_df["cell_index"].max() + 1, 2))
@@ -219,7 +208,6 @@ ax.legend()
 ax.set_xlabel("PC 1")
 ax.set_ylabel("PC 2")
 fig.show()
-
 
 # %%
 clustering = AffinityPropagation(random_state=5, max_iter=1000).fit(psths)

@@ -4,15 +4,12 @@ from polarspike import (
     stimulus_dfs,
     stimulus_spikes,
     colour_template,
-    spiketrains,
-    spiketrain_plots,
 )
 import numpy as np
 import polars as pl
 import pwlf
 import multiprocessing as mp
 from functools import partial
-import matplotlib.pyplot as plt
 
 
 # %% Functions

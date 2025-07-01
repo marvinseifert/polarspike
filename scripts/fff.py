@@ -1,14 +1,9 @@
 from polarspike import (
     Overview,
     spiketrain_plots,
-    moving_bars,
-    quality_tests,
-    stimulus_spikes,
-    binarizer,
     colour_template,
     histograms,
 )
-from bokeh.io import show
 import numpy as np
 from sklearn.cluster import AffinityPropagation, AgglomerativeClustering
 import matplotlib.pyplot as plt
@@ -41,7 +36,6 @@ fig = CT.add_stimulus_to_plot(fig, [2] * 12)
 
 fig.show()
 
-
 # %%
 
 fig, ax = spiketrain_plots.whole_stimulus(
@@ -71,7 +65,6 @@ all_cells[cell_index_top.astype(int).flatten(), len(bins) - 1 :] = psth_top
 # %% scaling
 scaler = StandardScaler()
 all_cells_scaled = scaler.fit_transform(all_cells)
-
 
 # %%
 clustering = AffinityPropagation(random_state=5, max_iter=1000).fit(all_cells)

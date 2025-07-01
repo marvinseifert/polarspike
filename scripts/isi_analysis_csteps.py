@@ -1,8 +1,7 @@
-from polarspike import Overview, spiketrain_plots, colour_template, bayesian
+from polarspike import Overview, spiketrain_plots, colour_template
 import numpy as np
 import polars as pl
 import matplotlib.pyplot as plt
-from bokeh.io import export
 
 # %%
 CT_fff = colour_template.Colour_template()
@@ -73,7 +72,6 @@ fig, ax = spiketrain_plots.whole_stimulus(
 )
 # fig = CT_contrast.add_stimulus_to_plot(fig, [2] * 20)
 fig.show()
-
 
 # %%
 fig, ax = spiketrain_plots.whole_stimulus(

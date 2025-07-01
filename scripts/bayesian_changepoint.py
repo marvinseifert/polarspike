@@ -1,4 +1,3 @@
-import pandas as pd
 from polarspike import (
     Overview,
     stimulus_dfs,
@@ -10,7 +9,6 @@ import numpy as np
 import polars as pl
 import matplotlib.pyplot as plt
 from sklearn.linear_model import RANSACRegressor
-import polars.selectors as cs
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.pipeline import make_pipeline
 
@@ -240,7 +238,6 @@ for trigger in range(20):
 slopes_before[slopes_before < 0] = np.mean(slopes_before[slopes_before > 0])
 slopes_after[slopes_after < 0] = np.mean(slopes_after[slopes_after > 0])
 
-
 # %%
 fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(15, 10))
 ax[0].bar(np.arange(0, 20, 1), slopes_before, color="black")
@@ -250,7 +247,6 @@ ax[1].set_title("Slopes after")
 ax[0].set_ylim([-0.5, 0.5])
 ax[1].set_ylim([-0.5, 0.5])
 fig.show()
-
 
 # %%
 CT = colour_template.Colour_template()
@@ -266,7 +262,6 @@ for trigger_idx, trigger in enumerate(cum_triggers):
         .then(pl.col("times_triggered"))
         .alias(f"{trigger_idx}_fs")
     )
-
 
 rep = 0
 spikes_fs = spikes_fs.filter(pl.col("repeat") == rep)
@@ -353,7 +348,6 @@ for test_trigger in range(20):
     )
     if col == 1:
         row += 1
-
 
 fig_spikes.savefig(rf"D:\chicken_analysis\first_spike_repeat{rep}.png")
 fig_cred.savefig(rf"D:\chicken_analysis\changepoint_example_repeat{rep}.png")
@@ -464,7 +458,6 @@ spiketimes_generated = []
 for _ in range(1000):
     spiketimes_generated.append(generate_poisson_spike_train(segments))
     isis.append(np.diff(spiketimes_generated[-1]))
-
 
 # %%
 bins_isi = np.arange(window_neg, window_pos, 0.01)

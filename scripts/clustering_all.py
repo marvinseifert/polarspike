@@ -1,18 +1,8 @@
 import numpy as np
-from tslearn.matrix_profile import MatrixProfile
 import matplotlib.pyplot as plt
-from sklearn.metrics import pairwise_distances, silhouette_score
-from sklearn.decomposition import PCA, SparsePCA, FastICA
-from sklearn.cluster import AgglomerativeClustering
-from sklearn.mixture import GaussianMixture
 from polarspike import colour_template, Overview, histograms, spiketrains
-from datashader.mpl_ext import dsshow, alpha_colormap
-import datashader as ds
-import pandas as pd
 from sklearn.preprocessing import StandardScaler
-from scipy.signal import find_peaks
 from pathlib import Path
-import polars as pl
 from cdb_clustering.clustering import CompressionBasedDissimilarity
 
 CT = colour_template.Colour_template()

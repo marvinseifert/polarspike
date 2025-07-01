@@ -1,14 +1,9 @@
 from polarspike import (
     Overview,
-    spiketrain_plots,
-    moving_bars,
     quality_tests,
-    stimulus_spikes,
-    binarizer,
     colour_template,
     histograms,
 )
-from bokeh.io import show
 import numpy as np
 from sklearn.cluster import AffinityPropagation, AgglomerativeClustering, HDBSCAN
 import matplotlib.pyplot as plt
@@ -16,7 +11,7 @@ from sklearn.preprocessing import StandardScaler
 import plotly.express as px
 from tslearn.clustering import TimeSeriesKMeans
 import pandas as pd
-from sklearn.metrics import silhouette_samples, silhouette_score, pairwise_distances
+from sklearn.metrics import silhouette_score, pairwise_distances
 from sklearn.decomposition import PCA
 from tslearn.metrics import cdist_dtw
 from cdb_clustering.clustering import CompressionBasedDissimilarity as CBD
@@ -72,7 +67,6 @@ psth, bins, cell_index = histograms.psth_by_index(
 psth_sorted = psth[np.argsort(cell_index[:, 0])]
 sorted_recordings = cell_index[np.argsort(cell_index[:, 0]), 0]
 nr_rec = np.unique(sorted_recordings, return_counts=True)
-
 
 # %% Saving
 np.save(r"D:\fff_clustering\psth_sorted.npy", psth_sorted)
@@ -134,7 +128,6 @@ clustering = AgglomerativeClustering(
 )
 labels = clustering.fit_predict(distance_matrix_scaled)
 
-
 # %%
 clustering = CBD(psth_scaled, bins=np.linspace(0, np.max(psth_scaled), 100))
 clustering.add_noise()
@@ -181,7 +174,6 @@ for cluster in range(np.max(labels) + 1):
     )
 fig = CT.add_stimulus_to_plot(fig, [2] * 12)
 fig.show()
-
 
 # %% Plot all cells from one cluster
 cluster = 23

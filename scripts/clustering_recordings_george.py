@@ -1,11 +1,10 @@
-from group_pca import GroupPCA
+from polarspike.group_pca import GroupPCA
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.mixture import GaussianMixture
 
 # Import normalizer
 from sklearn.preprocessing import StandardScaler
-
 
 """
 How it works.
@@ -45,7 +44,6 @@ store_scaled: list
 # %%
 
 scaler = StandardScaler()
-
 
 # %%
 group_pca = GroupPCA(n_components=20)
@@ -106,7 +104,6 @@ ax.set_xlabel("PC 1")
 ax.set_ylabel("PC 2")
 fig.show()
 
-
 # %% Plot the traces in subplots. The first column is the original PSTH, the second column is RF. The second column
 # should be much smaller (10 %) than the first column
 # Share the x-axis
@@ -143,7 +140,6 @@ for i in range(n_clusters):
 
 fig.show()
 
-
 # %% Plot all traces from a single cluster
 cluster = 1
 fig, ax = plt.subplots(figsize=(10, 10))
@@ -167,6 +163,5 @@ for cluster in range(n_clusters):
     ax.bar(rec_arr, cluster_rec_counts[cluster, :], label=f"Cluster {cluster}")
 ax.legend()
 fig.show()
-
 
 # Save you data somewhere.

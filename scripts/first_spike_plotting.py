@@ -1,18 +1,14 @@
 import polars as pl
 import matplotlib.pyplot as plt
 import numpy as np
-import plotly.express as px
 from polarspike import (
     Overview,
     stimulus_spikes,
-    bayesian,
     colour_template,
-    plotly_templates,
     histograms,
 )
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import math
 from sklearn.metrics import r2_score
 
 import matplotlib.animation as animation
@@ -166,7 +162,6 @@ fff_std_prior = (
     .item()
 )
 
-
 # %% plot the priors
 times = np.arange(-0.2, 0.2, 0.001)
 prior_contrast = calc_prior(times, contrast_median_prior, contrast_std_prior)
@@ -216,7 +211,6 @@ for trigger_idx, _ in enumerate(fff_cum_triggers):
         fff_spikes, bins=bins, density=True, weights=fff_posterior
     )
     peaks_fff[trigger_idx] = bins[np.argmax(fff_binned[trigger_idx])]
-
 
 # %% set the mask where the first spike is nan
 first_spikes_contrast = np.ma.masked_invalid(first_spikes_contrast)
@@ -337,7 +331,6 @@ for a in ax:
 ax[0].set_ylabel("Cumulative density")
 ax[1].set_xlabel(None)
 ax[0].set_xlabel("Inter repeat variability")
-
 
 fig.show()
 # %%
@@ -493,7 +486,6 @@ fig.update_layout(height=1300, width=2000)
 # hide legend
 fig.update_layout(showlegend=False)
 fig.show(renderer="browser")
-
 
 # %%
 fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(15, 10), sharey=True)
@@ -819,7 +811,6 @@ trigger = 1
 df_test = df_test.with_columns(
     pl.col(f"{trigger}_fs").list.eval(pl.element() + window_neg)
 )
-
 
 fig, ax = plt.subplots(nrows=5, sharex=True, figsize=(15, 20))
 ax[0].plot(
