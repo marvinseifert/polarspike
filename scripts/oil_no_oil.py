@@ -1,5 +1,4 @@
 import pandas as pd
-import spiketrain_plots
 from holoviews.plotting.bokeh.styles import marker
 from polarspike import (
     Overview,
