@@ -61,60 +61,95 @@ def stimulus_df():
 
 class Explorer:
     def __init__(self):
-        self.ct = colour_template.Colour_template()
-        self.stimulus_input = SelectFilesButton("Stimulus File")
-        self.recording_input = SelectFilesButton("Recording File")
-        self.sorting_input = SelectFilesButton("Sorting File")
-        self.stimulus_input.observe(self._on_stimulus_selected, names="files")
-        self.recording_input.observe(self._on_recording_selected, names="files")
-        self.sorting_input.observe(self._on_sorting_selected, names="files")
+        # Initialize state variables
         self.stimulus = None
+        self.recording = None
         self.mea_type = None
+        self.overview_df = None
+        self.initial_stim_df = False
+
+        # Create color template
+        self.ct = colour_template.Colour_template()
+
+        # Create descriptive text
         self.text = """ ## Single Recording Overview.
         This UI allows you to explore
         a single MEA recording fast
         and interactively.
-
         """
 
-        warnings = pn.widgets.StaticText(name="Warnings", value="No warnings")
-        self.overview_df = None
+        # === File input components ===
+        self._setup_file_inputs()
+
+        # === Control buttons ===
+        self._setup_control_buttons()
+
+        # === Parameter inputs ===
+        self._setup_parameter_inputs()
+
+        # === Status indicators ===
+        self._setup_status_indicators()
+
+        # === Stimulus visualization ===
+        self._setup_stimulus_visualization()
+
+        # === Spike visualization ===
+        self._setup_spike_visualization()
+
+        # === Stimulus analysis ===
+        self._setup_stimulus_analysis()
+
+        # === Color selection ===
+        self._setup_color_selection()
+
+        # === Layout configuration ===
+        self._setup_layout()
+
+    def _setup_file_inputs(self):
+        """Set up file input components."""
+        self.stimulus_input = SelectFilesButton("Stimulus File")
+        self.recording_input = SelectFilesButton("Recording File")
+        self.sorting_input = SelectFilesButton("Sorting File")
+
+        # Add event observers
+        self.stimulus_input.observe(self._on_stimulus_selected, names="files")
+        self.recording_input.observe(self._on_recording_selected, names="files")
+        self.sorting_input.observe(self._on_sorting_selected, names="files")
+
+        # Recording name input
+        self.recording_name = pn.widgets.TextInput(
+            name="recording name", placeholder="recording name (LC!)", width=200
+        )
+
+    def _setup_control_buttons(self):
+        """Set up main control buttons."""
+        # Load and save buttons
         self.load_button = pn.widgets.Button(
             name="Load Recording", button_type="primary", width=200
         )
         self.save_button = pn.widgets.Button(
             name="Save to Overview", button_type="primary", width=200
         )
-        self.second_trigger_checkbox = pn.widgets.Checkbox(
-            name="Second Trigger Channel?", value=False, width=200
-        )
-        self.save_button.on_click(self.save_to_overview)
-        self.load_button.on_click(self.load_data)
 
-        self.recording_name = pn.widgets.TextInput(
-            name="recording name", placeholder="recording name (LC!)", width=200
-        )
-
+        # Stimulus analysis buttons
         self.define_stimuli_button = pn.widgets.Button(
             name="Define Stimuli", button_type="primary", width=150
         )
         self.stimulus_spikes_button = pn.widgets.Button(
             name="Match stimulus spikes", button_type="primary", width=150
         )
+        self.calculate_qi_button = pn.widgets.Button(name="Calculate QI", width=150)
+
+        # Set up button event handlers
+        self.load_button.on_click(self.load_data)
+        self.save_button.on_click(self.save_to_overview)
         self.define_stimuli_button.on_click(self.define_stimuli)
         self.stimulus_spikes_button.on_click(self.stimulus_spikes)
-        self.calculate_qi_button = pn.widgets.Button(name="Calculate QI", width=150)
         self.calculate_qi_button.on_click(self.calculate_qi)
-        # Creating an instance of PlotApp
-        self.plot_app = PlotApp()
 
-        self.recording = None
-
-        self.stim_figure = self.stim_figure = pn.panel(
-            self.plot_app.plot,
-            width=1000,
-            height=500,
-        )
+    def _setup_parameter_inputs(self):
+        """Set up parameter input widgets."""
+        # Recording frequency input
         self.frequency_input = pn.widgets.FloatInput(
             name="Recording Frequency",
             value=10000.0,
@@ -124,35 +159,57 @@ class Explorer:
             width=200,
         )
 
-        self.spikes_fig = widgets.Output()
+        # Second trigger checkbox
+        self.second_trigger_checkbox = pn.widgets.Checkbox(
+            name="Second Trigger Channel?", value=False, width=200
+        )
 
-        self.isi_fig = widgets.Output()
-
-        self.spike_trains = widgets.Output()
-        self.isi_clus_fig = widgets.Output()
-
-        self.stimulus_df = stimulus_df()
-        self.stimulus_select = pn.widgets.Select(name="Select Stimulus", options=[])
-        self.stimulus_select.param.watch(self.update_stimulus_tabulator, "value")
-        self.initial_stim_df = False
-
+    def _setup_status_indicators(self):
+        """Set up status indicators."""
+        # Progress indicator
         self.status = pn.indicators.Progress(
             name="Indeterminate Progress", active=False, width=200
         )
 
-        self.dummy_spiketrain = pd.DataFrame(
-            columns=[
-                "cell_index",
-                "times_triggered",
-                "trigger",
-                "repeat",
-                "stimulus_index",
-            ],
-            data=np.zeros(
-                (1, 5),
-                dtype=int,
-            ),
+        # Warnings text
+        self.warnings = pn.widgets.StaticText(name="Warnings", value="No warnings")
+
+    def _setup_stimulus_visualization(self):
+        """Set up stimulus visualization components."""
+        # Initialize plot app
+        self.plot_app = PlotApp()
+
+        # Create stimulus figure
+        self.stim_figure = pn.panel(
+            self.plot_app.plot,
+            width=1000,
+            height=500,
         )
+
+        # Stimulus dataframe widget
+        self.stimulus_df = stimulus_df()
+
+    def _setup_spike_visualization(self):
+        """Set up spike visualization components."""
+        # Initialize containers for spike visualizations
+        self.spikes_fig = pn.Column()
+        self.isi_fig = pn.Column()
+        self.spike_trains = pn.Column()
+        self.isi_clus_fig = pn.Column()
+
+    def _setup_stimulus_analysis(self):
+        """Set up stimulus analysis components."""
+        # Stimulus selection
+        self.stimulus_select = pn.widgets.Select(name="Select Stimulus", options=[])
+        self.stimulus_select.param.watch(self.update_stimulus_tabulator, "value")
+
+        # Create dummy spiketrain for initial display
+        self.dummy_spiketrain = pd.DataFrame(
+            columns=["cell_index", "times_triggered", "trigger", "repeat", "stimulus_index"],
+            data=np.zeros((1, 5), dtype=int),
+        )
+
+        # Set up single cell raster visualization
         self.single_cell_raster = pn.panel(
             spiketrain_plots.spikes_and_trace(
                 self.dummy_spiketrain,
@@ -162,19 +219,14 @@ class Explorer:
             )
         )
 
+        # Configure stimulus dataframe
         uneditable_columns = [
-            "cell_index",
-            "stimulus_index",
-            "stimulus_name",
-            "nr_of_spikes",
-            "centres_x",
-            "centres_y",
-            "recording",
+            "cell_index", "stimulus_index", "stimulus_name",
+            "nr_of_spikes", "centres_x", "centres_y", "recording",
         ]
-        editors = {
-            col: {"type": "editable", "value": False} for col in uneditable_columns
-        }
+        editors = {col: {"type": "editable", "value": False} for col in uneditable_columns}
 
+        # Create tabulator for single stimulus data
         self.single_stimulus_df = pn.widgets.Tabulator(
             pd.DataFrame(),
             name="single stimulus",
@@ -187,14 +239,21 @@ class Explorer:
         )
         self.single_stimulus_df.on_click(self.update_raster)
 
-        # Color
+    def _setup_color_selection(self):
+        """Set up color selection components."""
+        # Color selector dropdown
         self.colour_selector = pn.widgets.Select(
-            name="Select colour set", options=["None"] + self.ct.list_stimuli().tolist()
+            name="Select colour set",
+            options=["None"] + self.ct.list_stimuli().tolist()
         )
-
         self.colour_selector.param.watch(self.on_colour_change, "value")
+
+        # Color picker widget
         self.selected_color = pn.pane.IPyWidget(self.ct.pickstimcolour())
 
+    def _setup_layout(self):
+        """Set up the main layout for the UI."""
+        # Sidebar layout
         self.sidebar = pn.layout.WidgetBox(
             pn.pane.Markdown(self.text, margin=(0, 10)),
             "Stimulus File",
@@ -209,23 +268,21 @@ class Explorer:
             self.load_button,
             self.save_button,
             self.status,
-            warnings,
+            self.warnings,
             max_width=300,
             max_height=1000,
             sizing_mode="stretch_width",
         ).servable(area="sidebar")
 
+        # Main content layout with tabs
         self.main = pn.Tabs(
+            # Stimulus tab
             (
                 "Stimulus",
                 pn.Row(
                     pn.Column(
                         pn.Column(
-                            pn.Row(
-                                self.stim_figure,
-                                height=600,
-                                width=1000,
-                            ),
+                            pn.Row(self.stim_figure, height=600, width=1000),
                             pn.Row(self.stimulus_df, height=200, width=1000),
                         ),
                         height=800,
@@ -237,37 +294,24 @@ class Explorer:
                     ),
                 ),
             ),
+            # Spikes tab
             (
                 "Spikes",
                 pn.Tabs(
-                    (
-                        "Spike Counts",
-                        pn.Column(self.spikes_fig, sizing_mode="stretch_width"),
-                    ),
+                    ("Spike Counts", pn.Column(self.spikes_fig, sizing_mode="stretch_width")),
                     ("ISI_time", pn.Column(self.isi_fig, sizing_mode="stretch_width")),
-                    (
-                        "ISI_cluster",
-                        pn.Column(self.isi_clus_fig, sizing_mode="stretch_width"),
-                    ),
-                    (
-                        "Raster",
-                        pn.Column(self.spike_trains, sizing_mode="stretch_width"),
-                    ),
+                    ("ISI_cluster", pn.Column(self.isi_clus_fig, sizing_mode="stretch_width")),
+                    ("Raster", pn.Column(self.spike_trains, sizing_mode="stretch_width")),
                     sizing_mode="stretch_width",
                 ),
             ),
+            # Stimuli tab
             (
                 "Stimuli",
                 pn.Row(
+                    pn.Column(self.stimulus_select, self.colour_selector, self.selected_color),
                     pn.Column(
-                        self.stimulus_select, self.colour_selector, self.selected_color
-                    ),
-                    pn.Column(
-                        pn.Row(
-                            self.single_stimulus_df,
-                            self.calculate_qi_button,
-                            width=1000,
-                        ),
+                        pn.Row(self.single_stimulus_df, self.calculate_qi_button, width=1000),
                         pn.Row(self.single_cell_raster, width=800),
                         width=800,
                     ),
@@ -292,7 +336,7 @@ class Explorer:
     def load_data(self, event):
         if self.stimulus_input.loaded:
             self.status.active = True
-            self.load_stimulus(second_trigger = self.second_trigger_checkbox.value)
+            self.load_stimulus(second_trigger=self.second_trigger_checkbox.value)
             self.stimulus_input.loaded = False
             self.status.active = False
         if self.recording_input.loaded:
@@ -324,6 +368,11 @@ class Explorer:
         stim_df["sampling_freq"] = self.frequency_input.value
         self.stimulus_df.value = stim_df
 
+    def update_spiketrain_plot(self):
+        if self.stimulus_df.value.empty:
+            return
+        recording_overview.add_stimulus_df_bokeh(self.spike_trains[0].object, self.stimulus_df.value)
+
     def stimulus_spikes(self, event):
         self.stimulus_df.value = stimulus_trace.find_ends(self.stimulus_df.value)
         self.stimulus_df.value = stimulus_trace.get_nr_repeats(self.stimulus_df.value)
@@ -343,6 +392,10 @@ class Explorer:
         stimulus_names = self.overview_df.stimulus_df["stimulus_name"].tolist()
         options_dict = {f"{name}_{idx}": idx for idx, name in enumerate(stimulus_names)}
         self.stimulus_select.options = options_dict
+        doc = pn.state.curdoc
+        doc.hold()
+        self.update_spiketrain_plot()
+        doc.unhold()
 
     def load_stimulus(self, second_trigger=False):
         self.stimulus = stimulus_trace.Stimulus_Extractor(
@@ -375,6 +428,18 @@ class Explorer:
             except FileNotFoundError:
                 print("No bininfo.txt file found. Using user input frequency.")
 
+        elif file_format == ".npy":
+            self.recording = Extractors.Extractor_KS(self.recording_file)
+            self.mea_type = "MCS"
+            try:
+                self.frequency_input.value = float(
+                    np.loadtxt(
+                        Path(self.recording_file).parent / "bininfo.txt", dtype=object
+                    )[1]
+                )
+            except FileNotFoundError:
+                print("No bininfo.txt file found. Using user input frequency.")
+
         elif file_format == ".brw":
             self.mea_type = "3Brain"
             self.recording = Extractors.Extractor_HS2(self.sorting_file)
@@ -387,34 +452,33 @@ class Explorer:
         self.plot_spike_trains()
 
     def plot_spike_counts(self):
-        fig, ax = recording_overview.spike_counts_from_file(
+        p = recording_overview.spike_counts_from_file(
             str(self.recording.file.with_suffix(".parquet")), "viridis"
         )
-        fig.set_size_inches(10, 8)
-        with self.spikes_fig:
-            fig.show()
+
+        self.spikes_fig.clear()
+        self.spikes_fig.append(p)
 
     def plot_isi(self, x, widget):
-        fig, ax = recording_overview.isi_from_file(
+        p = recording_overview.isi_from_file(
             str(self.recording.file.with_suffix(".parquet")),
             self.frequency_input.value,
             x=x,
             cmap="viridis",
             cutoff=np.log10(0.001),
         )
-        fig.set_size_inches(10, 8)
-        with widget:
-            fig.show()
+        widget.clear()
+        widget.append(p)
 
     def plot_spike_trains(self):
-        fig, ax = recording_overview.spiketrains_from_file(
+        p = recording_overview.spiketrains_from_file(
             str(self.recording.file.with_suffix(".parquet")),
             self.frequency_input.value,
             cmap="Greys",
         )
-        fig.set_size_inches(10, 8)
-        with self.spike_trains:
-            fig.show()
+
+        self.spike_trains.clear()
+        self.spike_trains.append(p)
 
     def update_stimulus_tabulator(self, event):
         stimulus_id = self.stimulus_select.value
@@ -524,7 +588,7 @@ class Explorer:
             for i in range(nr_batches):
                 spikes_df_subset = spikes_df.filter(
                     pl.col("cell_index").is_in(
-                        cell_ids[(i * batch_size) : (i * batch_size) + batch_size]
+                        cell_ids[(i * batch_size): (i * batch_size) + batch_size]
                     )
                 )
                 if len(spikes_df_subset) > 0:
@@ -632,7 +696,7 @@ class PlotApp(param.Parameterized):
             elapsed_time = 1  # First callback, so allow it
         self.last_callback_time = current_time
         if (
-            elapsed_time < 0.5
+                elapsed_time < 0.5
         ):  # If less than 0.5 seconds elapsed since last callback, ignore
             print("Callback debounced")
             return
@@ -871,7 +935,7 @@ class Recording_explorer:
         self.animal_tuning_input = pn.widgets.Select(
             name="Opsin templates",
             options=["None"]
-            + [item for item in Opsins.Opsin_template.opsins_types.keys()],
+                    + [item for item in Opsins.Opsin_template.opsins_types.keys()],
             width=250,
         )
         self.tuning_window_input = pn.widgets.FloatInput(
@@ -1241,10 +1305,10 @@ class Recording_explorer:
                 self.dataframe_menu.clicked
             ].columns.tolist()
             self.stats_colour_column.options = [
-                None
-            ] + self.recordings_object.dataframes[
-                self.dataframe_menu.clicked
-            ].columns.tolist()
+                                                   None
+                                               ] + self.recordings_object.dataframes[
+                                                   self.dataframe_menu.clicked
+                                               ].columns.tolist()
             self.action_column.clear()
             self.action_column.append(self.plotly_stats_ct)
         if type == "tuning_curves":
@@ -1349,7 +1413,7 @@ class Recording_explorer:
                 export_png(
                     self.output.objects[0].object,
                     filename=Path(self.analysis_path)
-                    / f"{self.figure_name_input.value}.png",
+                             / f"{self.figure_name_input.value}.png",
                     width=1500,
                     height=800,
                 )
