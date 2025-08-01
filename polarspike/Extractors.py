@@ -7,7 +7,6 @@ respective files.
 @Author: Marvin Seifert 2024
 """
 
-
 import numpy as np
 import h5py
 import polars as pl
@@ -144,7 +143,7 @@ class Extractor:
         df.lazy().sink_parquet(str(self.file.with_suffix(".parquet")))
 
     def load(
-        self, stimulus: bool = True, recording_name: str = None, pandas: bool = True
+            self, stimulus: bool = True, recording_name: str = None, pandas: bool = True
     ) -> pd.DataFrame | pl.DataFrame:
         """
         Load the spikes from the parquet file in lazy mode.
@@ -171,7 +170,7 @@ class Extractor:
                 return df
 
     def construct_df(
-        self, df: pl.DataFrame, recording_name: str = None, pandas: bool = True
+            self, df: pl.DataFrame, recording_name: str = None, pandas: bool = True
     ) -> pd.DataFrame | pl.DataFrame:
         """
         Construct the spikes_df using the information from the stimulus_df and the parquet file (for nr_of_spikes).
@@ -360,18 +359,23 @@ class Extractor_KS(Extractor):
 
     def get_spikes(self):
         working_dir = self.file.parents[0]
-        self.spikes["times"] = np.load(self.file).flatten().astype(np.dtypes.Int64DType)
-        cell_idx = np.load(working_dir / "spike_clusters.npy")
+        self.spikes["times"] = np.load(self.file, allow_pickle=True).flatten().astype(np.dtypes.Int64DType)
+        cell_idx = np.load(working_dir / "spike_clusters.npy", allow_pickle=True)
         cell_idx = cell_idx.astype(np.dtypes.Int64DType)
         self.spikes["cell_indices"] = np.unique(cell_idx)
         df = pl.from_numpy(
             np.vstack([cell_idx, self.spikes["times"]]).T,
             schema=["cell_index", "times"],
         )
+        spike_positions = np.load(working_dir / "spike_positions.npy", allow_pickle=True)
+        spike_positions_avg = np.zeros((len(np.unique(cell_idx)), 2), dtype=float)
+        for cell in np.unique(cell_idx):
+            spike_positions_avg[cell] = np.mean(spike_positions[cell_idx == cell], axis=0)
+        self.spikes["centres"] = spike_positions_avg
         df.write_parquet(str(self.file.with_suffix(".parquet")))
 
     def construct_df(
-        self, df: pd.DataFrame, recording_name: str = None, pandas: bool = True
+            self, df: pl.DataFrame, recording_name: str = None, pandas: bool = True
     ) -> pd.DataFrame | pl.DataFrame:
         dfs = []
         for stimulus in range(self.trigger.shape[0]):
@@ -407,6 +411,19 @@ class Extractor_KS(Extractor):
         df = pl.concat(dfs)
         df = df.sort("cell_index", descending=False)
         df = df.rename({"count": "nr_of_spikes"})
+
+        centres_id = np.hstack(
+            [
+                self.spikes["cell_indices"].reshape(-1, 1),
+                self.spikes["centres"],
+            ]
+        )
+        df_centre = pl.from_numpy(
+            data=centres_id,
+            schema=[("cell_index", int), ("centres_x", float), ("centres_y", float)],
+        )
+        df = df.sort("cell_index", descending=False)
+        df = df.join(df_centre, on="cell_index", how="left")
 
         # Fill missing values
 
