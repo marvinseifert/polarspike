@@ -67,6 +67,7 @@ class Explorer:
         self.mea_type = None
         self.overview_df = None
         self.initial_stim_df = False
+        self._updating_qi = False
 
         # Create color template
         self.ct = colour_template.Colour_template()
@@ -567,6 +568,9 @@ class Explorer:
             self.ct.unpick_stimulus()
 
     def calculate_qi(self, event):
+        if self._updating_qi:
+            return
+        self._updating_qi = True
         try:
             self.status.active = True
             cell_ids = self.single_stimulus_df.value["cell_index"].unique().tolist()
@@ -616,7 +620,9 @@ class Explorer:
             self.merge_stimulus_df()
         except Exception as e:
             print(e)
-        self.status.active = False
+        finally:
+            self.status.active = False
+            self._updating_qi = False
 
 
 class PlotApp(param.Parameterized):
