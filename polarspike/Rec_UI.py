@@ -335,17 +335,26 @@ class Explorer:
         return app
 
     def load_data(self, event):
+        # hold the document to prevent multiple updates
+
         if self.stimulus_input.loaded:
             self.status.active = True
+            doc = pn.state.curdoc
+            doc.hold()
             self.load_stimulus(second_trigger=self.second_trigger_checkbox.value)
             self.stimulus_input.loaded = False
             self.status.active = False
+            doc.unhold()
         if self.recording_input.loaded:
+            doc = pn.state.curdoc
+            doc.hold()
             self.recording_name.value = self.recording_name.value.lower()
             self.status.active = True
             self.load_recording()
             self.recording_input.loaded = False
             self.status.active = False
+            doc.unhold()
+        # unhold the document to allow updates
 
     def _on_stimulus_selected(self, change):
         self.stimulus_file = change["new"][0] if change["new"] else ""
@@ -375,6 +384,8 @@ class Explorer:
         recording_overview.add_stimulus_df_bokeh(self.spike_trains[0].object, self.stimulus_df.value)
 
     def stimulus_spikes(self, event):
+        doc = pn.state.curdoc
+        doc.hold()
         self.stimulus_df.value = stimulus_trace.find_ends(self.stimulus_df.value)
         self.stimulus_df.value = stimulus_trace.get_nr_repeats(self.stimulus_df.value)
         self.recording.add_stimulus_df(self.stimulus_df.value)
@@ -393,8 +404,6 @@ class Explorer:
         stimulus_names = self.overview_df.stimulus_df["stimulus_name"].tolist()
         options_dict = {f"{name}_{idx}": idx for idx, name in enumerate(stimulus_names)}
         self.stimulus_select.options = options_dict
-        doc = pn.state.curdoc
-        doc.hold()
         self.update_spiketrain_plot()
         doc.unhold()
 

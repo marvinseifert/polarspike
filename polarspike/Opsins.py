@@ -118,10 +118,10 @@ def alphaband(x, constA):
     ##A = b/(a+b)*numpy.exp(a/n)
     ##B = a/(a+b)*numpy.exp(-1*b/n)
     alpha = 1 / (
-        np.exp(constA[3] * (constA[0] - x))
-        + np.exp(constA[4] * (constA[1] - x))
-        + np.exp(constA[5] * (constA[2] - x))
-        + constA[6]
+            np.exp(constA[3] * (constA[0] - x))
+            + np.exp(constA[4] * (constA[1] - x))
+            + np.exp(constA[5] * (constA[2] - x))
+            + constA[6]
     )
     return alpha
 

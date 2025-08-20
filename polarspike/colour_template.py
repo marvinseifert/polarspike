@@ -7,7 +7,6 @@ bokeh figure.
 @Author: Marvin Seifert 2024
 """
 
-
 import numpy as np
 import pandas as pd
 import plotly.graph_objects
@@ -127,7 +126,7 @@ class Colour_template:
         """
         colours = np.asarray(self.plot_colour_dataframe.loc[name]["Colours"])
         if sub_selection is not None:
-            colours = colours[sub_selection[0] :: sub_selection[1]]
+            colours = colours[sub_selection[0]:: sub_selection[1]]
 
         return colours
 
@@ -147,7 +146,7 @@ class Colour_template:
             self.plot_colour_dataframe.loc[name]["Description"], dtype="<U11"
         )
         if sub_selection is not None:
-            names = names[sub_selection[0] :: sub_selection[1]]
+            names = names[sub_selection[0]:: sub_selection[1]]
 
         return names
 
@@ -211,7 +210,7 @@ class Colour_template:
         interact(self.pickstimcolour, selected_stimulus=self.stimulus_select)
 
     def pickstimcolour(
-        self, selected_stimulus: str = None, small: bool = False
+            self, selected_stimulus: str = None, small: bool = False
     ) -> widgets.HBox:
         """
         Creates RadioButtons for selecting a stimulus and ColorPickers for changing the colours of the stimulus.
@@ -302,7 +301,7 @@ class Colour_template:
     #     return self.colour_to_markdown()
 
     def create_stimcolour(
-        self, name: str, nr_colours: int, description: list[str]
+            self, name: str, nr_colours: int, description: list[str]
     ) -> widgets.VBox:
         """
         Interactive widget for creating a new stimulus with colours. The colours will displayed interactively in Jupyter
@@ -325,10 +324,10 @@ class Colour_template:
         return self.template.create_stimcolour(name, nr_colours, description)
 
     def add_stimulus_to_plot(
-        self,
-        initial_fig: plotly.graph_objects.Figure | plt.Figure | bokeh.plotting.figure,
-        flash_durations: list[float],
-        names: bool = True,
+            self,
+            initial_fig: plotly.graph_objects.Figure | plt.Figure | bokeh.plotting.figure,
+            flash_durations: list[float],
+            names: bool = True,
     ) -> plotly.graph_objects.Figure | plt.Figure | bokeh.plotting.figure:
         """
         This adds a colour stimulus plot under an existing plotly, matplotlib or bokeh figure.
@@ -405,7 +404,7 @@ class Interactive_template:
         self.colours = []
 
     def create_stimcolour(
-        self, name: str, nr_colours: int, description: list[str]
+            self, name: str, nr_colours: int, description: list[str]
     ) -> widgets.VBox:
         """
 
@@ -512,10 +511,10 @@ class Interactive_template:
 
 
 def add_stimulus_to_plotly(
-    initial_fig: plotly.graph_objects.Figure,
-    colours: list[str],
-    flash_durations: list[float],
-    names: list[str] = None,
+        initial_fig: plotly.graph_objects.Figure,
+        colours: list[str],
+        flash_durations: list[float],
+        names: list[str] = None,
 ) -> plotly.graph_objects.Figure:
     """
     Adds a subplot with colored rectangles to an existing plotly figure.
@@ -602,10 +601,10 @@ def add_stimulus_to_plotly(
 
 
 def add_stimulus_to_matplotlib(
-    initial_fig: plt.Figure,
-    colours: list[str],
-    flash_durations: list[float],
-    names: list[str] = None,
+        initial_fig: plt.Figure,
+        colours: list[str],
+        flash_durations: list[float],
+        names: list[str] = None,
 ) -> plt.Figure:
     """
     Adds a subplot with colored rectangles to an existing Matplotlib figure.
@@ -659,7 +658,7 @@ def add_stimulus_to_matplotlib(
                 names[i],
                 ha="center",
                 va="center",
-                fontsize=12**2 * aspect,
+                fontsize=12 ** 2 * aspect,
                 color=text_color,
             )
             x_position += width
@@ -671,10 +670,10 @@ def add_stimulus_to_matplotlib(
 
 
 def add_stimulus_to_bokeh(
-    initial_fig: bokeh.plotting.figure,
-    colours: list[str],
-    flash_durations: list[float],
-    names: list[str] = None,
+        initial_fig: bokeh.plotting.figure,
+        colours: list[str],
+        flash_durations: list[float],
+        names: list[str] = None,
 ) -> bokeh.plotting.figure:
     """
     Adds a subplot with colored rectangles to an existing Bokeh figure.
@@ -766,7 +765,7 @@ def hex_to_rgb(hex_color: str) -> tuple:
     """
     # Convert hex to RGB
     hex_color = hex_color.lstrip("#")
-    return tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
+    return tuple(int(hex_color[i: i + 2], 16) for i in (0, 2, 4))
 
 
 def calculate_luminance(rgb: tuple) -> float:

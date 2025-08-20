@@ -93,6 +93,7 @@ def spiketrains_from_file(
         cmap: str = "Greys",
         height: int = None,
         width: int = None,
+        backend: str = "bokeh"
 ) -> tuple[plt.Figure, plt.Axes]:
     """
     Plot the spike trains per cell in a recording using DataShader.
@@ -109,6 +110,8 @@ def spiketrains_from_file(
         The height of the plot. The default is None, which defaults to nr_cells.
     width : int, optional
         The width of the plot. The default is None, which defaults to nr_bins.
+    backend : str, optional
+        The backend to use for plotting. Can be "bokeh" or "matplotlib". The default is "bokeh".
 
     Returns
     -------
@@ -120,7 +123,10 @@ def spiketrains_from_file(
     df = pl.scan_parquet(file_parquet)
     df = df.select(pl.col("cell_index"), pl.col("times"))
     df = df.with_columns(pl.col("times").truediv(freq).alias("times"))
-    return plot_spiketrains_bokeh(df, cmap=cmap, height=height, width=width)
+    if backend == "matplotlib":
+        return plot_spiketrains(df, cmap=cmap, height=height, width=width)
+    elif backend == "bokeh":
+        return plot_spiketrains_bokeh(df, cmap=cmap, height=height, width=width)
 
 
 def spike_amplitudes_from_file(
@@ -447,6 +453,7 @@ def plot_spiketrains_bokeh(
     p.title.text = "Recording Overview"
     p.xaxis.axis_label = "time in seconds"
     p.yaxis.axis_label = "cell_index"
+    p.output_backend = "canvas"
 
     return p
 

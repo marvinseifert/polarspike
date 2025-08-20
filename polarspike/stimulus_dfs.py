@@ -11,13 +11,13 @@ class Stimulus_df_schroeder:
         self.sampling_freq = sampling_freq
 
     def add_stimulus(
-        self,
-        stimulus_name,
-        starts,
-        ends,
-        stimulus_repeat_logic=1,
-        stimulus_repeat_sublogic=1,
-        random_ids=None,
+            self,
+            stimulus_name,
+            starts,
+            ends,
+            stimulus_repeat_logic=1,
+            stimulus_repeat_sublogic=1,
+            random_ids=None,
     ):
         # Establish the trigger by interleaving the start and end times
         trigger_store = np.empty((1), dtype=object)
@@ -79,7 +79,7 @@ def split_triggers(old_triggers, nr_splits=1):
 
 
 def split_triggers_df(
-    df: pd.DataFrame, stimulus_id: list, nr_splits: int = 1
+        df: pd.DataFrame, stimulus_id: list, nr_splits: int = 1
 ) -> pd.DataFrame:
     """
     Splits the triggers of a stimulus dataframe for a given stimulus id or a number of stimulus ids.
@@ -129,14 +129,14 @@ def add_trigger_int(df, stimulus_id, interval, new_logic, new_sublogic):
     new_trigger_all = []
     for idx in range(len(stimulus_id)):
         new_trigger = (
-            np.arange(
-                begin_fr[idx],
-                end_fr[idx]
-                + interval * sampling_freq[idx]
-                - (interval * sampling_freq[idx]),
-                interval * sampling_freq[idx],
-            )
-            - begin_fr[idx]
+                np.arange(
+                    begin_fr[idx],
+                    end_fr[idx]
+                    + interval * sampling_freq[idx]
+                    - (interval * sampling_freq[idx]),
+                    interval * sampling_freq[idx],
+                )
+                - begin_fr[idx]
         ).astype(int)
         new_trigger_all.append(new_trigger)
     new_trigger_array = np.empty(len(new_trigger_all), dtype=object)

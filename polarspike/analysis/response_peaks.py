@@ -9,9 +9,9 @@ from scipy.signal import find_peaks as find_peaks_scipy
 
 
 def find_peaks(
-    spikes_df: pl.DataFrame or pd.DataFrame,
-    mean_trigger: np.ndarray,
-    bin_size: float = 0.05,
+        spikes_df: pl.DataFrame or pd.DataFrame,
+        mean_trigger: np.ndarray,
+        bin_size: float = 0.05,
 ) -> np.ndarray and np.ndarray:
     """
     Find the peaks in the response of a cell to a stimulus. Then align the peaks with the trigger signal.
