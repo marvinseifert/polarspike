@@ -11,10 +11,10 @@ import pandas as pd
 
 
 def spiketrain_qi(
-    spikes: pl.DataFrame,
-    max_window: int = 1,
-    bin_size: float = 0.001,
-    max_repeat: int = 24,
+        spikes: pl.DataFrame,
+        max_window: int = 1,
+        bin_size: float = 0.001,
+        max_repeat: int = 24,
 ) -> pd.DataFrame:
     """
     Calculate the quality index of a spiketrain or multiple spiketrains from multiple cells/ recordings.
@@ -48,6 +48,8 @@ def spiketrain_qi(
     if any("recording" in column for column in spikes.columns):
         if len(spikes["recording"].unique()) > 1:
             spikes_by_recording = spikes.partition_by("recording")
+        else:
+            spikes_by_recording = [spikes]
     else:  # Create a single item list.
         spikes_by_recording = [spikes]
 

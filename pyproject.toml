@@ -17,7 +17,7 @@ plotly = "^5.17.0"
 ipywidgets = "^8.1.1"
 panel = "^1.2.3"
 sympy = "^1.12"
-matplotlib = "^3.8.0"
+matplotlib = "3.10.5"
 pyarrow = "14.0.1"
 holoviews = "^1.17.1"
 ipympl = "^0.9.3"
@@ -45,6 +45,8 @@ sporco = "^0.2.1"
 spyking-circus = "^1.1.0"
 pyqt5 = "^5.15.11"
 imodels = "^2.0.0"
+mpltern = "^1.0.4"
+mpld3 = "^0.5.11"
 
 [build-system]
 requires = ["poetry-core"]

@@ -22,6 +22,7 @@ from polarspike import (
 from polarspike.grid import Table
 import warnings
 from pathlib import Path
+import copy
 
 
 def version_control(obj: "Recording") -> "Recording":
@@ -436,13 +437,16 @@ class Recording:
         -------
 
         """
-        self.views = {}
-        self.parquet_path = self.parquet_path.name
-        self.raw_path = self.raw_path.name
-        self.load_path = ""
+        obj_copy = copy.deepcopy(self)
+
+        # Modify only the copy's attributes
+        obj_copy.views = {}
+        obj_copy.parquet_path = obj_copy.parquet_path.name
+        obj_copy.raw_path = obj_copy.raw_path.name
+        obj_copy.load_path = ""
 
         with open(filename, "wb") as f:
-            pickle.dump(self, f)
+            pickle.dump(obj_copy, f)
 
     def save_save(self):
         """

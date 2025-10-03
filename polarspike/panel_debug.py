@@ -1,7 +1,9 @@
-from polarspike.Rec_UI import Recording_explorer
+from polarspike.Rec_UI import Recording_explorer, Explorer
 import panel as pn
+
+pn.extension('ipywidgets')
 pn.extension(debug=True)
 # %%
-rec_ex = Recording_explorer(r"~/data_disk/combined_analysis")
+rec_ex = Explorer()
 if __name__ == "__main__":
-    pn.serve(rec_ex.serve(), show=True, port=5006)
+    pn.serve(rec_ex.run(), show=True, port=5006)

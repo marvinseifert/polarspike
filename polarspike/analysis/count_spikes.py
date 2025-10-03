@@ -8,10 +8,10 @@ import pandas as pd
 
 
 def sum_spikes(
-    spikes: pl.DataFrame or pd.DataFrame,
-    mean_trigger: np.ndarray,
-    window: float = 0.5,
-    group_by: str = "cell_index",
+        spikes: pl.DataFrame or pd.DataFrame,
+        mean_trigger: np.ndarray,
+        window: float = 0.5,
+        group_by: str | list = "cell_index",
 ) -> np.ndarray and np.ndarray:
     """
     Sum the spikes in a given window for each trigger time.
@@ -36,6 +36,9 @@ def sum_spikes(
         The cell index for each row in the spikes_summed
 
     """
+    if type(group_by) == str:
+        group_by = [group_by]
+    n_indices = len(group_by)
     trig = 0
     spikes_summed = []
     for trig_idx, trigger in enumerate(mean_trigger):
@@ -52,8 +55,8 @@ def sum_spikes(
         trig += trigger
 
     all_trigger_df = pl.concat(spikes_summed, how="align").to_numpy()
-    spikes_summed = all_trigger_df[:, 1:]
+    spikes_summed = all_trigger_df[:, n_indices:].astype(float)
     spikes_summed[np.isnan(spikes_summed)] = 0
-    cell_index = all_trigger_df[:, 0]
+    cell_index = all_trigger_df[:, :n_indices]
 
     return spikes_summed, cell_index

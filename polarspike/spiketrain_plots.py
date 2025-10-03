@@ -57,15 +57,15 @@ def whole_stimulus_plotly(df, stacked=False):
 
 
 def whole_stimulus(
-    df: pl.DataFrame | pd.DataFrame,
-    how: str = "times_triggered",
-    indices: list[str] = None,
-    height: int = 10,
-    width: int = 10,
-    cmap: str | list[str] = "Greys",
-    bin_size: float = 0.05,
-    norm: str = "linear",
-    single_psth: bool = True,
+        df: pl.DataFrame | pd.DataFrame,
+        how: str = "times_triggered",
+        indices: list[str] = None,
+        height: int = 10,
+        width: int = 10,
+        cmap: str | list[str] = "Greys",
+        bin_size: float = 0.05,
+        norm: str = "linear",
+        single_psth: bool = True,
 ) -> tuple[plt.Figure, plt.Axes]:
     """
     Parameters:
@@ -169,11 +169,11 @@ def whole_stimulus(
 
 
 def _calculate_psth(
-    df: pl.DataFrame | pl.DataFrame,
-    bin_size: float,
-    single_psth: bool,
-    indices: list[str],
-    max_time: float,
+        df: pl.DataFrame | pl.DataFrame,
+        bin_size: float,
+        single_psth: bool,
+        indices: list[str],
+        max_time: float,
 ) -> tuple[list[np.ndarray], list[np.ndarray]]:
     """
     Calculate the PSTH (Peri-Stimulus Time Histogram) for the given DataFrame.
@@ -218,10 +218,10 @@ def _calculate_psth(
 
 
 def _plot_psth(
-    psth_list: list[np.ndarray],
-    bins_list: list[np.ndarray],
-    axs: plt.Axes,
-    cmap: str | list[str],
+        psth_list: list[np.ndarray],
+        bins_list: list[np.ndarray],
+        axs: plt.Axes,
+        cmap: str | list[str],
 ) -> None:
     """
     Plot the PSTH (Peri-Stimulus Time Histogram) using the given PSTHs and bins.
@@ -247,12 +247,12 @@ def _plot_psth(
 
 
 def _whole_stimulus_beautified(
-    fig: plt.Figure,
-    axs: plt.Axes,
-    repeated_indices: pd.DataFrame,
-    indices: list[str],
-    how: str,
-    df: pl.DataFrame | pd.DataFrame,
+        fig: plt.Figure,
+        axs: plt.Axes,
+        repeated_indices: pd.DataFrame,
+        indices: list[str],
+        how: str,
+        df: pl.DataFrame | pd.DataFrame,
 ) -> tuple[plt.Figure, plt.Axes]:
     """
     Adjust the appearance of the whole stimulus plot.
@@ -313,17 +313,17 @@ def _whole_stimulus_beautified(
 
 
 def _draw_artist(
-    df: pd.DataFrame,
-    fig: plt.Figure,
-    axs: plt.Axes,
-    how: str,
-    y_key: str,
-    cmap: str,
-    norm: str,
-    plot_height: int,
-    plot_width: int,
-    bin_size: float,
-    ranges: tuple[tuple[float, float], tuple[float, float]],
+        df: pd.DataFrame,
+        fig: plt.Figure,
+        axs: plt.Axes,
+        how: str,
+        y_key: str,
+        cmap: str,
+        norm: str,
+        plot_height: int,
+        plot_width: int,
+        bin_size: float,
+        ranges: tuple[tuple[float, float], tuple[float, float]],
 ) -> None:
     """Draws the artist on the figure and returns the figure and axis.
     Parameters
@@ -372,7 +372,7 @@ def _draw_artist(
 
 
 def _preprocess_input(
-    df: pl.DataFrame | pd.DataFrame, indices: list[str], cmap: str | list[str]
+        df: pl.DataFrame | pd.DataFrame, indices: list[str], cmap: str | list[str]
 ) -> tuple[pd.DataFrame, list[str], list[str]]:
     """
     Preprocess the input DataFrame and colormap.
@@ -404,13 +404,13 @@ def _preprocess_input(
 
 
 def bokeh_psth_plot(
-    df: pl.DataFrame | pd.DataFrame,
-    single_trace: bool,
-    indices: list[str],
-    line_colours: list[str],
-    width: int,
-    height: int,
-    bin_size: float,
+        df: pl.DataFrame | pd.DataFrame,
+        single_trace: bool,
+        indices: list[str],
+        line_colours: list[str],
+        width: int,
+        height: int,
+        bin_size: float,
 ) -> figure:
     """
     Generate a plot of the PSTH trace for the bokeh plotting library.
@@ -450,15 +450,15 @@ def bokeh_psth_plot(
 
 
 def bokeh_kde_plot(
-    df,
-    single_trace,
-    indices,
-    line_colours,
-    width,
-    height,
-    nr_samples,
-    max_time,
-    **kwargs,
+        df,
+        single_trace,
+        indices,
+        line_colours,
+        width,
+        height,
+        nr_samples,
+        max_time,
+        **kwargs,
 ):
     """
     Under construction
@@ -481,15 +481,15 @@ def bokeh_kde_plot(
 
 
 def bokeh_raster_plot(
-    df: pd.DataFrame,
-    y_key: str,
-    line_colours: list[str],
-    width: int,
-    height: int,
-    plot_height: int,
-    category_values: list[str],
-    x_range: tuple[float, float],
-    **kwargs: dict,
+        df: pd.DataFrame,
+        y_key: str,
+        line_colours: list[str],
+        width: int,
+        height: int,
+        plot_height: int,
+        category_values: list[str],
+        x_range: tuple[float, float],
+        **kwargs: dict,
 ) -> figure:
     """
     Generate a raster plot for a bokeh figure.
@@ -548,13 +548,13 @@ def bokeh_raster_plot(
 
 
 def spikes_and_trace(
-    df: pl.DataFrame | pd.DataFrame,
-    indices: list[str],
-    width: int = 1400,
-    height: int = 500,
-    bin_size: float = 0.05,
-    line_colour: str | list[str] = "black",
-    single_psth: bool = True,
+        df: pl.DataFrame | pd.DataFrame,
+        indices: list[str],
+        width: int = 1400,
+        height: int = 500,
+        bin_size: float = 0.05,
+        line_colour: str | list[str] = "black",
+        single_psth: bool = True,
 ) -> gridplot:
     """
     Generate a plot of spikes and psth trace.
@@ -601,18 +601,18 @@ def spikes_and_trace(
 
 
 def first_spikes_plot(
-    spikes: pd.DataFrame or pl.DataFrame,
-    category_name: str,
-    category_values: list,
-    category_colours: list,
-    nr_stim_repeats: int = None,
-    secondary_index: str = "cell_index",
-    max_time: float = None,
-    nr_samples: int = 100,
-    width: int = 1400,
-    height: int = 500,
-    bin_size: float = 0.05,
-    single_trace: bool = False,
+        spikes: pd.DataFrame or pl.DataFrame,
+        category_name: str,
+        category_values: list,
+        category_colours: list,
+        nr_stim_repeats: int = None,
+        secondary_index: str = "cell_index",
+        max_time: float = None,
+        nr_samples: int = 100,
+        width: int = 1400,
+        height: int = 500,
+        bin_size: float = 0.05,
+        single_trace: bool = False,
 ):
     if nr_stim_repeats is None:
         nr_stim_repeats = (spikes["repeat"].max() + 1) // len(category_values)
@@ -660,15 +660,15 @@ def first_spikes_plot(
 
 
 def _bokeh_plotting(
-    df: pd.DataFrame,
-    indices: list[str],
-    width: int = 1400,
-    height: int = 500,
-    s1_func: callable = bokeh_psth_plot,
-    s2_func: callable = bokeh_raster_plot,
-    single_trace: bool = False,
-    line_colour: str | list[str] = "black",
-    **kwargs,
+        df: pd.DataFrame,
+        indices: list[str],
+        width: int = 1400,
+        height: int = 500,
+        s1_func: callable = bokeh_psth_plot,
+        s2_func: callable = bokeh_raster_plot,
+        single_trace: bool = False,
+        line_colour: str | list[str] = "black",
+        **kwargs,
 ) -> gridplot:
     """
     Generate a plot of spikes and psth trace.
@@ -740,11 +740,11 @@ def _bokeh_plotting(
 
 
 def _bokeh_beautified(
-    s1: figure,
-    s2: figure,
-    width: int,
-    indices: list[str],
-    repeated_indices: pd.MultiIndex,
+        s1: figure,
+        s2: figure,
+        width: int,
+        indices: list[str],
+        repeated_indices: pd.MultiIndex,
 ) -> gridplot:
     """
     Beautify the Bokeh plot and arrange the subplots.
@@ -813,7 +813,7 @@ def _bokeh_beautified(
 
 
 def map_index(
-    df: pd.DataFrame, index_columns: list[str]
+        df: pd.DataFrame, index_columns: list[str]
 ) -> tuple[pd.DataFrame, pd.MultiIndex, int]:
     """
     Maps the indices specified by index_columns to a linear range.
