@@ -14,7 +14,7 @@ jupyterlab = "4.0.6"
 notebook = "^7.0.4"
 polars = "==1.31.0"
 plotly = "^5.17.0"
-ipywidgets = "^8.1.1"
+ipywidgets = "8.1.1"
 panel = "^1.2.3"
 sympy = "^1.12"
 matplotlib = "3.10.5"
@@ -43,10 +43,13 @@ pywavelets = "^1.7.0"
 ipyvizzu-story = "0.2.1"
 sporco = "^0.2.1"
 spyking-circus = "^1.1.0"
-pyqt5 = "^5.15.11"
+pyqt5 = "^5.13.11"
 imodels = "^2.0.0"
 mpltern = "^1.0.4"
 mpld3 = "^0.5.11"
+jupyterlab-widgets= "3.0.9"
+pyqt5-qt5 = "5.15.2"
+
 
 [build-system]
 requires = ["poetry-core"]
