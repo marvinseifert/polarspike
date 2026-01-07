@@ -17,6 +17,20 @@ from circus.shared.files import load_data
 from circus.shared import probes
 import os
 import pandas as pd
+import pathlib
+from pathlib import PureWindowsPath
+
+
+# Provide a fake WindowsPath that works on POSIX just for unpickling
+class _FakeWindowsPath(PureWindowsPath):
+    # Simplified: no private _flavour attribute needed
+    pass
+
+
+pathlib.WindowsPath = _FakeWindowsPath  # monkey patch
+
+
+# %%
 
 
 # Super class for all extractors

@@ -16,6 +16,8 @@ import numpy as np
 import scipy.signal as sg
 import polars as pl
 import re
+import dask.array as da
+from datetime import time, timedelta, datetime
 
 
 class Stimulus_Extractor:
@@ -67,49 +69,77 @@ class Stimulus_Extractor:
             )
 
         if format == ".dat":
-            self.channel = pd.DataFrame(
-                np.fromfile(stimulus_file, dtype=np.int16), columns=["Voltage"]
+            # 1. Load raw data into a Polars Series directly
+            # Note: Polars can ingest numpy arrays efficiently
+            # normalize to 0-255 range
+            raw_data = da.from_array(
+                np.memmap(stimulus_file, dtype=np.int16, mode="r"), chunks="256MiB"
             )
-            if second_trigger:
-                voltage = self.channel["Voltage"].values
-                even = voltage[0::2]
-                odd = voltage[1::2]
+            norm = (
+                    (raw_data - raw_data.min()) / (raw_data.max() - raw_data.min()) * 255
+            ).astype(np.uint8)
+            raw_data_normalized = norm.compute()
 
+            if second_trigger:
+                # Efficient slicing on the numpy array before DataFrame creation
+                # This avoids creating a DataFrame just to extract values again
+                even = raw_data_normalized[0::2]
+                odd = raw_data_normalized[1::2]
                 length = min(len(even), len(odd))
+
+                # Element-wise maximum using numpy (very fast)
                 combined = np.maximum(even[:length], odd[:length])
-                self.channel = pd.DataFrame({"Voltage": combined})
+                self.channel = pl.DataFrame({"Voltage": combined})
+            else:
+                self.channel = pl.DataFrame({"Voltage": raw_data_normalized})
 
             self.sampling_frequency = freq
 
-        self.max_Voltage = self.channel.Voltage.max(axis=0)
-        self.min_Voltage = self.channel.Voltage.min(axis=0)
+        # 2. Calculate Stats using Polars Expressions (Optimized)
+        self.max_Voltage = self.channel.select(pl.col("Voltage").max()).item()
+        self.min_Voltage = self.channel.select(pl.col("Voltage").min()).item()
+
         self.half_Voltage = self.min_Voltage + (self.max_Voltage - self.min_Voltage) / 2
-        self.Frames = range(0, len(self.channel.index), 1)
-        self.Time = np.asarray(self.Frames) / self.sampling_frequency
-        self.channel["Frame"] = self.Frames
-        self.channel["Time_s"] = self.Time
-        self.channel.Time_s = pd.to_timedelta(self.channel.Time_s, unit="s")
-        self.channel.set_index("Time_s", inplace=True)
+        self.channel = self.channel.with_columns(
+            pl.when(pl.col("Voltage") > self.half_Voltage)
+            .then(1)  # Set trigger to max
+            .otherwise(0)  # Set background to min
+            .cast(pl.Boolean)
+            .alias("Voltage")
+        )
+        self.channel = self.channel.with_row_index(name="Frame")
+        end_time = len(self.channel) * (1 / self.sampling_frequency)
+        hours, remainder = divmod(end_time, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        # microseconds = (seconds - int(seconds)) * 1_000_000
+        start_datetime = datetime(
+            1970, 1, 1
+        )  # We add a dummy date to create datetime objects, makes downsampling easier
+        end_datetime = start_datetime + timedelta(seconds=end_time)
+        time_series = pl.datetime_range(
+            start=start_datetime,
+            end=end_datetime,
+            interval=timedelta(seconds=1 / self.sampling_frequency),
+            eager=True,
+            closed="right",
+        )
+        # add Time_s column
+        self.channel = self.channel.with_columns(time_series.alias("Time_s"))
 
         self.switch = 0
         self.begins = []
         self.ends = []
         self.stimuli = pd.DataFrame()
 
+        # Note: Polars does not use an "Index" like Pandas.
+        # You keep 'Time_s' as a column and filter by it when needed.
+
     def downsample(self, dsf):
-        dsf = int(self.sampling_frequency / convert_time_string_to_frequency(dsf))
-        channel = self.channel
-        channel = pl.from_pandas(channel)
-        channel = channel.sort("Frame")
-        df = channel.with_columns((channel["Frame"] // dsf).alias("Group_Key"))
-        grouped_df = df.group_by(["Group_Key"], maintain_order=True).agg(
-            pl.col("Voltage").max().alias("Voltage")
+        ds_df = self.channel.group_by_dynamic("Time_s", every=dsf).agg(
+            pl.col("Voltage").max().alias("Voltage"),
+            pl.col("Frame").first().alias("Frame"),
         )
-        grouped_df = grouped_df.with_columns(
-            (pl.col("Group_Key").mul(dsf)).alias("Frame")
-        )
-        channel = grouped_df.to_pandas()
-        print(len(channel))
+        channel = ds_df.to_pandas()
         return channel
 
     def get_stim_range_new(self, begins, ends):
@@ -130,7 +160,7 @@ class Stimulus_Extractor:
         self.stimuli = create_stim_df()
         self.begins = begins
         self.ends = ends
-        channel = self.channel.set_index("Frame")
+        channel = self.channel.to_pandas().set_index("Frame")
         for i in range(len(self.begins)):
             limits_temp = np.array(
                 [
@@ -146,8 +176,10 @@ class Stimulus_Extractor:
                 limits_temp[1] = 0
             limits_int = limits_temp.astype(int)
             channel_cut = channel[limits_int[0]: limits_int[1]]
-            channel_log = channel_cut.Voltage > self.half_Voltage
-            peaks = sg.find_peaks(channel_log, height=1, plateau_size=2)
+            # channel_log = channel_cut.Voltage > self.half_Voltage
+            peaks = sg.find_peaks(
+                channel_cut["Voltage"].to_numpy(), height=1, plateau_size=2
+            )
 
             peaks[0][:] = peaks[0][:] + limits_temp[0]
             peaks_left = peaks[1]["left_edges"] + limits_temp[0]
@@ -195,7 +227,7 @@ class Stimulus_Extractor:
         channel: The cut out trigger channel for one stimulus
         """
         for i in range(0, self.nr_stim_input.value):
-            channel = self.channel.Voltage[limits[i, 0]: limits[i, 1]]
+            channel = self.channel.to_pandas().Voltage[limits[i, 0]: limits[i, 1]]
             return channel
 
     def get_changed_names(self):
