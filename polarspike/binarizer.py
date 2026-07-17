@@ -12,7 +12,7 @@ import scipy.signal as signal
 
 
 def timestamps_to_binary_polars(
-        df_timestamps: pl.DataFrame, sample_rate: int = None, max_window: int = None
+    df_timestamps: pl.DataFrame, sample_rate: int = None, max_window: int = None
 ) -> pl.DataFrame:
     """
     This function converts timestamps to binary signals. It takes a DataFrame with timestamps and converts them to binary
@@ -74,9 +74,13 @@ def timestamps_to_binary_polars(
     # Fill dataframes with single spikes
     if df_result["cell_index"].unique().max() is None:
         df_result = df_result.with_columns(
-            cell_index=pl.lit(df_timestamps["cell_index"])
+            cell_index=pl.lit(df_timestamps["cell_index"][0]).cast(
+                df_timestamps["cell_index"].dtype
+            ),
+            repeat=pl.lit(df_timestamps["repeat"][0]).cast(
+                df_timestamps["repeat"].dtype
+            ),
         )
-        df_result = df_result.with_columns(repeat=pl.lit(df_timestamps["repeat"]))
 
     # If cell didn't spike in a repeat, fill with zeros
 
@@ -84,7 +88,7 @@ def timestamps_to_binary_polars(
 
 
 def fill_missing_repeats(
-        max_repeat: int, nr_bins: int, df_result: pl.DataFrame
+    max_repeat: int, nr_bins: int, df_result: pl.DataFrame
 ) -> pl.DataFrame:
     """
     This function fills missing repeats with zeros. This is necessary to have a consistent DataFrame that is all
@@ -137,7 +141,7 @@ def fill_missing_repeats(
 
 
 def apply_on_group(
-        sample_rate: int, max_window: int, group_df: pl.DataFrame
+    sample_rate: int, max_window: int, group_df: pl.DataFrame
 ) -> pl.DataFrame:
     """
     Apply the timestamps_to_binary_polars function on a group of a DataFrame.
@@ -160,12 +164,14 @@ def apply_on_group(
     """
     try:
         return timestamps_to_binary_polars(group_df, sample_rate, max_window)
-    except Exception as e:  # This is broad, but we want to catch all exceptions
-        print(group_df)
+    except Exception as e:
+        print("Failed on group:", group_df.select("cell_index", "repeat").row(0))
+        print("Error:", repr(e))
+    raise
 
 
 def timestamps_to_binary_multi(
-        df: pl.DataFrame, bin_size: int, max_window: int, max_repeat: int
+    df: pl.DataFrame, bin_size: int, max_window: int, max_repeat: int
 ) -> pl.DataFrame:
     """
     Convert timestamps to binary signals for multiple cells.
@@ -302,7 +308,7 @@ def calc_tradqi(kernel_fits: np.ndarray) -> float:
 
 
 def kernel_template(
-        width: float = 0.0100, sampling_freq: float = 17852.767845719834
+    width: float = 0.0100, sampling_freq: float = 17852.767845719834
 ) -> np.ndarray:
     """
     Create Gaussian kernel by providing the width (FWHM) value. According to wiki, this is approx. 2.355*std of dist.
@@ -327,7 +333,7 @@ def kernel_template(
     gtime = np.arange(-k, k)
 
     # create Gaussian window
-    gauswin = np.exp(-(4 * np.log(2) * gtime ** 2) / fwhm ** 2)
+    gauswin = np.exp(-(4 * np.log(2) * gtime**2) / fwhm**2)
     gauswin = gauswin / np.sum(gauswin)
 
     # initialize filtered signal vector

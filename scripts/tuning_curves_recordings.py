@@ -20,7 +20,7 @@ from polarspike import (
     histograms,
     Opsins,
     colour_template,
-    stimulus_spikes,
+    spike_loader,
     spiketrain_plots,
 )
 from polarspike.analysis import response_peaks, count_spikes
@@ -84,7 +84,7 @@ bin_size = 0.05  # Binsize for findpeaks method
 fff_stimulus = recordings.stimulus_df.query("stimulus_name == @stimulus_name")
 recordings.dataframes["fff_stimulus"] = fff_stimulus
 # %%
-mean_trigger = stimulus_spikes.mean_trigger_times(fff_stimulus, ["all"])
+mean_trigger = spike_loader.mean_trigger_times(fff_stimulus, ["all"])
 
 # %%
 recordings.dataframes[stimulus_name] = recordings.spikes_df.query(
@@ -97,7 +97,6 @@ recordings.dataframes[f"{stimulus_name}_filtered"] = recordings.dataframes[
 spikes = recordings.get_spikes_df(
     cell_df=f"{stimulus_name}_filtered", stimulus_df="fff_stimulus", pandas=False
 )
-
 
 # %%
 # Create a list of possible windows
@@ -116,15 +115,12 @@ for recording in spikes_rec:
     )[0]
     spikes_summed_all.append(spikes_summed)
 
-
 # %%
 spikes_summed = np.concatenate(spikes_summed_all, axis=0)
-
 
 # %%
 # Normalize 0 - 1 along 1st axis
 spikes_summed_norm = spikes_summed / np.max(spikes_summed, axis=1)[:, None]
-
 
 # %% PLot everything on top of each other
 fig, ax = plt.subplots(figsize=(20, 10))
@@ -139,7 +135,7 @@ points = 6
 time = np.asarray(wavelengths)
 # normalize wavelengths 01
 wave_norm = (wavelengths - np.min(wavelengths)) / (
-    np.max(wavelengths) - np.min(wavelengths)
+        np.max(wavelengths) - np.min(wavelengths)
 )
 width = 400
 
@@ -164,7 +160,6 @@ ax.set_xticklabels(wavelengths)
 plt.title("Tuning curves ON")
 fig.show()
 
-
 # %%
 ts_df = pd.DataFrame(spikes_summed_norm[:, 1::2])
 wavelengths = CT.wavelengths[::2]
@@ -172,7 +167,7 @@ points = 6
 time = np.asarray(wavelengths)
 # normalize wavelengths 01
 wave_norm = (wavelengths - np.min(wavelengths)) / (
-    np.max(wavelengths) - np.min(wavelengths)
+        np.max(wavelengths) - np.min(wavelengths)
 )
 width = 400
 
@@ -242,7 +237,6 @@ print(np.max(labels) + 1)
 # %%
 clustering = KMeans(n_clusters=2)
 labels = clustering.fit_predict(spikes_summed_norm[:, ::2])
-
 
 # %% plot the clusters
 fig, axs = plt.subplots(nrows=np.max(labels) + 1, ncols=1, figsize=(5, 10))

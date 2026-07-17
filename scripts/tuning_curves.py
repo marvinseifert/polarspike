@@ -18,7 +18,7 @@ from polarspike import (
     histograms,
     Opsins,
     colour_template,
-    stimulus_spikes,
+    spike_loader,
     spiketrain_plots,
 )
 from polarspike.analysis import response_peaks, count_spikes
@@ -34,39 +34,120 @@ import matplotlib.pyplot as plt
 # recording = Overview.Recording.load(
 #     r"B:\Marvin\chicken_02_13_2024_2nd\Phase_01\overview"
 # )
-window = (
-    0.5  # This is the window size in seconds over which the response will be summed
-)
+window = 1  # This is the window size in seconds over which the response will be summed
 stimulus_id = 0
 use_opsin = True  # If contrast steps = False, if chromatic stimuli = True
-colour_name = "FFF_6_MC"  # Which colour template to use
-animal_name = ["Zebrafish"]
+colour_name = "FFF_8_MC"  # Which colour template to use
+animal_name = ["Chicken"]
 bin_size = 0.05  # Binsize for findpeaks method
 
 # %%
-recordings = Overview.Recording_s.load(r"A:\Marvin\fff_clustering_zf\records")
+recordings = Overview.Recording_s(
+    r"/run/user/1000/gvfs/smb-share:server=mea_nas_25.local,share=root/Marvin/combined_analysis",
+    "fff_analysis",
+)
+recordings.add_from_saved(
+    r"/run/user/1000/gvfs/smb-share:server=mea_nas_25.local,share=root/Marvin/chicken_11_02_2026/Phase_01/overview"
+)
+recordings.add_from_saved(
+    r"/run/user/1000/gvfs/smb-share:server=mea_nas_25.local,share=root/Marvin/chicken_12_02_2026/Phase_00/overview"
+)
+recordings.add_from_saved(
+    r"/run/user/1000/gvfs/smb-share:server=mea_nas_25.local,share=root/Marvin/chicken_13_11_2025/Phase_00/overview"
+)
+recordings.add_from_saved(
+    r"/run/user/1000/gvfs/smb-share:server=mea_nas_25.local,share=root/Marvin/chicken_17_11_2025/Phase_00/overview"
+)
+# recordings.add_from_saved(
+#     r"/run/user/1000/gvfs/smb-share:server=mea_nas_25.local,share=root/Marvin/chicken_18_11_2025/Phase_00/overview"
+# )
+recordings.add_from_saved(
+    r"/run/user/1000/gvfs/smb-share:server=mea_nas_24.local,share=root/Marvin/chicken_01_05_2025/Phase_00/overview"
+)
+recordings.add_from_saved(
+    r"/run/user/1000/gvfs/smb-share:server=mea_nas_24.local,share=root/Marvin/chicken_05_05_2025/Phase_00/overview"
+)
+recordings.add_from_saved(
+    r"/run/user/1000/gvfs/smb-share:server=mea_nas_24.local,share=root/Marvin/chicken_07_05_2025/Phase_00/overview"
+)
+recordings.add_from_saved(
+    r"/run/user/1000/gvfs/smb-share:server=mea_nas_24.local,share=root/Marvin/chicken_14_05_2025/Phase_00/overview"
+)
 
+# %%
+ct = colour_template.Colour_template()
+ct.pick_stimulus("FFF_8_MC")
 # %%
 fff_ids = recordings.stimulus_df.query("stimulus_name == 'fff'").index.to_list()
 # # %%
-mean_trigger = stimulus_spikes.mean_trigger_times(recordings.stimulus_df, fff_ids)
+mean_trigger = spike_loader.mean_trigger_times(recordings.stimulus_df, fff_ids)
 
 # %%
-spikes = recordings.get_spikes_df("fff_filtered", pandas=False)
-
+spikes = recordings.get_spikes_triggered(
+    [{"stimulus_name": ["scf_13nd", "scf(1.3ND)"]}],
+    pandas=False,
+    carry=["stimulus_name", "qi"],
+)
+spikes = spikes.filter(pl.col("qi") >= 0.3)
 
 # %%
-# Create a list of possible windows
-spikes_summed = count_spikes.sum_spikes(
-    spikes, mean_trigger, window=window, group_by="stimulus_index"
-)[0]
-
-spikes_summed = np.mean(spikes_summed, axis=0)
+psth, bins = histograms.psth(spikes)
 # %%
-# Normalize and plotting
-spikes_summed_norm = spikes_summed / np.max(spikes_summed)
-spikes_summed_norm = np.atleast_2d(spikes_summed_norm)
+fig, ax = plt.subplots(nrows=2, gridspec_kw={"height_ratios": [10, 1]}, sharex=True)
+ax[0].plot(bins[:-1], psth)
+fig = ct.add_stimulus_to_plot(fig, [2] * 16)
+fig.show()
+# %%
+spikes_summed, cell_indices = count_spikes.sum_spikes(
+    spikes,
+    mean_trigger,
+    window=window,
+    group_by=["recording", "cell_index", "repeat"],
+)
+# %% transfer to polars dataframe
+summed_df = pl.DataFrame(
+    {
+        "recordings": cell_indices[:, 0].tolist(),
+        "cell_index": cell_indices[:, 1].astype(int),
+        "repeat": cell_indices[:, 2].astype(int),
+        "spikes_summed": spikes_summed,
+    },
+    schema={
+        "recordings": pl.String,
+        "cell_index": pl.UInt32,
+        "repeat": pl.UInt8,
+        "spikes_summed": pl.List,
+    },
+)
+unique_pairs = summed_df.select(["recordings", "cell_index"]).unique()
+all_repeats = pl.DataFrame({"repeat": pl.Series(range(5), dtype=pl.UInt8)})
 
+# Cross join to get all expected combinations
+expected = unique_pairs.join(all_repeats, how="cross")
+
+# Left join back to the actual data, filling missing with zeros
+zero_array = [0.0] * 16
+
+summed_df = (
+    expected.join(summed_df, on=["recordings", "cell_index", "repeat"], how="left")
+    .sort(["recordings", "cell_index", "repeat"])
+    .with_columns(
+        pl.col("spikes_summed").fill_null(
+            pl.lit(zero_array, dtype=pl.Array(pl.Float64, 16))
+        )
+    )
+)
+spikes_per_cell = (
+    spikes.group_by(["recording", "cell_index", "repeat"], maintain_order=True)
+    .agg(pl.col("times_triggered").count().alias("spike_counts"))
+    .group_by(pl.col(["recording", "cell_index"]), maintain_order=True)
+    .agg(pl.col("spike_counts").mean().alias("mean_spike_count"))
+    .with_columns(pl.col("mean_spike_count") / (1 / window * np.sum(mean_trigger)))
+)
+spikes_per_cell = spikes_per_cell.rename({"recording": "recordings"})
+spikes_summed = summed_df.join(spikes_per_cell, on=["recordings", "cell_index"])
+spikes_summed_norm = np.mean(np.stack(spikes_summed["spikes_summed"]), axis=0)
+spikes_summed_norm = (spikes_summed_norm / np.max(spikes_summed_norm))[np.newaxis, :]
 # %% Findpeaks method
 
 all_heights, peak_locations = response_peaks.find_peaks(
@@ -129,11 +210,11 @@ fig.add_trace(
         name="Diagonal",
     )
 )
-fig.update_layout(height=700, width=700)
+fig.update_layout(height=700, width=1400)
 fig.show(renderer="browser")
 # %% plot this with the oil droplet sensitivity curves
-double_ab_df = pd.read_pickle(r"D:\Chicken_24\opsins_double")
-single_ab_df = pd.read_pickle(r"D:\Chicken_24\opsins_oil")
+double_ab_df = pd.read_pickle(r"/mnt/workdrive/Chicken_24/opsins_double")
+single_ab_df = pd.read_pickle(r"/mnt/workdrive/Chicken_24/opsins_oil")
 combined_df = pd.concat([double_ab_df, single_ab_df])
 combined_df = combined_df.sort_values(["cone", "wavelength"])
 combined_df["absorption"] = combined_df["absorption"] * np.e
@@ -160,12 +241,12 @@ combined_df["absorption"] = np.log(combined_df["absorption"])
 # combined_df.loc[combined_df["absorption"] <= np.log(10e-10), "absorption"] = -np.inf
 # renormalize to range 0-1
 combined_df["absorption"] = (
-    combined_df["absorption"] - np.nanmin(combined_df["absorption"])
-) / (np.nanmax(combined_df["absorption"]) - np.nanmin(combined_df["absorption"]))
+                                    combined_df["absorption"] - np.nanmin(combined_df["absorption"])
+                            ) / (np.nanmax(combined_df["absorption"]) - np.nanmin(combined_df["absorption"]))
 
 # %%
 CT = colour_template.Colour_template()
-CT.pick_stimulus("FFF_6_MC")
+CT.pick_stimulus("FFF_8_MC")
 colours = CT.colours[::2]
 cone_colours = [
     colours[0],
@@ -178,9 +259,9 @@ cone_colours = [
 ]
 cone_color_dict = {
     "LWS": colours[0],
-    "MWS": colours[2],
-    "SWS2": colours[4],
-    "SWS1": colours[5],
+    "MWS": colours[3],
+    "SWS2": colours[6],
+    "SWS1": colours[7],
     "principal": "orange",
     "accessory": "darkgoldenrod",
 }

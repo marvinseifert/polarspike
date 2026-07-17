@@ -2,7 +2,7 @@
 from polarspike import (
     Overview,
     stimulus_dfs,
-    stimulus_spikes,
+    spike_loader,
     colour_template,
     spiketrains,
 )
@@ -116,7 +116,7 @@ window_pos = 0.2
 shuffle_window = 5
 bin_width = 0.001
 max_trigger = spikes["trigger"].max()
-mean_trigger_times = stimulus_spikes.mean_trigger_times(recordings.stimulus_df, [1])
+mean_trigger_times = spike_loader.mean_trigger_times(recordings.stimulus_df, [1])
 cum_triggers = np.cumsum(mean_trigger_times)
 # %% Get potential first spikes
 first_spike_potential = []
@@ -145,7 +145,6 @@ for trigger_idx, trigger in enumerate(cum_triggers):
         .list.eval(pl.element().sub(trigger))
         .alias(f"{trigger_idx}_fs")
     )
-
 
 # %%
 columns = [f"{trigger_idx}_fs" for trigger_idx, _ in enumerate(cum_triggers)]

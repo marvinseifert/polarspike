@@ -3,7 +3,7 @@ from polarspike import (
     histograms,
     Opsins,
     colour_template,
-    stimulus_spikes,
+    spike_loader,
 )
 import numpy as np
 import plotly.graph_objects as go
@@ -18,7 +18,7 @@ recording = Overview.Recording.load(
 stimulus_id = 0
 bin_size = 0.05
 # %%
-mean_trigger = stimulus_spikes.mean_trigger_times(recording.stimulus_df, [stimulus_id])
+mean_trigger = spike_loader.mean_trigger_times(recording.stimulus_df, [stimulus_id])
 spikes = recording.get_spikes_triggered([[stimulus_id]], [["all"]], pandas=False)
 
 # %%
@@ -38,11 +38,9 @@ average_nr_bins = int(np.round(average_stim_length / bin_size))
 signal_trace_on = np.zeros(trace.shape[0] * 2)
 signal_trace_on[::average_nr_bins] = 1
 
-
 # %%
 # Cross correlate
 cross_corr_on = np.correlate(trace, signal_trace_on, mode="same")
-
 
 # %%
 fig, ax = plt.subplots(figsize=(20, 10))
@@ -54,18 +52,18 @@ fig.show()
 
 cross_corr_on_off = cross_corr_on_off[
     int(np.floor(len(cross_corr_on_off) / 2))
-    + 1 : int(np.floor(len(cross_corr_on_off) / 2))
-    + average_nr_bins * 2
+    + 1: int(np.floor(len(cross_corr_on_off) / 2))
+         + average_nr_bins * 2
 ]
 cross_corr_on = cross_corr_on[
     int(np.floor(len(cross_corr_on) / 2))
-    + 1 : int(np.floor(len(cross_corr_on) / 2))
-    + average_nr_bins * 2
+    + 1: int(np.floor(len(cross_corr_on) / 2))
+         + average_nr_bins * 2
 ]
 cross_corr_off = cross_corr_off[
     int(np.floor(len(cross_corr_off) / 2))
-    + 1 : int(np.floor(len(cross_corr_off) / 2))
-    + average_nr_bins * 2
+    + 1: int(np.floor(len(cross_corr_off) / 2))
+         + average_nr_bins * 2
 ]
 
 # %%

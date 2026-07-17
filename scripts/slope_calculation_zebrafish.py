@@ -2,7 +2,7 @@
 from polarspike import (
     Overview,
     stimulus_dfs,
-    stimulus_spikes,
+    spike_loader,
     colour_template,
 )
 import numpy as np
@@ -14,7 +14,7 @@ from functools import partial
 
 # %% Functions
 def piece_wise_linear(
-    x: np.ndarray, y: np.ndarray, segment_range: range = None, t: int = 0
+        x: np.ndarray, y: np.ndarray, segment_range: range = None, t: int = 0
 ):
     best_score = np.inf
     best_n_segments = 0
@@ -190,7 +190,7 @@ if __name__ == "__main__":
     shuffle_window = 5
     bin_width = 0.001
     max_trigger = spikes["trigger"].max()
-    mean_trigger_times = stimulus_spikes.mean_trigger_times(recordings.stimulus_df, [0])
+    mean_trigger_times = spike_loader.mean_trigger_times(recordings.stimulus_df, [0])
     cum_triggers = np.hstack([np.array([0]), np.cumsum(mean_trigger_times)])
     # %% Get potential first spikes
     first_spike_potential = []
@@ -225,8 +225,8 @@ if __name__ == "__main__":
     binned_spikes = pl.concat(dfs, how="align")
     binned_spikes = binned_spikes.with_columns(bins=bins.tolist())
     columns = [
-        f"{trigger_idx}_fs_binned" for trigger_idx, _ in enumerate(cum_triggers)
-    ] + ["bins"]
+                  f"{trigger_idx}_fs_binned" for trigger_idx, _ in enumerate(cum_triggers)
+              ] + ["bins"]
     binned_spikes = binned_spikes.explode(columns)
     # %%
 
@@ -258,9 +258,11 @@ if __name__ == "__main__":
         triggers=[trigger_idx for trigger_idx, _ in enumerate(cum_triggers)],
     )
 
+
     def chunk_list(lst, size):
         for i in range(0, len(lst), size):
-            yield lst[i : i + size]
+            yield lst[i: i + size]
+
 
     chunks = list(chunk_list(df_list, n))
     pool = mp.Pool(nr_cpus)

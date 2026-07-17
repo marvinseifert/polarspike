@@ -5,7 +5,7 @@ from polarspike import (
     histograms,
     Opsins,
     colour_template,
-    stimulus_spikes,
+    spike_loader,
     spiketrain_plots,
 )
 from polarspike.analysis import response_peaks, count_spikes
@@ -152,8 +152,8 @@ histogram_oil_complete = (
 histogram_no_oil_complete = (
         histogram_no_oil_complete
         / np.maximum(np.max(np.abs(histogram_no_oil_complete), axis=1), 1e-10)[
-          :, np.newaxis
-          ]
+            :, np.newaxis
+        ]
 )
 
 # %% normalize to 0-1

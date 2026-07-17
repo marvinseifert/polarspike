@@ -1,10 +1,9 @@
 import Overview
-import stimulus_spikes
+import spike_loader
 import binarizer
 import numpy as np
 import spiketrain_plots
 import colour_template
-
 
 recordings = Overview.Recording_s(r"D:\combined_analysis", "chicken")
 recordings.add_recording(

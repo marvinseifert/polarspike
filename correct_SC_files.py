@@ -5,7 +5,9 @@ This script moves files in a experiment directory into the correct subdirectorie
 from pathlib import Path, PurePath
 import shutil
 
-root_dir = Path(r"/home/mawa/nas_a/Marvin/toy_example/Phase_0")
+root_dir = Path(
+    r"/run/user/1000/gvfs/smb-share:server=mea_nas_25.local,share=root/Marvin/chicken_12_02_2026/Phase_00"
+)
 root_name = "alldata"
 
 files_to_me_moved = [

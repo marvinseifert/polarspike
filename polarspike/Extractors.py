@@ -143,7 +143,7 @@ class Extractor:
         df.lazy().sink_parquet(str(self.file.with_suffix(".parquet")))
 
     def load(
-            self, stimulus: bool = True, recording_name: str = None, pandas: bool = True
+        self, stimulus: bool = True, recording_name: str = None, pandas: bool = True
     ) -> pd.DataFrame | pl.DataFrame:
         """
         Load the spikes from the parquet file in lazy mode.
@@ -170,7 +170,7 @@ class Extractor:
                 return df
 
     def construct_df(
-            self, df: pl.DataFrame, recording_name: str = None, pandas: bool = True
+        self, df: pl.DataFrame, recording_name: str = None, pandas: bool = True
     ) -> pd.DataFrame | pl.DataFrame:
         """
         Construct the spikes_df using the information from the stimulus_df and the parquet file (for nr_of_spikes).
@@ -279,6 +279,31 @@ class Extractor_HS2(Extractor):
         return
 
 
+class Extractor_axonsort(Extractor):
+    def __init__(self, file: str, stimulus_df: pd.DataFrame = None):
+        super().__init__(file, stimulus_df)
+
+        df = pl.read_parquet(file)
+        self.spikes["cluster_id"] = df["cluster_ids"].to_numpy().flatten()
+        self.spikes["times"] = df["sample_index"].to_numpy().flatten()
+        self.spikes["nr_of_cells"] = df["cluster_ids"].n_unique()
+
+        self.spikes["cell_indices"] = np.linspace(
+            1, self.spikes["nr_of_cells"], self.spikes["nr_of_cells"], dtype=int
+        )
+        self.spikes["spikes_freq"] = np.array(
+            np.unique(self.spikes["cluster_id"], return_counts=True)
+        )
+        self.spikes["max_spikes"] = np.max(self.spikes["spikes_freq"][1, :])
+        self.spikes["centres"] = np.zeros((self.spikes["nr_of_cells"], 2), dtype=float)
+
+    def get_spikes(self):
+        df = pl.DataFrame(
+            {"cell_index": self.spikes["cluster_id"], "times": self.spikes["times"]}
+        )
+        df.write_parquet(str(self.file.with_suffix(".parquet")))
+
+
 class Extractor_SPC(Extractor):
     """
     Extractor class for Spyking Circus spikesorting results.
@@ -359,7 +384,9 @@ class Extractor_KS(Extractor):
 
     def get_spikes(self):
         working_dir = self.file.parents[0]
-        self.spikes["times"] = np.load(self.file, allow_pickle=True).flatten().astype(np.dtypes.Int64DType)
+        self.spikes["times"] = (
+            np.load(self.file, allow_pickle=True).flatten().astype(np.dtypes.Int64DType)
+        )
         cell_idx = np.load(working_dir / "spike_clusters.npy", allow_pickle=True)
         cell_idx = cell_idx.astype(np.dtypes.Int64DType)
         self.spikes["cell_indices"] = np.unique(cell_idx)
@@ -367,15 +394,19 @@ class Extractor_KS(Extractor):
             np.vstack([cell_idx, self.spikes["times"]]).T,
             schema=["cell_index", "times"],
         )
-        spike_positions = np.load(working_dir / "spike_positions.npy", allow_pickle=True)
+        spike_positions = np.load(
+            working_dir / "spike_positions.npy", allow_pickle=True
+        )
         spike_positions_avg = np.zeros((len(np.unique(cell_idx)), 2), dtype=float)
         for cell in np.unique(cell_idx):
-            spike_positions_avg[cell] = np.mean(spike_positions[cell_idx == cell], axis=0)
+            spike_positions_avg[cell] = np.mean(
+                spike_positions[cell_idx == cell], axis=0
+            )
         self.spikes["centres"] = spike_positions_avg
         df.write_parquet(str(self.file.with_suffix(".parquet")))
 
     def construct_df(
-            self, df: pl.DataFrame, recording_name: str = None, pandas: bool = True
+        self, df: pl.DataFrame, recording_name: str = None, pandas: bool = True
     ) -> pd.DataFrame | pl.DataFrame:
         dfs = []
         for stimulus in range(self.trigger.shape[0]):

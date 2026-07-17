@@ -1,7 +1,7 @@
 from polarspike import (
     Overview,
     colour_template,
-    stimulus_spikes,
+    spike_loader,
     histograms,
     Opsins,
 )
@@ -40,7 +40,7 @@ fff_stimulus = recordings.stimulus_df.query("stimulus_name == @stimulus_name")
 recordings.dataframes["fff_stimulus"] = fff_stimulus
 
 # %%
-mean_trigger = stimulus_spikes.mean_trigger_times(fff_stimulus, ["all"])
+mean_trigger = spike_loader.mean_trigger_times(fff_stimulus, ["all"])
 
 # %%
 spikes_rec = spikes_df.partition_by("recording")
@@ -89,7 +89,6 @@ psths_df = pd.DataFrame(
     np.arange(psths_indices.shape[1]), index=multi_index_2, columns=["psth_index"]
 )
 
-
 # %%
 spikes_summed_all = np.vstack(spikes_summed_all)
 spikes_summed_all_on = np.vstack(spikes_summed_all[:, ::2])
@@ -97,7 +96,7 @@ spikes_summed_all_off = np.vstack(spikes_summed_all[:, 1::2])
 # %% normalize each trace to the maximum
 spikes_summed_all_on = spikes_summed_all_on / spikes_summed_all_on.max(axis=1)[:, None]
 spikes_summed_all_off = (
-    spikes_summed_all_off / spikes_summed_all_off.max(axis=1)[:, None]
+        spikes_summed_all_off / spikes_summed_all_off.max(axis=1)[:, None]
 )
 spikes_summed_all_on[np.isnan(spikes_summed_all_on)] = 0
 spikes_summed_all_off[np.isnan(spikes_summed_all_off)] = 0
@@ -120,9 +119,11 @@ single_ab_df["absorption"] = np.log(single_ab_df["absorption"])
 # normalize the absorption values to 0-1 per cone
 for cone in single_ab_df["cone"].unique():
     single_ab_df.loc[single_ab_df["cone"] == cone, "absorption"] = (
-        single_ab_df.loc[single_ab_df["cone"] == cone, "absorption"]
-        - np.nanmin(single_ab_df["absorption"])
-    ) / (np.nanmax(single_ab_df["absorption"]) - np.nanmin(single_ab_df["absorption"]))
+                                                                           single_ab_df.loc[single_ab_df[
+                                                                                                "cone"] == cone, "absorption"]
+                                                                           - np.nanmin(single_ab_df["absorption"])
+                                                                   ) / (np.nanmax(
+        single_ab_df["absorption"]) - np.nanmin(single_ab_df["absorption"]))
 
 # %% plot sensitivity curves
 fig = px.line(
@@ -160,7 +161,6 @@ for i in range(4):
     ax.plot(wavelengths, X[i, :], c=cone_colours[::-1][i], label=f"cone {i}")
 fig.legend()
 fig.show()
-
 
 # %%
 nr_cells = spikes_summed_all_on.shape[0]
@@ -206,7 +206,6 @@ for cell in range(spikes_summed_all_on.shape[0]):
     results_dict["OFF"]["Linear"]["goodness_of_fit"][cell] = linear.score(
         X.T, spikes_summed_all_off[cell, :]
     )
-
 
 # %%
 fig, ax = plt.subplots(1, 1, figsize=(10, 10))
@@ -295,14 +294,18 @@ fig.show()
 # normalize the absorption values to 0-1 per cone
 for cone in single_ab_df["cone"].unique():
     single_ab_df.loc[single_ab_df["cone"] == cone, "absorption"] = (
-        single_ab_df.loc[single_ab_df["cone"] == cone, "absorption"]
-        - np.nanmin(single_ab_df["absorption"])
-    ) / (np.nanmax(single_ab_df["absorption"]) - np.nanmin(single_ab_df["absorption"]))
+                                                                           single_ab_df.loc[single_ab_df[
+                                                                                                "cone"] == cone, "absorption"]
+                                                                           - np.nanmin(single_ab_df["absorption"])
+                                                                   ) / (np.nanmax(
+        single_ab_df["absorption"]) - np.nanmin(single_ab_df["absorption"]))
 for cone in double_ab_df["cone"].unique():
     double_ab_df.loc[double_ab_df["cone"] == cone, "absorption"] = (
-        double_ab_df.loc[double_ab_df["cone"] == cone, "absorption"]
-        - np.nanmin(double_ab_df["absorption"])
-    ) / (np.nanmax(double_ab_df["absorption"]) - np.nanmin(double_ab_df["absorption"]))
+                                                                           double_ab_df.loc[double_ab_df[
+                                                                                                "cone"] == cone, "absorption"]
+                                                                           - np.nanmin(double_ab_df["absorption"])
+                                                                   ) / (np.nanmax(
+        double_ab_df["absorption"]) - np.nanmin(double_ab_df["absorption"]))
 # %%
 fig = px.line(
     single_ab_df,
@@ -345,7 +348,6 @@ fig, ax = plt.subplots(1, 1, figsize=(10, 10))
 for i in range(6):
     ax.plot(wavelengths, X[i, :], c=cone_colours[i], label=f"cone {i}")
 fig.show()
-
 
 # %%
 nr_cells = spikes_summed_all_on.shape[0]

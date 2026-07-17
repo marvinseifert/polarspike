@@ -1,6 +1,6 @@
 import numpy as np
 from polarspike import Overview, stimulus_dfs, colour_template
-from polarspike import stimulus_spikes
+from polarspike import spike_loader
 from polarspike import spiketrain_plots
 import polars as pl
 import matplotlib.pyplot as plt
@@ -142,7 +142,7 @@ fig.show()
 
 # %%
 # find mean trigger times
-mean_trigger_times = stimulus_spikes.mean_trigger_times(recordings.stimulus_df, [1])
+mean_trigger_times = spike_loader.mean_trigger_times(recordings.stimulus_df, [1])
 cum_triggers = np.cumsum(mean_trigger_times)
 cum_triggers_extended = np.copy(cum_triggers)
 # add another 9 trigger instances

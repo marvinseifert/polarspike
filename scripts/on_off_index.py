@@ -3,7 +3,7 @@ from polarspike import (
     histograms,
     Opsins,
     colour_template,
-    stimulus_spikes,
+    spike_loader,
 )
 from polarspike.analysis import response_peaks, count_spikes
 import numpy as np
@@ -22,8 +22,7 @@ colour_name = "FFF_6_MC"  # Which colour template to use
 animal_name = ["Chicken"]
 bin_size = 0.05  # Binsize for findpeaks method
 
-
-mean_trigger = stimulus_spikes.mean_trigger_times(recording.stimulus_df, [stimulus_id])
+mean_trigger = spike_loader.mean_trigger_times(recording.stimulus_df, [stimulus_id])
 
 spikes = recording.get_spikes_triggered([[stimulus_id]], [["all"]], pandas=False)
 
@@ -31,7 +30,6 @@ spikes = recording.get_spikes_triggered([[stimulus_id]], [["all"]], pandas=False
 spikes_summed, cell_indices = count_spikes.sum_spikes(
     spikes, mean_trigger, window=window, group_by="cell_index"
 )
-
 
 # %%
 # Sum On

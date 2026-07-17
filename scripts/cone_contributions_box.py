@@ -7,7 +7,7 @@ from polarspike import (
     histograms,
     Opsins,
     colour_template,
-    stimulus_spikes,
+    spike_loader,
     spiketrain_plots,
 )
 import numpy as np

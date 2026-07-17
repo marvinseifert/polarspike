@@ -1,26 +1,37 @@
 from polarspike import Overview
 import polars as pl
+import matplotlib.pyplot as plt
+import numpy as np
 
 # %%
-recordings = Overview.Recording_s.load(r"A:\Marvin\fff_clustering_zf\records")
-
-# %%
-stimulus_df = pl.from_pandas(recordings.stimulus_df)
-spikes_df = pl.from_pandas(recordings.spikes_df)
-# %%
-old_stimulus = "csteps420"
-new_stimulus = "csteps413"
-
-stimulus_df = stimulus_df.with_columns(
-    pl.col("stimulus_name").replace(old_stimulus, new_stimulus)
+recording = Overview.Recording.load(
+    r"/mnt/nas_b/Marvin/chicken_29_05_2026/Phase_01/overview"
 )
-spikes_df = spikes_df.with_columns(
-    pl.col("stimulus_name").replace(old_stimulus, new_stimulus)
+
+recording.stimulus_df.loc[0, "trigger_fr_relative"].shape
+
+# %%
+expected = 15 * 60 * 60 * 5 + 1
+missing = expected - recording.stimulus_df.loc[0, "trigger_fr_relative"].shape[0]
+
+# %%
+trigger = np.arange(
+    0,
+    missing * (1 / 15) * recording.sampling_freq,
+    (1 / 15) * recording.sampling_freq,
+    dtype=int,
+) + np.max(recording.stimulus_df.loc[0, "trigger_fr_relative"])
+
+# %%
+np.mean(np.diff(trigger))
+np.mean(np.diff(recording.stimulus_df.loc[0, "trigger_fr_relative"]))
+# %%
+recording.dataframes["stimulus_df"].at[0, "trigger_fr_relative"] = np.concatenate(
+    [recording.stimulus_df.loc[0, "trigger_fr_relative"], trigger]
 )
 # %%
-recordings.dataframes["stimulus_df"] = stimulus_df.to_pandas()
-recordings.dataframes["spikes_df"] = spikes_df.to_pandas()
+recording.dataframes["stimulus_df"].at[
+    0, "trigger_fr_relative"
+] = recording.stimulus_df.loc[0, "trigger_fr_relative"][:-1]
 # %%
-recordings.synchronize_dataframes()
-# %%
-recordings.save_save()
+recording.save_save()

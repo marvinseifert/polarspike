@@ -1,4 +1,4 @@
-from polarspike import Overview, stimulus_spikes, colour_template
+from polarspike import Overview, spike_loader, colour_template
 
 import numpy as np
 import polars as pl
@@ -26,7 +26,7 @@ single_cells_spikes = pl.scan_parquet(r"D:\chicken_analysis\spikes_fffs.parquet"
 # )  # (r"D:\chicken_analysis\spikes_csteps.parquet")
 
 recordings = Overview.Recording_s.load(r"A:\Marvin\fff_clustering\records")
-mean_trigger_times = stimulus_spikes.mean_trigger_times(recordings.stimulus_df, [1])
+mean_trigger_times = spike_loader.mean_trigger_times(recordings.stimulus_df, [1])
 cum_triggers = np.hstack([np.array([0]), np.cumsum(mean_trigger_times)])
 unique_indices = results_df.select("cell_index", "recording").unique().collect()
 recordings = unique_indices["recording"].to_list()
@@ -64,7 +64,7 @@ for trig in unique_trigger_indices:
     expr = None
     for t in triggers_for_index:
         condition = (pl.col("times_relative") > t + window_neg) & (
-            pl.col("times_relative") < t + window_pos
+                pl.col("times_relative") < t + window_pos
         )
         # If the condition is met, subtract the corresponding trigger time t
         if expr is None:
@@ -106,7 +106,7 @@ median_response = median_response.with_columns(
 )
 # median_response.collect()["median_starts"].std()
 median_start = (
-    median_response.select("median_starts").median().collect().item() + window_neg_abs
+        median_response.select("median_starts").median().collect().item() + window_neg_abs
 )
 # Find the break points for each cell. The break is defined as the break point which is closest to the median response
 # start time.
@@ -120,10 +120,10 @@ for trigger_idx, trigger in enumerate(cum_triggers):
         .group_by(["recording", "cell_index"])
         .agg(
             (
-                pl.col(f"breaks_{trigger_idx}").abs()
-                - pl.col(
-                    "median_starts"
-                )  # This finds the closest break point to the median response start time
+                    pl.col(f"breaks_{trigger_idx}").abs()
+                    - pl.col(
+                "median_starts"
+            )  # This finds the closest break point to the median response start time
             )
             .arg_min()
             .alias(f"break_idx_{trigger_idx}"),
@@ -302,14 +302,14 @@ for trigger_idx, trigger in enumerate(cum_triggers):
         .group_by(["recording", "cell_index", "repeat"])
         .agg(
             (
-                (
-                    pl.int_range(1, pl.len(), dtype=pl.UInt32)
-                    * pl.col(f"slope_before{trigger_idx}").slice(0, pl.len() - 1).log()
-                )
-                - (
-                    pl.col(f"slope_before{trigger_idx}").slice(0, pl.len() - 1)
-                    * pl.col(f"{trigger_idx}_cum_sum").slice(0, pl.len() - 1)
-                )
+                    (
+                            pl.int_range(1, pl.len(), dtype=pl.UInt32)
+                            * pl.col(f"slope_before{trigger_idx}").slice(0, pl.len() - 1).log()
+                    )
+                    - (
+                            pl.col(f"slope_before{trigger_idx}").slice(0, pl.len() - 1)
+                            * pl.col(f"{trigger_idx}_cum_sum").slice(0, pl.len() - 1)
+                    )
             ).alias(f"L1_log_{trigger_idx}")
         )
     )
@@ -318,21 +318,21 @@ for trigger_idx, trigger in enumerate(cum_triggers):
         .group_by(["recording", "cell_index", "repeat"])
         .agg(
             (
-                (
-                    (pl.len() - pl.int_range(1, pl.len(), dtype=pl.Int32))
-                    * pl.col(f"slope_after{trigger_idx}").slice(0, pl.len() - 1).log()
-                )
-                - (
-                    pl.col(f"slope_after{trigger_idx}").slice(0, pl.len() - 1)
-                    * (
-                        (
-                            pl.repeat(
-                                pl.col(f"{trigger_idx}_cum_sum").slice(-1), pl.len() - 1
-                            )
-                            - pl.col(f"{trigger_idx}_cum_sum").slice(0, pl.len() - 1)
-                        )
+                    (
+                            (pl.len() - pl.int_range(1, pl.len(), dtype=pl.Int32))
+                            * pl.col(f"slope_after{trigger_idx}").slice(0, pl.len() - 1).log()
                     )
-                )
+                    - (
+                            pl.col(f"slope_after{trigger_idx}").slice(0, pl.len() - 1)
+                            * (
+                                (
+                                        pl.repeat(
+                                            pl.col(f"{trigger_idx}_cum_sum").slice(-1), pl.len() - 1
+                                        )
+                                        - pl.col(f"{trigger_idx}_cum_sum").slice(0, pl.len() - 1)
+                                )
+                            )
+                    )
             ).alias(f"L2_log_{trigger_idx}")
         )
     )
@@ -419,17 +419,17 @@ for trigger_idx, trigger in enumerate(cum_triggers):
         .group_by(["recording", "cell_index", "repeat"])
         .agg(
             (
-                (
                     (
-                        (
-                            pl.col(f"{trigger_idx}_fs").slice(1, pl.len() - 2)
-                            - median_start
-                        )
-                        / prior_std
+                            (
+                                    (
+                                            pl.col(f"{trigger_idx}_fs").slice(1, pl.len() - 2)
+                                            - median_start
+                                    )
+                                    / prior_std
+                            )
+                            ** 2
                     )
-                    ** 2
-                )
-                * -0.5
+                    * -0.5
             )
             .exp()
             .alias(f"prior_{trigger_idx}")
@@ -473,8 +473,8 @@ for trigger_idx, trigger in enumerate(cum_triggers):
     updated_results = updated_results.with_columns(
         pl.when(
             (
-                pl.col(f"{trigger_idx}_fs").list.get(1, null_on_oob=True)
-                < window_neg_abs
+                    pl.col(f"{trigger_idx}_fs").list.get(1, null_on_oob=True)
+                    < window_neg_abs
             ).fill_null(False)
         )
         .then(True)
@@ -503,10 +503,10 @@ for trigger_idx, trigger in enumerate(cum_triggers):
     )
     updated_results = updated_results.with_columns(
         (
-            pl.col(f"{trigger_idx}_fs").list.get(
-                pl.col(f"first_spike_idx_{trigger_idx}") + 1
-            )
-            - window_neg_abs  # Subtract the window_neg_abs to get the time centered at 0
+                pl.col(f"{trigger_idx}_fs").list.get(
+                    pl.col(f"first_spike_idx_{trigger_idx}") + 1
+                )
+                - window_neg_abs  # Subtract the window_neg_abs to get the time centered at 0
         ).alias(f"first_spike_{trigger_idx}")
     )
     updated_results = updated_results.with_columns(

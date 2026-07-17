@@ -18,65 +18,164 @@ def normalize_0_1(data):
 def moving_average(a, n=3):
     ret = np.cumsum(a, dtype=float)
     ret[n:] = ret[n:] - ret[:-n]
-    return ret[n - 1 :] / n
+    return ret[n - 1:] / n
 
 
 # %%
-recordings = Overview.Recording_s.load(r"A:\Marvin\fff_clustering\records")
+recordings = Overview.Recording.load(
+    r"/run/user/1000/gvfs/smb-share:server=mea_nas_25.local,share=root/Laura/zebrafish_05_11_2025/Phase_01/overview"
+)
 recordings.dataframes["chirps"] = recordings.spikes_df.query(
     "stimulus_name == 'chirp'"
-    "| stimulus_name == 'chirp413'|stimulus_name == 'chirp460'|stimulus_name == 'chirp535'|stimulus_name == 'chirp610'"
+    "| stimulus_name == 'chirp_413'|stimulus_name == 'chirp_460'| stimulus_name == 'chirp_500'| stimulus_name == 'chirp_530'|stimulus_name == 'chirp_560'"
+    "| stimulus_name == 'chirp_610'| stimulus_name == 'chirp_660'"
 ).copy()
 
 # %% import labels
-# labels_df = pd.read_csv(r"A:\Marvin\fff_clustering\labels.csv")
-labels_df = pd.read_pickle(r"A:\Marvin\fff_clustering\coeff_label_df")
-# labels_df = labels_df.set_index(["recording", "cell_index"])
+# # labels_df = pd.read_csv(r"A:\Marvin\fff_clustering\labels.csv")
+# labels_df = pd.read_pickle(r"A:\Marvin\fff_clustering\coeff_label_df")
+# # labels_df = labels_df.set_index(["recording", "cell_index"])
+#
+# recordings.dataframes["chirps"]["labels"] = -1
+#
+# recordings.dataframes["chirps"] = recordings.dataframes["chirps"].set_index(
+#     ["recording", "cell_index"]
+# )
+# recordings.dataframes["chirps"].update(labels_df)
+#
+# recordings.dataframes["chirps"] = recordings.dataframes["chirps"].reset_index()
 
-recordings.dataframes["chirps"]["labels"] = -1
+spikes = recordings.get_spikes_df("chirps", carry=["stimulus_name"])
 
-recordings.dataframes["chirps"] = recordings.dataframes["chirps"].set_index(
-    ["recording", "cell_index"]
+
+# %% OLD CHIRP (WRONG PHASE)
+# # Define chirp
+# start_freq = 1  # Start frequency in Hz
+# end_freq = 30  # End frequency in Hz
+# duration = 30  # Duration in seconds
+# refresh_rate = 300  # Refresh rate in Hz
+# num_cycles = duration * refresh_rate
+#
+# chirp_real = []
+# time = []
+# freq = []
+# for i in range(num_cycles):
+#     t = i / refresh_rate
+#     f = np.power(end_freq / start_freq, t / duration) * start_freq
+#     # Intended instantaneous frequency (exponential chirp)
+#     k = np.log(end_freq / start_freq) / duration
+#     f_intended = start_freq * np.exp(k * t)
+#
+#     # Actual instantaneous frequency due to incorrect phase
+#     f_actual = f_intended * (1 + k * t)
+#     value = np.sin(2 * np.pi * f * t)
+#     chirp_real.append(int((value + 1) * 4095 / 2))
+#     time.append(t)
+#     freq.append(f_actual)
+#
+# chirp_real = np.asarray(chirp_real)
+#
+# chirp_real = normalize_0_1(chirp_real)
+# chirp_complete = np.zeros(35 * 300 - 1)
+# chirp_complete[300 * 3: 3300 * 3] = chirp_real
+# c_freqs = np.zeros_like(chirp_complete)
+# c_freqs[300 * 3: 3300 * 3] = np.asarray(freq)
+# time = np.arange(0, 35 - 1 / 300, 1 / 300)
+
+
+# %% NEW CHIRP (CORRECT PHASE)
+def generate_chirp_data(start_freq, end_freq, duration, refresh_rate, max_power=4095):
+    """
+    Translates the C++ freq_chirp_template logic into Python.
+    Returns time, brightness values, and instantaneous frequency arrays.
+    """
+    # 1. Setup constants (matching C++ logic)
+    num_cycles = int(duration * refresh_rate)
+
+    # Calculate beta (growth rate)
+    # C++: log(end / start) / duration
+    beta = np.log(end_freq / start_freq) / duration
+
+    # 2. Generate Time Array
+    # C++: i / refresh_rate
+    t = np.linspace(0, duration, num_cycles, endpoint=False)
+
+    # 3. Calculate Exponential Term for all t
+    # C++: exp_bt = exp(beta * t)
+    exp_bt = np.exp(beta * t)
+
+    # 4. Calculate Frequency at time t
+    # C++: freq = start_freq * exp_bt
+    freqs = start_freq * exp_bt
+
+    # 5. Calculate Correct Instantaneous Phase
+    # C++: phase = 2 * PI * (start / beta) * (exp_bt - 1)
+    phase = 2 * np.pi * (start_freq / beta) * (exp_bt - 1)
+
+    # 6. Calculate Sine Value
+    # C++: value = sin(phase)
+    raw_sine = np.sin(phase)
+
+    # 7. Scale to LED Brightness (0 to max_power)
+    # C++: (value + 1.0f) * max_power / 2.0f
+    chirp_signal = (raw_sine + 1.0) * max_power / 2.0
+    chirp_signal = chirp_signal.astype(int)
+
+    return t, chirp_signal, freqs
+
+
+# --- Configuration (Matching your snippets) ---
+start_freq = 1  # Hz
+end_freq = 30  # Hz
+duration = 30  # Seconds
+refresh_rate = 300  # Hz
+
+# --- Generate Data ---
+time, chirp_real, freq_actual = generate_chirp_data(
+    start_freq, end_freq, duration, refresh_rate
 )
-recordings.dataframes["chirps"].update(labels_df)
 
-recordings.dataframes["chirps"] = recordings.dataframes["chirps"].reset_index()
+# --- Output Formatting (Matching your second snippet) ---
+# Your snippet padded the data into a larger array.
+# Replicating that structure here:
 
-spikes = recordings.get_spikes_df("chirps", carry=["stimulus_name", "labels"])
-# %%
-# Define chirp
-start_freq = 1  # Start frequency in Hz
-end_freq = 30  # End frequency in Hz
-duration = 30  # Duration in seconds
-refresh_rate = 300  # Refresh rate in Hz
-num_cycles = duration * refresh_rate
+total_length_sec = 35
+total_samples = int(total_length_sec * refresh_rate) - 1  # Based on your snippet length
 
-chirp_real = []
-time = []
-freq = []
-for i in range(num_cycles):
-    t = i / refresh_rate
-    f = np.power(end_freq / start_freq, t / duration) * start_freq
-    # Intended instantaneous frequency (exponential chirp)
-    k = np.log(end_freq / start_freq) / duration
-    f_intended = start_freq * np.exp(k * t)
+# Create the full container arrays filled with zeros
+chirp_complete = np.zeros(total_samples)
+c_freqs = np.zeros(total_samples)
+full_time_axis = np.arange(0, total_length_sec - 1 / refresh_rate, 1 / refresh_rate)
 
-    # Actual instantaneous frequency due to incorrect phase
-    f_actual = f_intended * (1 + k * t)
-    value = np.sin(2 * np.pi * f * t)
-    chirp_real.append(int((value + 1) * 4095 / 2))
-    time.append(t)
-    freq.append(f_actual)
+# Define offset (Your snippet used 3 seconds padding: 300 * 3)
+offset = 300 * 3
+end_idx = offset + len(chirp_real)
 
-chirp_real = np.asarray(chirp_real)
+# Insert the generated chirp into the complete arrays
+# Ensure we don't overflow if the calculated lengths differ slightly due to rounding
+limit = min(len(chirp_complete), end_idx)
+insert_len = limit - offset
 
-chirp_real = normalize_0_1(chirp_real)
-chirp_complete = np.zeros(35 * 300 - 1)
-chirp_complete[300 * 3 : 3300 * 3] = chirp_real
-c_freqs = np.zeros_like(chirp_complete)
-c_freqs[300 * 3 : 3300 * 3] = np.asarray(freq)
-time = np.arange(0, 35 - 1 / 300, 1 / 300)
+if insert_len > 0:
+    chirp_complete[offset:limit] = chirp_real[:insert_len]
+    c_freqs[offset:limit] = freq_actual[:insert_len]
 
+# --- Verification Plot (Optional) ---
+#
+plt.figure(figsize=(10, 6))
+plt.subplot(2, 1, 1)
+plt.plot(full_time_axis, chirp_complete)
+plt.title("LED Brightness (Chirp Signal)")
+plt.ylabel("PWM Value")
+
+plt.subplot(2, 1, 2)
+plt.plot(full_time_axis, c_freqs, color="orange")
+plt.title("Instantaneous Frequency (Hz)")
+plt.xlabel("Time (s)")
+plt.ylabel("Frequency (Hz)")
+plt.grid(True)
+plt.tight_layout()
+plt.show()
 # %%
 from scipy.signal import hilbert, chirp
 
@@ -88,26 +187,23 @@ envelope_intended = np.abs(transform_intended)
 envelope = np.abs(transform)
 # %%
 fig = make_subplots(rows=4, cols=1, shared_xaxes=True)
-fig.add_scatter(x=time, y=chirp_complete, row=1, col=1)
-fig.add_scatter(x=time, y=envelope, row=2, col=1)
-fig.add_scatter(x=time_intended, y=intended_chirp, row=3, col=1)
-fig.add_scatter(x=time_intended, y=envelope_intended, row=4, col=1)
+fig.add_scatter(x=time, y=chirp_complete, row=1, col=1, name="chirp actual")
+fig.add_scatter(x=time, y=envelope, row=2, col=1, name="hilbert actual")
+# fig.add_scatter(x=time_intended, y=intended_chirp, row=3, col=1)
+# fig.add_scatter(x=time_intended, y=envelope_intended, row=4, col=1)
 fig.show(renderer="browser")
 # %% Example cell
-idx = 5
-cell_spikes = spikes.query(
-    f"recording == 'chicken_19_07_2024_p0' & cell_index == 454 & stimulus_name == 'chirp'"
-)
+cell_spikes = spikes.query(f"cell_index == 21 & stimulus_name == 'chirp'")
 # %% PSTH
 psth, bins, repeat = histograms.psth_by_index(
     cell_spikes, index=["repeat"], bin_size=0.01 / 3, window_end=35, return_idx=True
 )
 
 # %%
-psth_hilbert = np.abs(hilbert(psth[3]))
+psth_hilbert = np.abs(hilbert(psth))
 fig = make_subplots(rows=4, cols=1, shared_xaxes=True)
-fig.add_scatter(x=bins[:-1], y=psth[3], row=1, col=1)
-fig.add_scatter(x=bins[:-1], y=psth_hilbert, row=2, col=1)
+fig.add_scatter(x=bins[:-1], y=psth[0], row=1, col=1)
+fig.add_scatter(x=bins[:-1], y=psth_hilbert[0], row=2, col=1)
 fig.add_scatter(x=time, y=chirp_complete, row=3, col=1)
 fig.add_scatter(x=time, y=envelope, row=4, col=1)
 fig.show(renderer="browser")
@@ -172,7 +268,7 @@ axs.set_title("Continuous Wavelet Transform (Scaleogram)")
 # axs[1].plot(bins[:-1], psth[0])
 # fig.colorbar(pcm, ax=axs[0])
 # change y ticks to show frequency in Hz
-log_ticks = [0.1, 1, 30, 100]
+log_ticks = [0.1, 1, 10, 30, 100]
 axs.yaxis.set_major_locator(FixedLocator(log_ticks))
 
 # Set the labels to match the log ticks
@@ -180,11 +276,12 @@ axs.set_yticklabels(log_ticks)
 # plot red horizontal line at 1, 10 and 100 Hz
 # for freq in log_ticks:
 #     axs[0].axhline(freq, color="red", linestyle="--", linewidth=0.5)
-axs.plot(time, c_freqs, c="k")
+axs.plot(time, freq_actual, c="k")
 # axs.plot(bins[:-1], c_freqs_positions, c="r")
 fig.show()
 
 # %%
+max_power[c_freqs[:-1] == 0] = 0
 fig, axs = plt.subplots(1, 1, figsize=(20, 10), sharex=True)
 pcm = axs.pcolormesh(bins[:-1], np.arange(300), cwtmatr)
 axs.scatter(bins[:-2], max_positions, c="r", s=10)
@@ -203,19 +300,22 @@ fig.show()
 fig, ax = plt.subplots(1, 1, figsize=(20, 10))
 ax.plot(bins[:-2], np.abs(max_power))
 fig.show()
+
 # %% plot spectrogram
 # find location where signal is 5% of max on the right side of the power trace
+
 power_max = np.max(np.abs(max_power))
 power_max_position = np.argmax(np.abs(max_power))
 power_max_frequency = c_freqs[power_max_position]
 threshold = power_max * 0.10
-threshold_position = np.where(np.abs(max_power) > threshold)[0][-1]
+threshold_position = np.where(np.abs(filtered_signal) > threshold)[0][-1]
 threshold_power = np.sum(np.abs(max_power)[threshold_position:])
 power_ratio = (
-    np.sum(np.abs(max_power)[:threshold_position]) / threshold_power
-) / np.sum(np.abs(max_power))
+                      np.sum(np.abs(max_power)[:threshold_position]) / threshold_power
+              ) / np.sum(np.abs(max_power))
 
 print(f"max frequency: {power_max_frequency}, power_ratio: {power_ratio}")
+print(f"frequency threshold at {c_freqs[threshold_position]} Hz")
 # %% find peaks
 peaks = peak_local_max(cwtmatr, min_distance=4, threshold_rel=0.4)
 # plot result using matplotlib's pcolormesh (image with annoted axes)

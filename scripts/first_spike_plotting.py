@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from polarspike import (
     Overview,
-    stimulus_spikes,
+    spike_loader,
     colour_template,
     histograms,
 )
@@ -27,10 +27,10 @@ prior_std = 0.01
 
 # %%
 def first_spike_stats(
-    lazy_df: pl.DataFrame,
-    cum_triggers: np.ndarray,
-    op_first=pl.median,
-    op_posterior=pl.mean,
+        lazy_df: pl.DataFrame,
+        cum_triggers: np.ndarray,
+        op_first=pl.median,
+        op_posterior=pl.mean,
 ) -> pl.DataFrame:
     """
     Aggregates the dataframe using the provided operations for first_spike and first_spike_posterior.
@@ -111,10 +111,10 @@ fff_repeats = len(fff_df.select("repeat").unique().collect())
 contrast_repeats = len(contrast_df.select("repeat").unique().collect())
 recordings = Overview.Recording_s.load(r"A:\Marvin\fff_clustering\records")
 # %% Contrast triggers
-mean_trigger_times = stimulus_spikes.mean_trigger_times(recordings.stimulus_df, [12])
+mean_trigger_times = spike_loader.mean_trigger_times(recordings.stimulus_df, [12])
 contrast_cum_triggers = np.hstack([np.array([0]), np.cumsum(mean_trigger_times)])
 # %% FFF triggers
-mean_trigger_times = stimulus_spikes.mean_trigger_times(recordings.stimulus_df, [1])
+mean_trigger_times = spike_loader.mean_trigger_times(recordings.stimulus_df, [1])
 fff_cum_triggers = np.hstack([np.array([0]), np.cumsum(mean_trigger_times)])
 # %% Get first spike statistics for contrast
 contrast_hist = first_spike_stats(contrast_df, contrast_cum_triggers)
@@ -140,8 +140,8 @@ contrast_median_prior = contrast_df.select("median_starts").median().collect().i
 contrast_std_prior = (
     contrast_df.select(
         (
-            pl.col("median_starts").quantile(0.75)
-            - pl.col("median_starts").quantile(0.25)
+                pl.col("median_starts").quantile(0.75)
+                - pl.col("median_starts").quantile(0.25)
         )
         / 1.349
     )
@@ -153,8 +153,8 @@ fff_median_prior = fff_df.select("median_starts").median().collect().item()
 fff_std_prior = (
     fff_df.select(
         (
-            pl.col("median_starts").quantile(0.75)
-            - pl.col("median_starts").quantile(0.25)
+                pl.col("median_starts").quantile(0.75)
+                - pl.col("median_starts").quantile(0.25)
         )
         / 1.349
     )
@@ -394,7 +394,8 @@ for trigger_idx, _ in enumerate(contrast_cum_triggers[:-1]):
                 coloraxis="coloraxis",  # Use coloraxis for a single colorbar
             ),
             text=combined_contrast.to_pandas().apply(
-                lambda row: f"Recording: {row['recording']}, Cell Index: {row['cell_index']}, posterior: {row[f'av_posterior_{trigger_idx}']}",
+                lambda
+                    row: f"Recording: {row['recording']}, Cell Index: {row['cell_index']}, posterior: {row[f'av_posterior_{trigger_idx}']}",
                 axis=1,
             ),
             hoverinfo="text",
@@ -453,7 +454,8 @@ for trigger_idx, _ in enumerate(fff_cum_triggers[:-1]):
                 coloraxis="coloraxis",  # Use coloraxis for a single colorbar
             ),
             text=combined_fff.to_pandas().apply(
-                lambda row: f"Recording: {row['recording']}, Cell Index: {row['cell_index']}, posterior: {row[f'av_posterior_{trigger_idx}']}",
+                lambda
+                    row: f"Recording: {row['recording']}, Cell Index: {row['cell_index']}, posterior: {row[f'av_posterior_{trigger_idx}']}",
                 axis=1,
             ),
             hoverinfo="text",

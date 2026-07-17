@@ -1,7 +1,7 @@
 from polarspike import (
     Overview,
     stimulus_dfs,
-    stimulus_spikes,
+    spike_loader,
     colour_template,
     bayesian,
 )
@@ -47,7 +47,7 @@ recordings.dataframes["csteps_stim"]["stimulus_repeat_logic"] = 20
 recordings.dataframes["csteps_stim"]["stimulus_repeat_sublogic"] = 1
 
 # %%
-mean_trigger_times = stimulus_spikes.mean_trigger_times(recordings.stimulus_df, [12])
+mean_trigger_times = spike_loader.mean_trigger_times(recordings.stimulus_df, [12])
 cum_triggers = np.hstack([np.array([0]), np.cumsum(mean_trigger_times)])
 
 
@@ -333,7 +333,7 @@ for test_trigger in range(20):
         cum_triggers[test_trigger] + response_starts[test_trigger][0], c="blue"
     )
     if slopes_before[test_trigger] > 0 and not np.all(
-        example_times > [cum_triggers[test_trigger]]
+            example_times > [cum_triggers[test_trigger]]
     ):
         cred_axes[row, col].axvline(credibility_borders[0], c="green")
         cred_axes[row, col].axvline(credibility_borders[1], c="green")
@@ -344,7 +344,7 @@ for test_trigger in range(20):
         ]
     )
     on_off_times[row, col] = (
-        candidate_times[np.argmax(posterior)] - cum_triggers[test_trigger]
+            candidate_times[np.argmax(posterior)] - cum_triggers[test_trigger]
     )
     if col == 1:
         row += 1
@@ -414,11 +414,11 @@ breaks = (
     .flatten()
 )
 rates = (
-    single_cell_results.select(f"slopes_{test_trigger}")[f"slopes_{test_trigger}"]
-    .list.to_array(1)
-    .to_numpy()
-    .flatten()
-    * 1000
+        single_cell_results.select(f"slopes_{test_trigger}")[f"slopes_{test_trigger}"]
+        .list.to_array(1)
+        .to_numpy()
+        .flatten()
+        * 1000
 )
 rates[rates < 0] = 0
 segments = [(breaks[i], breaks[i + 1], rates[i]) for i in range(len(breaks) - 1)]

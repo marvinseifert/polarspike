@@ -5,13 +5,14 @@ This script provides functions to count the spikes elicited by a stimulus. Sever
 import numpy as np
 import polars as pl
 import pandas as pd
+from polarspike import histograms
 
 
 def sum_spikes(
-        spikes: pl.DataFrame or pd.DataFrame,
-        mean_trigger: np.ndarray,
-        window: float = 0.5,
-        group_by: str | list = "cell_index",
+    spikes: pl.DataFrame or pd.DataFrame,
+    mean_trigger: np.ndarray,
+    window: float = 0.5,
+    group_by: str | list = "cell_index",
 ) -> np.ndarray and np.ndarray:
     """
     Sum the spikes in a given window for each trigger time.

@@ -15,7 +15,7 @@ import ipywidgets as widgets
 from polarspike import spiketrain_plots
 from pathlib import Path
 from polarspike import colour_template
-from polarspike import stimulus_spikes
+from polarspike import spike_loader
 from polarspike import binarizer, quality_tests
 from polarspike import Opsins
 from polarspike import tuning_curves
@@ -206,7 +206,13 @@ class Explorer:
 
         # Create dummy spiketrain for initial display
         self.dummy_spiketrain = pd.DataFrame(
-            columns=["cell_index", "times_triggered", "trigger", "repeat", "stimulus_index"],
+            columns=[
+                "cell_index",
+                "times_triggered",
+                "trigger",
+                "repeat",
+                "stimulus_index",
+            ],
             data=np.zeros((1, 5), dtype=int),
         )
 
@@ -222,10 +228,17 @@ class Explorer:
 
         # Configure stimulus dataframe
         uneditable_columns = [
-            "cell_index", "stimulus_index", "stimulus_name",
-            "nr_of_spikes", "centres_x", "centres_y", "recording",
+            "cell_index",
+            "stimulus_index",
+            "stimulus_name",
+            "nr_of_spikes",
+            "centres_x",
+            "centres_y",
+            "recording",
         ]
-        editors = {col: {"type": "editable", "value": False} for col in uneditable_columns}
+        editors = {
+            col: {"type": "editable", "value": False} for col in uneditable_columns
+        }
 
         # Create tabulator for single stimulus data
         self.single_stimulus_df = pn.widgets.Tabulator(
@@ -244,8 +257,7 @@ class Explorer:
         """Set up color selection components."""
         # Color selector dropdown
         self.colour_selector = pn.widgets.Select(
-            name="Select colour set",
-            options=["None"] + self.ct.list_stimuli().tolist()
+            name="Select colour set", options=["None"] + self.ct.list_stimuli().tolist()
         )
         self.colour_selector.param.watch(self.on_colour_change, "value")
 
@@ -299,10 +311,19 @@ class Explorer:
             (
                 "Spikes",
                 pn.Tabs(
-                    ("Spike Counts", pn.Column(self.spikes_fig, sizing_mode="stretch_width")),
+                    (
+                        "Spike Counts",
+                        pn.Column(self.spikes_fig, sizing_mode="stretch_width"),
+                    ),
                     ("ISI_time", pn.Column(self.isi_fig, sizing_mode="stretch_width")),
-                    ("ISI_cluster", pn.Column(self.isi_clus_fig, sizing_mode="stretch_width")),
-                    ("Raster", pn.Column(self.spike_trains, sizing_mode="stretch_width")),
+                    (
+                        "ISI_cluster",
+                        pn.Column(self.isi_clus_fig, sizing_mode="stretch_width"),
+                    ),
+                    (
+                        "Raster",
+                        pn.Column(self.spike_trains, sizing_mode="stretch_width"),
+                    ),
                     sizing_mode="stretch_width",
                 ),
             ),
@@ -310,9 +331,15 @@ class Explorer:
             (
                 "Stimuli",
                 pn.Row(
-                    pn.Column(self.stimulus_select, self.colour_selector, self.selected_color),
                     pn.Column(
-                        pn.Row(self.single_stimulus_df, self.calculate_qi_button, width=1000),
+                        self.stimulus_select, self.colour_selector, self.selected_color
+                    ),
+                    pn.Column(
+                        pn.Row(
+                            self.single_stimulus_df,
+                            self.calculate_qi_button,
+                            width=1000,
+                        ),
                         pn.Row(self.single_cell_raster, width=800),
                         width=800,
                     ),
@@ -381,7 +408,9 @@ class Explorer:
     def update_spiketrain_plot(self):
         if self.stimulus_df.value.empty:
             return
-        recording_overview.add_stimulus_df_bokeh(self.spike_trains[0].object, self.stimulus_df.value)
+        recording_overview.add_stimulus_df_bokeh(
+            self.spike_trains[0].object, self.stimulus_df.value
+        )
 
     def stimulus_spikes(self, event):
         doc = pn.state.curdoc
@@ -409,7 +438,9 @@ class Explorer:
 
     def load_stimulus(self, second_trigger=False):
         self.stimulus = stimulus_trace.Stimulus_Extractor(
-            self.stimulus_file, self.frequency_input.value, second_trigger=second_trigger
+            self.stimulus_file,
+            self.frequency_input.value,
+            second_trigger=second_trigger,
         )
         channel = self.stimulus.downsample("500ms")
 
@@ -454,6 +485,18 @@ class Explorer:
             self.mea_type = "3Brain"
             self.recording = Extractors.Extractor_HS2(self.sorting_file)
             self.frequency_input.value = float(self.recording.spikes["sampling"])
+
+        elif file_format == ".parquet":
+            self.recording = Extractors.Extractor_axonsort(self.recording_file)
+            self.mea_type = "MCS"
+            try:
+                self.frequency_input.value = float(
+                    np.loadtxt(
+                        Path(self.recording_file).parent / "bininfo.txt", dtype=object
+                    )[1]
+                )
+            except FileNotFoundError:
+                print("No bininfo.txt file found. Using user input frequency.")
 
         self.recording.get_spikes()
         self.plot_spike_counts()
@@ -544,7 +587,7 @@ class Explorer:
             # Add stimulus:
             raster_plot = self.ct.add_stimulus_to_plot(
                 raster_plot,
-                stimulus_spikes.mean_trigger_times(
+                spike_loader.mean_trigger_times(
                     self.overview_df.stimulus_df, [self.stimulus_select.value]
                 ),
             )
@@ -610,7 +653,7 @@ class Explorer:
                         spikes_df_subset,
                         0.001,
                         np.sum(
-                            stimulus_spikes.mean_trigger_times(
+                            spike_loader.mean_trigger_times(
                                 self.overview_df.stimulus_df,
                                 [self.stimulus_select.value],
                             )
@@ -1249,7 +1292,7 @@ class Recording_explorer:
                     cell_df="cell_selection", pandas=False
                 )
                 # Get max time and nr_repeats
-                mean_trigger_times = stimulus_spikes.mean_trigger_times(
+                mean_trigger_times = spike_loader.mean_trigger_times(
                     self.recordings_object.recordings[recording].stimulus_df,
                     self.recordings_object.dataframes["cell_selection"]
                     .stimulus_index.unique()
@@ -1360,7 +1403,7 @@ class Recording_explorer:
             self.output.clear()  #
 
             if self.colour_checkbox.value:
-                flash_duration = stimulus_spikes.mean_trigger_times(
+                flash_duration = spike_loader.mean_trigger_times(
                     self.recordings_object.dataframes["stimulus_df"], stimulus_indices
                 )
                 try:
@@ -1387,7 +1430,7 @@ class Recording_explorer:
             )
             fig = self.ct.add_stimulus_to_plot(
                 fig,
-                stimulus_spikes.mean_trigger_times(
+                spike_loader.mean_trigger_times(
                     self.recordings_object.dataframes["stimulus_df"], stimulus_indices
                 ),
             )
@@ -1401,7 +1444,7 @@ class Recording_explorer:
 
             if len(spikes) == 0:
                 return
-            flash_duration = stimulus_spikes.mean_trigger_times(
+            flash_duration = spike_loader.mean_trigger_times(
                 self.recordings_object.dataframes["stimulus_df"], stimulus_indices
             )
             fig = func(
