@@ -1,0 +1,28 @@
+[project]
+name = "polarspike-core"
+version = "0.1.0"
+description = "Loading and querying MEA spike recordings — the polarspike core, without plotting or GUI."
+readme = "README.md"
+requires-python = ">=3.10,<3.12"
+authors = [{ name = "Marvin Seifert", email = "m.seifert@gmx.de" }]
+# Versions mirror the validated polarspike environment. numpy is capped below 2.0
+# because pyarrow 14.0.1 is built against the numpy 1.x C ABI and fails to import
+# under numpy 2.x.
+dependencies = [
+    "numpy>=1.24,<2.0",
+    "pandas>=2.1.4,<3.0",
+    "polars>=1.31.0,<2.0",
+    "pyarrow>=14.0.1,<15.0",
+    "h5py>=3.9.0,<4.0",
+    "scipy>=1.10,<2.0",
+]
+
+[project.optional-dependencies]
+interactive = ["panel>=1.2.3", "jupyterlab>=4.0.6", "ipywidgets>=8.1.1"]
+
+[tool.poetry]
+packages = [{ include = "polarspike" }]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

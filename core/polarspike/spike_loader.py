@@ -213,6 +213,7 @@ def get_spikes(
     waveforms: bool,
     pandas: bool,
     carry: list[str],
+    derandomize: bool = True,
 ) -> pd.DataFrame | pl.DataFrame:
     """Load triggered spikes for many recordings and optionally carry columns.
 
@@ -226,12 +227,15 @@ def get_spikes(
         waveforms (bool): If True also load the "waveforms" list column.
         pandas (bool): Return a pandas frame if True, else a polars frame.
         carry (list[str]): Extra columns to copy from original_df, or empty.
+        derandomize (bool): If True, label the trigger column with the condition
+            shown (using a stimulus's trigger_order when present); if False,
+            keep the physical position within the repeat.
 
     Output:
         pd.DataFrame | pl.DataFrame: Triggered spikes, sorted, with the carried
         columns joined on when carry is given.
     """
-    df = load_triggered_lazy(files_dict, filter_dict, time, waveforms)
+    df = load_triggered_lazy(files_dict, filter_dict, time, waveforms, derandomize)
     if df.height == 0:
         return df.to_pandas() if pandas else df
 
@@ -283,6 +287,7 @@ def load_triggered_lazy(
     filter_dict: dict,
     time: str = "seconds",
     waveforms: bool = False,
+    derandomize: bool = True,
 ) -> pl.DataFrame:
     """Load spikes for all recordings and align them to triggers and repeats.
 
@@ -292,29 +297,40 @@ def load_triggered_lazy(
             end, cell_indices, trigger, stim_repeat_logic, sampling_freq).
         time (str): "seconds" to convert frame counts, else frames are kept.
         waveforms (bool): If True also load the "waveforms" list column.
+        derandomize (bool): If True, use a stimulus's trigger_order (when
+            present) so the trigger label is the condition shown; if False, keep
+            the physical position within the repeat.
 
     Output:
         pl.DataFrame: Spikes with recording, stimulus_index, times_relative,
         trigger, repeat and times_triggered columns.
     """
-    derive_trigger_arrays(filter_dict)
+    derive_trigger_arrays(filter_dict, derandomize)
     spikes_by_rec = filter_spikes(files_dict, filter_dict, waveforms)
     return align_to_triggers(spikes_by_rec, filter_dict, time)
 
 
-def derive_trigger_arrays(filter_dict: dict) -> None:
+def derive_trigger_arrays(filter_dict: dict, derandomize: bool = True) -> None:
     """Add the trigger arrays the alignment step needs to filter_dict.
 
     Input:
         filter_dict (dict): recording -> stimulus -> filter parameters; each
-            entry must hold trigger and stim_repeat_logic. Modified in place.
+            entry must hold trigger and stim_repeat_logic, and may hold
+            trigger_order (a per-interval condition id for randomized stimuli).
+            Modified in place.
+        derandomize (bool): If True and a stimulus carries a trigger_order, the
+            trigger label is set to the condition shown in each interval; if
+            False (or no order is present), the physical position within the
+            repeat is used instead.
 
     Output:
-        None. Adds rel_trigger and trigger_sub to every stimulus entry.
+        None. Adds rel_trigger (the trigger label) and trigger_sub (repeat-onset
+        offsets, always physical) to every stimulus entry.
 
     Raises:
         ValueError: if a trigger array length is incompatible with its
-            stimulus_repeat_logic (len(trigger) - 1 must be a multiple of it).
+            stimulus_repeat_logic (len(trigger) - 1 must be a multiple of it),
+            or a trigger_order length does not equal len(trigger) - 1.
     """
     for rec, filters in filter_dict.items():
         for stim_id, filt in filters.items():
@@ -327,9 +343,40 @@ def derive_trigger_arrays(filter_dict: dict) -> None:
                     f"stimulus_repeat_logic {logic}; (len - 1) must be a "
                     f"multiple of the logic."
                 )
-            rel_trigger = map_triggers(np.arange(trigger.shape[0]), logic)
-            filt["rel_trigger"] = rel_trigger
-            filt["trigger_sub"] = sub_trigger(trigger, rel_trigger, logic)
+            physical = map_triggers(np.arange(trigger.shape[0]), logic)
+            filt["trigger_sub"] = sub_trigger(trigger, physical, logic)
+            order = trigger_order(filt)
+            if derandomize and order is not None:
+                if order.shape[0] != trigger.shape[0] - 1:
+                    raise ValueError(
+                        f"recording {rec} stimulus {stim_id}: trigger_order of "
+                        f"length {order.shape[0]} does not match the "
+                        f"{trigger.shape[0] - 1} trigger intervals."
+                    )
+                filt["rel_trigger"] = order
+            else:
+                filt["rel_trigger"] = physical
+
+
+def trigger_order(filt: dict) -> np.ndarray | None:
+    """Extract a stimulus's per-interval condition order, if it has one.
+
+    Input:
+        filt (dict): One stimulus's filter parameters, possibly holding a
+            trigger_order value (as pulled from stimulus_df, i.e. a length-1
+            array wrapping the per-interval condition ids, or None/NaN).
+
+    Output:
+        np.ndarray | None: The 1-D condition-id array (one entry per trigger
+        interval) for a randomized stimulus, or None for a linear one.
+    """
+    raw = filt.get("trigger_order")
+    if raw is None or len(raw) == 0:
+        return None
+    order = raw[0]
+    if order is None or np.ndim(order) < 1:
+        return None
+    return np.asarray(order)
 
 
 def filter_spikes(

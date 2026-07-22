@@ -19,7 +19,6 @@ from polarspike import (
     spike_loader,
     stimulus_dfs,
 )
-from polarspike.grid import Table
 import warnings
 from pathlib import Path
 import copy
@@ -125,6 +124,7 @@ class Recording:
             cell_df: str = "spikes_df",
             stimulus_df: str = "stimulus_df",
             carry: list[str] = None,
+            derandomize: bool = True,
     ) -> pd.DataFrame | pl.DataFrame:
         # get the filtered spikes_df
         input_df = spike_loader.filter_dataframe_complex(
@@ -157,6 +157,7 @@ class Recording:
             waveforms,
             pandas,
             carry,
+            derandomize,
         )
 
     def _check_spikes_df(
@@ -294,62 +295,46 @@ class Recording:
             level: str = False,
             condition: str = False,
             viewname: str = None,
-    ) -> Table:
-        """Main function to interactively view the dataframes.
+    ):
+        """View one of the dataframes, interactively if Panel is installed.
 
-        Parameters
-        ----------
-        name : str
-            Name of the dataframe that should be shown. Can be "spikes_df" or "stimulus_df" or any dataframe that was
-            added manually during the analysis.
-        level : str
-            Shows a specific column or index named after the string in level.
-        condition : str
-            Shows a specific subset of the dataframe, for which the condition is true.
-            Can only be true if level is true
-        viewname : str
-            Name of the view that is created. If not specified, the name of the dataframe is used.
+        Input:
+            name (str): Name of the dataframe to show. "spikes_df", "stimulus_df",
+                or any dataframe added manually during the analysis.
+            level (str): Column or index level to restrict the view to.
+            condition (str): Value that `level` must equal. Only used if `level` is set.
+            viewname (str): Key the view is stored under in `self.views`.
+                Defaults to `name`.
 
-        Returns
-        -------
-        view
-            Qgrid class of a Dataframe view.
-
+        Output:
+            A Panel Tabulator widget when `polarspike[interactive]` is installed,
+            otherwise the selected pandas.DataFrame itself.
         """
-        # Version control:
-
         if name == "stimulus":
             name = "stimulus_df"
         if name == "spikes":
             name = "spikes_df"
 
+        df = self.dataframes[name]
         if level and not condition:
             try:
-                view = Table(self.dataframes[name][level])
+                df = df[level]
             except KeyError:
-                view = Table(self.dataframes[name].index.show_level_values(level))
-
+                df = df.index.show_level_values(level)
         elif level:
             try:
-                view = Table(
-                    self.dataframes[name][self.dataframes[name][level] == condition]
-                ).show()
+                df = df[df[level] == condition]
             except KeyError:
-                view = Table(
-                    self.dataframes[name][
-                        self.dataframes[name].index.show_level_values(level)
-                        == condition
-                        ]
-                )
-        else:
-            view = Table(self.dataframes[name])
+                df = df[df.index.show_level_values(level) == condition]
 
-        # Overwrite the view if it already exists:
-        self.views[viewname] = None
         if not viewname:
             viewname = name
-        self.views[viewname] = view
-        # Keeping track of which cells the user might select:
+        try:
+            from polarspike.grid import Table
+        except ImportError:
+            self.views[viewname] = df
+            return df
+        self.views[viewname] = Table(df)
         return self.views[viewname].show()
 
     def filtered_df(self, df_name: str) -> pd.DataFrame:
@@ -361,7 +346,8 @@ class Recording:
         df_name : str
             Name of the dataframe that shall be returned.
         """
-        return self.views[df_name].tabulator.value
+        view = self.views[df_name]
+        return view if isinstance(view, pd.DataFrame) else view.tabulator.value
 
     def find_stim_indices(
             self,
@@ -569,9 +555,14 @@ class Recording:
         original_df[filter_name] = filter_values[1]
 
         if not all_stimuli:
-            df_temp = self.views[view_name].tabulator.value.set_index(
-                ["recording", "cell_index"]
-            )
+            view = self.views[view_name]
+            if isinstance(view, pd.DataFrame):
+                raise RuntimeError(
+                    f"View '{view_name}' is not interactive, so it carries no cell "
+                    "selection to filter on. Interactive tables need Panel: "
+                    "pip install polarspike[interactive]"
+                )
+            df_temp = view.tabulator.value.set_index(["recording", "cell_index"])
             df_temp[filter_name] = filter_values[0]
 
         else:

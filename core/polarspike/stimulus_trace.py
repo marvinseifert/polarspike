@@ -9,13 +9,13 @@ file formate.
 """
 import pandas
 
-from polarspike import backbone
 import h5py
 import pandas as pd
 import numpy as np
 import scipy.signal as sg
 import polars as pl
 import re
+from pathlib import Path
 
 
 class Stimulus_Extractor:
@@ -51,7 +51,12 @@ class Stimulus_Extractor:
 
         # Check if file is .brw or .mat
         self.recording_folder = stimulus_file[: stimulus_file.rfind("/") + 1]
-        format = backbone.get_file_ending(stimulus_file)
+        format = Path(stimulus_file).suffix
+        if format not in (".brw", ".h5", ".dat"):
+            raise ValueError(
+                f"Cannot read stimulus trace from '{stimulus_file}': unsupported "
+                f"file type '{format or 'no extension'}'. Expected a .brw or .dat file."
+            )
         if format == ".brw":
             with h5py.File(stimulus_file, "r") as f:
                 self.channel = pd.DataFrame(
@@ -389,6 +394,14 @@ def create_filter_dict(
             sampling_freq = stimulus_df.query(
                 "stimulus_index == @unique_stimulus & recording == @rec"
             )["sampling_freq"].values[0]
+            # Randomized stimuli carry the per-interval condition order; linear
+            # stimuli have no such column, so fall back to None.
+            if "trigger_order" in stimulus_df.columns:
+                trigger_order = stimulus_df.query(
+                    "stimulus_index == @unique_stimulus & recording == @rec"
+                )["trigger_order"].values
+            else:
+                trigger_order = None
             # Create the dict
             for array in trigger:
                 array = array.astype(int)
@@ -397,6 +410,7 @@ def create_filter_dict(
                 start=start_frame,
                 end=end_frame,
                 trigger=trigger,
+                trigger_order=trigger_order,
                 sampling_freq=sampling_freq,
                 stim_repeat_logic=stim_repeat_logic,
                 cell_indices=input_split[(rec),]
