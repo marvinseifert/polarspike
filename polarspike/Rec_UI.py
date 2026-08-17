@@ -425,7 +425,7 @@ class Explorer:
         dataframes["spikes_df"]["filter"] = True
 
         self.overview_df = Overview.Recording(
-            Path(self.recording.file.with_suffix(".parquet")),
+            Path(self.recording.file_parquet),
             Path(self.recording_file),
             dataframes,
             self.frequency_input.value,
@@ -506,7 +506,7 @@ class Explorer:
 
     def plot_spike_counts(self):
         p = recording_overview.spike_counts_from_file(
-            str(self.recording.file.with_suffix(".parquet")), "viridis"
+            str(self.recording.file_parquet), "viridis"
         )
 
         self.spikes_fig.clear()
@@ -514,7 +514,7 @@ class Explorer:
 
     def plot_isi(self, x, widget):
         p = recording_overview.isi_from_file(
-            str(self.recording.file.with_suffix(".parquet")),
+            str(self.recording.file_parquet),
             self.frequency_input.value,
             x=x,
             cmap="viridis",
@@ -525,7 +525,7 @@ class Explorer:
 
     def plot_spike_trains(self):
         p = recording_overview.spiketrains_from_file(
-            str(self.recording.file.with_suffix(".parquet")),
+            str(self.recording.file_parquet),
             self.frequency_input.value,
             cmap="Greys",
         )

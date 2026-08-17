@@ -20,6 +20,7 @@ combined_df["absorption"] = combined_df["absorption"] * np.e
 combined_df.loc[combined_df["absorption"] < 0] = 0
 combined_df = combined_df.set_index("wavelength")
 subset_df = combined_df.loc[wavelengths]
+subset_df
 # %%
 subset_df.to_pickle(r"/home/mawa/PycharmProjects/linear_nonlinear_model/test_predictor")
 # %% Or get animal specific opsins
@@ -35,6 +36,12 @@ combined_df = pd.DataFrame(
         "cone": cone_names,
     }
 )
+# %%
+import plotly.express as px
+
+# %%
+fig = px.scatter(combined_df, x="wavelength", y="absorption")
+fig.show(renderer="browser")
 # %% log transform the absorption
 combined_df = combined_df.sort_values(["cone", "wavelength"])
 combined_df["absorption"] = combined_df["absorption"] * np.e
@@ -50,6 +57,4 @@ combined_df.loc[combined_df["absorption"] < 0] = 0
 combined_df = combined_df.set_index("wavelength")
 subset_df = combined_df.loc[wavelengths]
 # %%
-subset_df.to_pickle(
-    r"/home/mawa/PycharmProjects/linear_nonlinear_model/train_predictor"
-)
+subset_df.to_pickle(r"/home/mawa/PycharmProjects/linear_nonlinear_model/test_predictor")

@@ -22,7 +22,7 @@ from mpl_toolkits.axes_grid1.axes_divider import HBoxDivider, VBoxDivider
 import mpl_toolkits.axes_grid1.axes_size as Size
 import matplotlib.gridspec as gridspec
 from matplotlib.colorbar import Colorbar
-import polarspike
+from pathlib import Path
 import bokeh
 from bokeh.plotting import figure, show
 from bokeh.models import BoxAnnotation, Label
@@ -50,13 +50,20 @@ class Colour_template:
         ----------
         df_file : str, optional
             The path to the DataFrame containing the colours for the stimuli. The default is None,
-            which refers to: polarspike.__path__[0] + "/stim_colour_df".
+            which refers to the "stim_colour_df" file shipped next to this module.
         """
         if df_file is None:
-            df_file = polarspike.__path__[0] + "/stim_colour_df"
+            df_file = Path(__file__).parent / "stim_colour_df"
         self.df_file = df_file
 
-        self.plot_colour_dataframe = pd.read_pickle(df_file)
+        try:
+            self.plot_colour_dataframe = pd.read_pickle(df_file)
+        except FileNotFoundError:
+            raise FileNotFoundError(
+                f"Could not find the stimulus colour table at '{df_file}'. It ships "
+                "with polarspike, so a missing file means the installation is "
+                "incomplete; reinstall polarspike or pass df_file explicitly."
+            ) from None
 
         self.stimulus_select = widgets.RadioButtons(
             options=list(self.plot_colour_dataframe.index),

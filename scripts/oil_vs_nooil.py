@@ -114,7 +114,10 @@ unique_labels = (
     .agg(pl.col("labels").first().alias("labels"))["labels"]
     .value_counts()
 )
-
+# %%
+label_idx, nr_labels = np.unique(
+    combined_df.group_by(["recording", "cell_index"]).agg(pl.col("labels").first().alias("labels"))[
+        "labels"].to_numpy(), return_counts=True)
 # %%
 psths = np.load(r"/media/mawa/fast_data/swa_embedding_all_fff/psths.npy")
 psths = np.mean(psths, axis=1)
