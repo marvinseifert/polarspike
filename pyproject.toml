@@ -49,6 +49,9 @@ mpltern = "^1.0.4"
 mpld3 = "^0.5.11"
 jupyterlab-widgets= "3.0.9"
 pyqt5-qt5 = "5.15.2"
+imageio = {extras = ["ffmpeg"], version = "^2.37.2"}
+tdqm = "^0.0.1"
+numpydantic = "^1.7.0"
 
 
 [build-system]
