@@ -747,6 +747,37 @@ class Recording_s(Recording):
         self.nr_stimuli = self.nr_stimuli - recording.nr_stimuli
 
     @classmethod
+    def load(cls, filename: str | pathlib.Path) -> "Recording_s":
+        """Load a saved Recording_s and resolve the file paths of every contained recording.
+
+        Input:
+            filename (str | pathlib.Path): Path to the pickled Recording_s object.
+
+        Output:
+            Recording_s: The loaded object. Its own parquet_path/raw_path are placeholders
+            (a collection has no files); each recording points to its absolute parquet
+            file, with raw_path placed next to it.
+
+        Raises:
+            FileNotFoundError: If the parquet file of a contained recording does not exist.
+        """
+        with open(filename, "rb") as f:
+            obj = version_control(pickle.load(f))
+        obj.load_path = Path(filename)
+        for name, rec in obj.recordings.items():
+            rec = version_control(rec)
+            # Relative paths are anchored like in Recording.load; absolute ones win the join.
+            rec.parquet_path = Path(rec.load_path).parent / rec.parquet_path
+            rec.raw_path = rec.parquet_path.parent / rec.raw_path
+            if not rec.parquet_path.exists():
+                raise FileNotFoundError(
+                    f"Spike file of recording '{name}' not found at {rec.parquet_path}. "
+                    f"Check that the drive is mounted and the file was not moved."
+                )
+            obj.recordings[name] = rec
+        return obj
+
+    @classmethod
     def load_from_single(cls, analysis_path, analysis_name, recording_path):
         """
         Loads a single recording and creates a Recording_s object.
