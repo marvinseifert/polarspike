@@ -238,6 +238,30 @@ def selectivity(responses, directions):
     return float(dsi),float(osi)
 
 
+def bar_reference_time(local, v, base, p):
+    """Time within one bar direction that is moved to peak_target_s.
+
+    'peak'  : the single highest point (original method). In ON-OFF cells the OFF
+              peak (~0.9 s after ON) is the bigger one in 35-56 % of responses, so
+              cells were aligned on ON or OFF at random and cluster averages showed
+              three peaks (2.5 - 0.9, 2.5, 2.5 + 0.9 s).
+    'first' : the first clear peak, i.e. roughly when the bar's leading edge reaches
+              the cell. A peak is clear if its prominence is at least
+              bar_align_fraction * (highest point - baseline). ON-OFF cells then
+              always have ON at peak_target_s and OFF after it. On the 8 example
+              recordings (same clusters) this halved three-peak cluster averages
+              (14 -> 7 of 128) and gave consistent ON-OFF pairs (2-peak 47 -> 82).
+    """
+    method=p.get('bar_align_method','peak')
+    if method=='peak':
+        return local[np.argmax(v)]
+    if method=='first':
+        from scipy.signal import find_peaks
+        peaks,_=find_peaks(v,prominence=p.get('bar_align_fraction',.4)*(v.max()-base))
+        return local[peaks[0]] if len(peaks) else local[np.argmax(v)]
+    raise ValueError(f"Unknown bar_align_method {method!r}: use 'first' or 'peak'")
+
+
 def align_curve(values, grid, p):
     out=values.copy(); duration=p['direction_duration_s']
     for d in range(p['directions']):
@@ -245,8 +269,8 @@ def align_curve(values, grid, p):
         if d==p['directions']-1: mask[-1]=True
         local=grid[mask]-d*duration; v=values[mask]
         if len(v)<2 or not np.isfinite(v).all() or np.ptp(v)<1e-12: continue
-        shift=p['peak_target_s']-local[np.argmax(v)]
         base=np.percentile(v,p['baseline_percentile'])
+        shift=p['peak_target_s']-bar_reference_time(local,v,base,p)
         out[mask]=np.interp(local-shift,local,v,left=base,right=base)
     return out
 
@@ -566,7 +590,7 @@ def format_response(ax,role,p,plotting):
     else:
         duration=p['direction_duration_s']
         ax.set_xticks((np.arange(p['directions'])+.5)*duration,p['direction_names'],rotation=45,ha='right')
-        ax.set_xlabel('Bar direction (peaks centred)' if p['bar_peak_align'] else 'Bar direction')
+        ax.set_xlabel(('Bar direction (first peak at 2.5 s)' if p.get('bar_align_method','peak')=='first' else 'Bar direction (peaks centred)') if p['bar_peak_align'] else 'Bar direction')
         for b in np.arange(1,p['directions'])*duration: ax.axvline(b,color='.85',lw=.5)
     ax.set_xlim(0,p['durations'][role])
 

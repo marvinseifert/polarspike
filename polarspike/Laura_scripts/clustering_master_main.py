@@ -66,6 +66,11 @@ PROCESSING = dict(
     direction_names=['up','down','right','left','up-right','down-right','up-left','down-left'],
     selectivity_bin_s=0.10,  # Change to .05 for 50 ms; previous latest setting was 100 ms.
     bar_peak_align=True, peak_target_s=2.5, baseline_percentile=20.,
+    # How each bar direction is shifted to peak_target_s: 'first' = first clear peak
+    # (bar leading edge; ON-OFF pairs stay in order), 'peak' = highest point (original;
+    # gives three peaks in cluster averages). bar_align_fraction: a peak is 'clear' if it
+    # rises at least this fraction of the highest point above baseline (0.3-0.5 all work).
+    bar_align_method='first', bar_align_fraction=0.4,
     # STA is resampled only within measured support. Missing cells are never filled.
     sta_time_range_s=[-0.5,0.0], sta_samples=51,
     sta_time_unit_if_absent='ms',  # Explicit assumption; source coordinate units take priority.

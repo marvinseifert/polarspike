@@ -60,7 +60,7 @@ warnings.filterwarnings('ignore')
 # =============================================================================
 # SETTINGS  (everything here can also be set on the command line)
 # =============================================================================
-CACHE_DIR = Path(r"C:\Users\laura\PycharmProjects\polarspike\polarspike\Laura_scripts\master_clustering_cache")
+CACHE_DIR = Path(__file__).resolve().parent / "master_clustering_cache"
 
 # Which clustering to show: a file name, a bare key, a full path, or 'latest'.
 FIT = 'latest'

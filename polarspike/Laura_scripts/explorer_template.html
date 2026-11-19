@@ -270,7 +270,7 @@ body{padding:1.25rem clamp(.75rem,3vw,2.5rem) 3rem}
     <div class="lx-card" data-stim="scf"><h3>Full-field flashes</h3><p class="lx-sub">Colour bands mark the eight flash colours</p><div id="cl-heat-scf" class="lx-box" data-source="traces_scf cells stim_axes"></div><div id="cl-trace-scf" class="lx-box" data-source="cluster_means stim_axes"></div><p class="lx-sub" id="cl-note-scf"></p></div>
     <div class="lx-card" data-stim="csteps"><h3>Contrast steps</h3><p class="lx-sub">Lighter bands are the steps; darker bands are the dark intervals (OFF)</p><div id="cl-heat-csteps" class="lx-box" data-source="traces_csteps cells stim_axes"></div><div id="cl-trace-csteps" class="lx-box" data-source="cluster_means stim_axes"></div><p class="lx-sub" id="cl-note-csteps"></p></div>
     <div class="lx-card" data-stim="chirp"><h3>Chirp</h3><p class="lx-sub">Flicker frequency rises along the time axis</p><div id="cl-heat-chirp" class="lx-box" data-source="traces_chirp cells stim_axes"></div><div id="cl-trace-chirp" class="lx-box" data-source="cluster_means stim_axes"></div><p class="lx-sub" id="cl-note-chirp"></p></div>
-    <div class="lx-card" data-stim="moving_bar"><h3>Moving bar</h3><p class="lx-sub">Eight directions, each aligned so its peak sits mid-window</p><div id="cl-heat-moving_bar" class="lx-box" data-source="traces_bar cells stim_axes"></div><div id="cl-trace-moving_bar" class="lx-box" data-source="cluster_means stim_axes"></div><p class="lx-sub" id="cl-note-moving_bar"></p></div>
+    <div class="lx-card" data-stim="moving_bar"><h3>Moving bar</h3><p class="lx-sub">Eight directions, each shifted so the first clear peak sits mid-window</p><div id="cl-heat-moving_bar" class="lx-box" data-source="traces_bar cells stim_axes"></div><div id="cl-trace-moving_bar" class="lx-box" data-source="cluster_means stim_axes"></div><p class="lx-sub" id="cl-note-moving_bar"></p></div>
   </div>
   <div class="lx-grid2">
     <div class="lx-card" data-needs="sta"><h3>Receptive field time course</h3><p class="lx-sub" id="cl-sta-sub"></p><div id="cl-sta" class="lx-box" data-source="cell_sta cluster_sta cells stim_axes"></div></div>
@@ -1271,7 +1271,7 @@ window.__EXPLORER__ = "__EXPLORER_DATA__";
     const all = reps.map((t) => smoothRate(t, dur, n)); const mean = new Float32Array(n);
     all.forEach((a) => { for (let i = 0; i < n; i++) mean[i] += a[i] / all.length; });
     const layers = all.map((a, i) => ({ y: a, color: muted(), width: 1, opacity: 0.85, label: 'Repeat ' + (i + 1) }));
-    layers.push({ y: mean, color: accent(), width: 2, label: stim === 'moving_bar' ? 'Mean of repeats (not peak-aligned)' : 'Mean of repeats' });
+    layers.push({ y: mean, color: accent(), width: 2, label: stim === 'moving_bar' ? 'Mean of repeats (not shifted)' : 'Mean of repeats' });
     drawTrace(box, stim, layers, { h: 190 });
   }
 
