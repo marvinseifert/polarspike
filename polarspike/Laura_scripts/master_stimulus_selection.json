@@ -6,7 +6,8 @@
     "rf": "Noise stimulus used for the receptive field: stimulus index, channel name inside noise_data_v2.nc, and the file (relative to the phase folder). null = no RF data.",
     "region": "Where on the retina the recording was made (e.g. 'dorsal', 'ventral'). Fill in later; can be changed without re-extracting spikes.",
     "notes": "Free text, copied into the master file.",
-    "regions_table": "Retinal region of every recording ('<date>/<phase>'), given by Laura 2026-11-19. Used for 'region' when a recording entry has none."
+    "regions_table": "Retinal region of every recording ('<date>/<phase>'), given by Laura 2026-11-19. Used for 'region' when a recording entry has none.",
+    "excluded": "Recordings that must not be extracted, with the reason (Laura, 2026-11-19)."
   },
   "nas_root": "/mnt/mea_nas/Laura",
   "expected_bar_repeats": 10,
@@ -30,6 +31,15 @@
     "14_08_2026/Phase_00": "central",
     "15_10_2026/Phase_00": "dorsal nasal",
     "22_10_2026/Phase_00": "dorsal temporal"
+  },
+  "excluded": {
+    "07_05_2026": "poor quality or cone ablation (different fish strain) recording - do not extract",
+    "07_08_2026": "poor quality or cone ablation (different fish strain) recording - do not extract",
+    "13_08_2026": "poor quality or cone ablation (different fish strain) recording - do not extract",
+    "01_10_2026": "poor quality or cone ablation (different fish strain) recording - do not extract",
+    "21_07_2026": "poor quality or cone ablation (different fish strain) recording - do not extract",
+    "28_10_2026": "recording never happened",
+    "22_10_2026": "Phase_00 is a red cone knockout; Phase_01 had LED issues - do not extract"
   },
   "recordings": {
     "05_11_2025": {
@@ -276,6 +286,338 @@
       },
       "region": "central",
       "notes": ""
+    },
+    "18_12_2025": {
+      "phase": "Phase_00",
+      "groups": {
+        "1": [
+          0,
+          1,
+          2
+        ],
+        "2": [
+          5,
+          7,
+          6
+        ],
+        "3": [
+          10,
+          11,
+          9
+        ]
+      },
+      "moving_bar": [
+        3
+      ],
+      "rf": null,
+      "region": null,
+      "notes": "Moving bar: 2 dropped triggers repaired (10 repeats). Only 4px noise (no 12/32px RF)."
+    },
+    "08_01_2026": {
+      "phase": "Phase_00",
+      "groups": {
+        "1": [
+          0,
+          1,
+          2
+        ],
+        "2": [
+          5,
+          6,
+          7
+        ],
+        "3": [
+          9,
+          10,
+          11
+        ],
+        "4": [
+          13,
+          14,
+          15
+        ]
+      },
+      "moving_bar": [
+        3
+      ],
+      "rf": null,
+      "region": null,
+      "notes": "Only 4px noise (no 12/32px RF)."
+    },
+    "29_01_2026": {
+      "phase": "Phase_00",
+      "groups": {
+        "1": [
+          0,
+          1,
+          2
+        ],
+        "2": [
+          5,
+          6,
+          7
+        ],
+        "3": [
+          9,
+          10,
+          11
+        ],
+        "4": [
+          13,
+          14,
+          15
+        ]
+      },
+      "moving_bar": [
+        3
+      ],
+      "rf": null,
+      "region": null,
+      "notes": "Only coloured 4px noise (no 12/32px RF)."
+    },
+    "21_04_2026": {
+      "phase": "Phase_00",
+      "groups": {
+        "1": [
+          0,
+          1,
+          2
+        ],
+        "2": [
+          5,
+          6,
+          7
+        ],
+        "3": [
+          9,
+          10,
+          11
+        ]
+      },
+      "moving_bar": [
+        3
+      ],
+      "rf": null,
+      "region": null,
+      "notes": "Only 2px noise (no 12/32px RF)."
+    },
+    "22_04_2026": {
+      "phase": "Phase_00",
+      "groups": {
+        "1": [
+          14,
+          15,
+          16
+        ]
+      },
+      "moving_bar": [
+        17
+      ],
+      "rf": {
+        "stimulus_index": 18,
+        "channel": "12px_20Hz_15mins_shuffle_1000px_ND0",
+        "file": "noise_analysis_QI10/noise_data_v2.nc"
+      },
+      "region": null,
+      "notes": "ND series: only the ND0 block is used (flashes 14-16, bar 17, noise 18). RF noise is 12px 15 min 1000px."
+    },
+    "23_04_2026": {
+      "phase": "Phase_00",
+      "groups": {
+        "1": [
+          0,
+          1,
+          2
+        ],
+        "2": [
+          6,
+          7,
+          8
+        ],
+        "3": [
+          10,
+          11,
+          12
+        ]
+      },
+      "moving_bar": [
+        3
+      ],
+      "rf": null,
+      "region": null,
+      "notes": "Chirp 4 not used. Moving bar: 1 dropped trigger repaired. Only 2/4px noise."
+    },
+    "24_04_2026": {
+      "phase": "Phase_00",
+      "groups": {
+        "1": [
+          14,
+          15,
+          16
+        ]
+      },
+      "moving_bar": [
+        17
+      ],
+      "rf": {
+        "stimulus_index": 18,
+        "channel": "12px_20Hz_15mins_shuffle_1000px_ND0",
+        "file": "noise_analysis_QI10/noise_data_v2.nc"
+      },
+      "region": null,
+      "notes": "ND series: only the ND0 block is used (flashes 14-16, bar 17, noise 18). RF noise is 12px 15 min 1000px."
+    },
+    "30_04_2026": {
+      "phase": "Phase_00",
+      "groups": {
+        "1": [
+          0,
+          1,
+          2
+        ],
+        "2": [
+          5,
+          6,
+          7
+        ],
+        "3": [
+          9,
+          10,
+          11
+        ]
+      },
+      "moving_bar": [
+        3
+      ],
+      "rf": null,
+      "region": null,
+      "notes": "Bar 3 is moving_bar_big; tiny bars 12/13 not used. Only 4px noise."
+    },
+    "13_05_2026": {
+      "phase": "Phase_00",
+      "groups": {
+        "1": [
+          0,
+          1,
+          2
+        ],
+        "2": [
+          4,
+          5,
+          6
+        ],
+        "3": [
+          8,
+          9,
+          10
+        ]
+      },
+      "moving_bar": [
+        11
+      ],
+      "rf": null,
+      "region": null,
+      "notes": "Only 8px noise (no 12/32px RF)."
+    },
+    "14_05_2026": {
+      "phase": "Phase_00",
+      "groups": {
+        "1": [
+          0,
+          1,
+          2
+        ],
+        "2": [
+          5,
+          6,
+          7
+        ],
+        "3": [
+          9,
+          10,
+          11
+        ]
+      },
+      "moving_bar": [
+        3
+      ],
+      "rf": {
+        "stimulus_index": 4,
+        "channel": "12px_20Hz_25mins_shuffle_x12",
+        "file": "noise_analysis_QI10/noise_data_v2.nc"
+      },
+      "region": null,
+      "notes": "RF noise is 12px 25 min x12 (different version from 12px_20Hz_shuffle)."
+    },
+    "15_05_2026": {
+      "phase": "Phase_00",
+      "groups": {
+        "1": [
+          0,
+          1,
+          2
+        ],
+        "2": [
+          6,
+          7,
+          8
+        ],
+        "3": [
+          13,
+          12,
+          14
+        ],
+        "4": [
+          16,
+          17,
+          18
+        ],
+        "5": [
+          20,
+          21,
+          22
+        ]
+      },
+      "moving_bar": [
+        4
+      ],
+      "rf": {
+        "stimulus_index": 15,
+        "channel": "12px_20Hz_25mins_shuffle_white",
+        "file": "noise_analysis_QI10/noise_data_v2.nc"
+      },
+      "region": null,
+      "notes": "Bar 4 (3 is moving_bar_tiny). RF noise is 12px 25 min white."
+    },
+    "15_10_2026": {
+      "phase": "Phase_00",
+      "groups": {
+        "1": [
+          0,
+          1,
+          2
+        ],
+        "2": [
+          6,
+          7,
+          8
+        ],
+        "3": [
+          13,
+          14,
+          15
+        ]
+      },
+      "moving_bar": [
+        3
+      ],
+      "rf": {
+        "stimulus_index": 11,
+        "channel": "32px_15Hz_20mins_shuffle_x4",
+        "file": "noise_analysis_QI10/noise_data_v2.nc"
+      },
+      "region": null,
+      "notes": "Csteps 4 not used. Moving bar: 2 dropped triggers repaired. RF from stimulus 11 (1 repeat); stimulus 5 (4 repeats) is in noise_analysis_colour_QI10."
     }
   }
 }

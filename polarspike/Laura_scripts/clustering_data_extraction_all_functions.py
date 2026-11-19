@@ -254,9 +254,12 @@ def update_recording_info(path, selection):
 def repair_triggers(rel, logic, expected_repeats, max_ratio=1.4):
     """Insert dropped triggers so a stimulus has expected_repeats full repeats.
 
-    A dropped trigger shows up as one interval much longer than the usual frame interval.
-    The missing trigger is put in the middle of the longest such interval (the final
-    interval is ignored: it is often long because the stimulus ends there).
+    A dropped trigger shows up as an interval longer than the usual frame interval. The
+    first and last triggers are always present (every bar spans exactly 400 s), so the
+    missing ones are put, evenly spaced, into the longest intervals - including the last
+    one (a long final interval means the second-to-last trigger is missing). An interval
+    about k frames long receives k-1 triggers. Ties go to the earlier interval. Placing a
+    trigger one gap off shifts the frames in between by one frame (16.7 ms at 60 Hz).
     Returns (new relative triggers, positions inserted)."""
     rel = np.asarray(rel, np.int64)
     inserted = []
@@ -264,12 +267,13 @@ def repair_triggers(rel, logic, expected_repeats, max_ratio=1.4):
     while len(rel) < needed:
         d = np.diff(rel)
         typical = np.median(d)
-        inner = d[:-1]
-        j = int(np.argmax(inner))
-        if inner[j] < max_ratio * typical:
+        j = int(np.argmax(d))
+        if d[j] < max_ratio * typical:
             break  # no clear gap: leave it, the stimulus will keep fewer repeats
-        rel = np.insert(rel, j + 1, rel[j] + inner[j] // 2)
-        inserted.append(j + 1)
+        k = int(min(max(1, round(d[j] / typical) - 1), needed - len(rel)))
+        new = rel[j] + (np.arange(1, k + 1) * d[j]) // (k + 1)
+        rel = np.insert(rel, j + 1, new)
+        inserted += list(range(j + 1, j + 1 + k))
     return rel, inserted
 
 
