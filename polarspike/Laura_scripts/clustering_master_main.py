@@ -27,9 +27,10 @@ FFF_GROUPS_BY_RECORDING = {'24_04_2026': 'all', '22_04_2026': 'all'}
 GROUP_MODE = 'average'  # 'average' (one row/cell) or 'separate' (one row/cell/group)
 
 QUALITY = dict(
-    mode='fff_or_rf',  # 'fff_or_rf', 'fff_and_rf', 'fff_only', 'rf_only', 'none'
+    # Settings of the 15 Oct 2026 example explorer (bd434141): both checks, RF > 10.
+    mode='fff_and_rf',  # 'fff_or_rf', 'fff_and_rf', 'fff_only', 'rf_only', 'none'
     fff_threshold=0.5, fff_rule='any',  # 'any' or 'all' of the SAME group's 3 QIs
-    rf_threshold=20.0,
+    rf_threshold=10.0,
 )
 # True: only use recordings that contain eligible receptive fields, meaning at
 # least RF_MIN_CELLS cells with RF quality above rf_threshold. Cells in those
@@ -43,7 +44,7 @@ RF_MIN_CELLS = 1
 # low-QI groups and low-quality RF. Moving-bar QI is NEVER used for selection.
 
 FEATURES = dict(scf=True, csteps=True, chirp=True, moving_bar=True,
-                DSI=True, OSI=True, center_size_mm2=True, surround_size_mm2=False,
+                DSI=True, OSI=True, center_size_mm2=True, surround_size_mm2=True,
                 elongation=True, orientation=False, temporal_sta=True)
 EXCLUDE_MISSING_FEATURES = False
 # False: use a Gaussian-mixture likelihood over available features, with no
