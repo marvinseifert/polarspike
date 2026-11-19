@@ -33,6 +33,9 @@ NAS_DIR = Path('/mnt/mea_nas/Laura/RGC_clustering/master_data_extraction')
 COPY_TO_NAS = True
 RECORDINGS = None      # None = every recording in the selection file; or e.g. ['14_08_2026']
 FORCE = []             # recordings to re-extract even if already in the master
+# Re-read ONLY the receptive-field values (quick, no spikes) for these recordings;
+# 'all' = every recording with RF in the selection file. Use after changing RF extraction.
+REFRESH_RF = []
 
 
 def copy_to_nas(local, nas_dir):
@@ -68,6 +71,13 @@ def main():
         storage.extract_recording(LOCAL_MASTER, rec, selection['recordings'][rec], selection['nas_root'],
                                   selection.get('expected_bar_repeats', 10))
         print(f'    {rec} took {time.time() - start:.0f} s', flush=True)
+    refresh = [r for r in selection['recordings'] if selection['recordings'][r].get('rf')] \
+        if REFRESH_RF == 'all' else REFRESH_RF
+    for rec in refresh:
+        if rec in FORCE or rec not in storage.recordings_in(LOCAL_MASTER):
+            continue  # just extracted in full
+        print(f'== {rec}: refreshing RF values only', flush=True)
+        storage.refresh_rf(LOCAL_MASTER, rec, selection['recordings'][rec], selection['nas_root'])
     storage.update_recording_info(LOCAL_MASTER, selection)
     with storage.MasterDataset(LOCAL_MASTER) as db:
         print('\nMaster file contents:')

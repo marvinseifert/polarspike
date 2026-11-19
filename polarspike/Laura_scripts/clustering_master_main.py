@@ -31,6 +31,15 @@ QUALITY = dict(
     mode='fff_and_rf',  # 'fff_or_rf', 'fff_and_rf', 'fff_only', 'rf_only', 'none'
     fff_threshold=0.5, fff_rule='any',  # 'any' or 'all' of the SAME group's 3 QIs
     rf_threshold=10.0,
+    # RFs cut off by the edge of the noise stimulus (their size/elongation are wrong): the
+    # RF blob (RMS map > 30 % of peak) or the centre outline comes within rf_edge_margin_um
+    # of the edge (0 = touches it). Only happens where the stimulus is smaller than the
+    # array (32 px, 1000 px ND and x12 noise).
+    #   'drop_rf'   keep the cell (flash + bar responses, temporal STA), leave out its RF
+    #               shape features (centre/surround size, elongation, orientation)
+    #   'drop_cell' leave the cell out of the clustering completely
+    #   None        use cut-off RFs as they are (October behaviour)
+    rf_edge='drop_rf', rf_edge_margin_um=0.,
 )
 # True: only use recordings that contain eligible receptive fields, meaning at
 # least RF_MIN_CELLS cells with RF quality above rf_threshold. Cells in those
@@ -44,7 +53,7 @@ RF_MIN_CELLS = 1
 # low-QI groups and low-quality RF. Moving-bar QI is NEVER used for selection.
 
 FEATURES = dict(scf=True, csteps=True, chirp=True, moving_bar=True,
-                DSI=True, OSI=True, center_size_mm2=True, surround_size_mm2=True,
+                DSI=True, OSI=True, center_size_mm2=True, surround_size_mm2=False,  # surround: 32 px finds ~1/3 the size of 12 px
                 elongation=True, orientation=False, temporal_sta=True)
 EXCLUDE_MISSING_FEATURES = False
 # False: use a Gaussian-mixture likelihood over available features, with no
@@ -61,6 +70,15 @@ RF_SOURCES = {}  # e.g. {'02_12_2025': 'rf:4:12px_20Hz_shuffle'}
 # 32 px noise only after it. RF data breaking the rule is ignored (cells keep their flash
 # and bar responses). None = use every RF source.
 RF_PIXEL_RULE = dict(change_date='20_04_2026', before_px=12, after_px=32)
+# RF size corrections (reversible; nothing in the master file changes):
+# RF_SCALE_BY_PIXEL: real size of a noise pixel relative to what the RF analysis assumed.
+#   {12: 1.25} = the 12 px noise was really 5 um per projector pixel, not 4 (makes 12 px and
+#   32 px centre sizes match: medians 0.019 vs 0.020 mm2). {} = use sizes as stored.
+RF_SCALE_BY_PIXEL = {12: 1.25}
+# RF_SURROUND: 32 px noise finds much smaller surrounds than 12 px (median ~1/3), which no
+#   scale explains. 'normalise_by_pixel' = compare each surround only with cells of the same
+#   noise pixel size; 'drop' = leave surround size out; 'as_is' = use as stored.
+RF_SURROUND = 'as_is'   # surround size is not used as a feature (FEATURES) since 19 Nov 2026
 
 PROCESSING = dict(
     bandwidth_s=0.05, samples=1000,
@@ -86,8 +104,15 @@ ANALYSIS = dict(
     covariance_types=['diag','tied_diag'],
     n_initialisations=20, max_iterations=500, tolerance=1e-4,
     reg_covar=1e-5, random_seed=0,
-    # Each RF/selectivity family has total variance of one typical response PC.
-    feature_weights={},  # e.g. {'DSI': 1., 'OSI': 1., 'temporal_sta': 1.}
+    # How much each feature counts when cells are assigned to clusters (weighted
+    # likelihood). Each column (response PC or RF number) counts 1 by default, so with
+    # everything on, the 54 response columns outweigh the 5 RF columns (RF ~2 % of the decision).
+    # rf_share: None = no balancing; 0.75 = RF features (centre, surround, elongation,
+    # orientation, temporal STA) get 75 % of the total weight, responses (flash, steps,
+    # chirp, bar, DSI, OSI) 25 %. Needs both kinds enabled in FEATURES.
+    rf_share=None,
+    # Extra weight per feature on top (1 = normal), e.g. {'elongation': 2.}
+    feature_weights={},
 )
 PLOTTING = dict(min_cluster_cells=20, clusters_per_page=10,
                 linewidth=0.8, contrast_alpha=0.18, show_interim=True,
@@ -101,6 +126,7 @@ def config():
         rf_recordings_only=RF_RECORDINGS_ONLY, rf_min_cells=RF_MIN_CELLS,
         exclude_missing=EXCLUDE_MISSING_FEATURES, bar_indices=MOVING_BAR_INDICES,
         bar_indices_by_recording=MOVING_BAR_INDICES_BY_RECORDING, rf_sources=RF_SOURCES, rf_pixel_rule=RF_PIXEL_RULE,
+        rf_scale_by_pixel=RF_SCALE_BY_PIXEL, rf_surround=RF_SURROUND,
         processing=PROCESSING, analysis=ANALYSIS, plotting=PLOTTING))
 
 

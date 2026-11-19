@@ -9,11 +9,12 @@ import json
 import pickle
 import warnings
 import uuid
+import re
 import numpy as np
 import pandas as pd
 import clustering_data_extraction_all_functions as storage
 
-VERSION = 1
+VERSION = 2  # 2: moving-bar directions in door-view order (15_10_2026 reordered)
 FFF = ('scf','csteps','chirp')
 RESPONSES = (*FFF,'moving_bar')
 EXTRAS = ('DSI','OSI','center_size_mm2','surround_size_mm2','elongation','orientation','temporal_sta')
@@ -40,7 +41,7 @@ def read_cache(path):
 def load_signature(c):
     keys = ('recordings','groups','groups_by_recording','group_mode','quality',
             'bar_indices','bar_indices_by_recording','rf_sources','processing',
-            'rf_recordings_only','rf_min_cells','rf_pixel_rule')
+            'rf_recordings_only','rf_min_cells','rf_pixel_rule','rf_scale_by_pixel','rf_surround')
     return digest(dict(version=VERSION,master=storage.fingerprint(c['master_file']),
                        settings={k:c[k] for k in keys}))
 
@@ -97,6 +98,8 @@ def select_rows(db, c):
     q = c['quality']
     if q['mode'] not in ('fff_or_rf','fff_and_rf','fff_only','rf_only','none') or q['fff_rule'] not in ('any','all'):
         raise ValueError('Invalid quality rule')
+    if q.get('rf_edge') not in (None,'drop_rf','drop_cell'):
+        raise ValueError("QUALITY['rf_edge'] must be None, 'drop_rf' or 'drop_cell'")
     if c['group_mode'] not in ('average','separate'):
         raise ValueError("group_mode must be 'average' or 'separate'")
     obs = db.observations()
@@ -158,19 +161,23 @@ def select_rows(db, c):
         rf_values = rf_lookup.get(key,{})
         rf_qi = rf_values.get('rf_quality',np.nan)
         rf_pass = bool(np.isfinite(rf_qi) and rf_qi>q['rf_threshold'])
+        edge = rf_values.get('rf_edge_margin_um',np.nan)
+        rf_at_edge = bool(np.isfinite(edge) and edge<=q.get('rf_edge_margin_um',0.))
         ff_pass = bool(passing)
         keep = {'fff_or_rf':ff_pass or rf_pass,'fff_and_rf':ff_pass and rf_pass,
                 'fff_only':ff_pass,'rf_only':rf_pass,'none':True}[q['mode']]
+        dropped_edge = bool(keep and rf_at_edge and q.get('rf_edge')=='drop_cell')
+        if dropped_edge: keep = False
         audit.append(dict(recording=cell.recording,cell_index=int(cell.cell_index),cell_uid=cell.cell_uid,
                           selected_groups=group_list,passing_groups=passing,fff_pass=ff_pass,
-                          rf_quality=rf_qi,rf_pass=rf_pass,included=keep))
+                          rf_quality=rf_qi,rf_pass=rf_pass,rf_edge_margin_um=edge,rf_at_edge=rf_at_edge,dropped_rf_edge=dropped_edge,included=keep))
         if not keep: continue
         # Separate mode still uses CELL-level eligibility: no failing selected
         # group is removed when another selected group or RF rescues the cell.
         observations = [group_list] if c['group_mode']=='average' else [[g] for g in group_list] or [[]]
         for groups in observations:
             record = dict(recording=cell.recording,cell_index=int(cell.cell_index),cell_uid=cell.cell_uid,
-                          groups=groups,fff_pass=ff_pass,rf_pass=rf_pass,rf_quality=rf_qi,
+                          groups=groups,fff_pass=ff_pass,rf_pass=rf_pass,rf_quality=rf_qi,rf_at_edge=rf_at_edge,
                           rf_context=sources.get(cell.recording),
                           observation_uid=cell.cell_uid+(':average' if c['group_mode']=='average' else ':group_'+str(groups[0]) if groups else ':no_FF'))
             output.append(record)
@@ -208,6 +215,7 @@ def response(db, rec, cell, index, role, p):
             edges = absolute[r*logic:(r+1)*logic+1:p['frames_per_direction']]
             direction = np.searchsorted(edges,events,side='right')-1
             times = (direction+(events-edges[direction])/np.diff(edges)[direction])*p['direction_duration_s']
+            times = storage.bar_times_to_door(times, rec, p['direction_duration_s'])
         else:
             times = (events-begin)/fs
         trials.append(times[(times>=0)&(times<p['durations'][role])])
@@ -306,6 +314,49 @@ def read_sta(db, rec, cell, context, p):
     return np.interp(grid,x,y),'ok'
 
 
+def noise_pixel_size(context):
+    """'rf:6:12px_20Hz_shuffle' -> 12 (None if unknown)."""
+    m = re.search(r'(\d+)px', str(context)) if isinstance(context, str) else None
+    return int(m.group(1)) if m else None
+
+
+def adjust_rf_sizes(extras, rows, c):
+    """Reversible corrections of RF sizes, in place (settings in clustering_master_main.py).
+
+    rf_scale_by_pixel {pixel size: factor}: lengths of that noise are multiplied by the factor,
+        so centre/surround AREAS by factor**2 (e.g. {12: 1.25}: 12 px noise really 5 um/px, not 4).
+        Shape (elongation) and time course are unaffected.
+    rf_surround: 'as_is' | 'normalise_by_pixel' (each pixel size's surround sizes divided by
+        that group's median and multiplied by the median of the largest group, so 'large
+        surround' means large for that noise) | 'drop' (surround size left out, all missing).
+    """
+    pixel = np.array([noise_pixel_size(x) or -1 for x in rows['rf_context']])
+    for size, factor in (c.get('rf_scale_by_pixel') or {}).items():
+        hit = pixel == int(size)
+        for name in ('center_size_mm2', 'surround_size_mm2'):
+            extras[name][hit] *= float(factor) ** 2
+        if hit.any():
+            print(f'RF sizes of {int(hit.sum())} cells with {size} px noise scaled by {float(factor):g} '
+                  f'(areas x {float(factor) ** 2:g}).', flush=True)
+    mode = c.get('rf_surround') or 'as_is'
+    if mode not in ('as_is', 'normalise_by_pixel', 'drop'):
+        raise ValueError("RF_SURROUND must be 'as_is', 'normalise_by_pixel' or 'drop'")
+    sur = extras['surround_size_mm2'][:, 0]
+    if mode == 'drop':
+        sur[:] = np.nan
+        print('RF surround size left out (RF_SURROUND = drop).', flush=True)
+    elif mode == 'normalise_by_pixel':
+        groups = [g for g in np.unique(pixel) if g > 0 and np.isfinite(sur[pixel == g]).any()]
+        if len(groups) > 1:
+            ref = max(groups, key=lambda g: np.isfinite(sur[pixel == g]).sum())
+            ref_median = np.nanmedian(sur[pixel == ref])
+            for g in groups:
+                med = np.nanmedian(sur[pixel == g])
+                if med > 0:
+                    sur[pixel == g] *= ref_median / med
+            print(f'RF surround sizes normalised within each noise pixel size (to the {ref} px median).', flush=True)
+
+
 def load_data(c, force=False):
     p=c['processing']
     if p['bandwidth_s']<=0 or p['samples']<20 or not 0<p['selectivity_bin_s']<=p['direction_duration_s']:
@@ -322,6 +373,12 @@ def load_data(c, force=False):
         selection['group_audit'].to_csv(root/f'group_qi_{signature}.csv',index=False)
         if rows.empty: raise ValueError('No cells pass the requested group/RF quality rule. See selection CSV.')
         print(f"Retained {rows.cell_uid.nunique()} cells / {len(rows)} observations. Moving-bar quality is ignored.",flush=True)
+        audit=selection['audit']
+        if 'rf_at_edge' in audit and audit.rf_at_edge.any():
+            action=c['quality'].get('rf_edge')
+            n_edge=int(audit.dropped_rf_edge.sum()) if action=='drop_cell' else int(audit.rf_at_edge[audit.included].sum())
+            text={'drop_rf':'kept, RF shape features left out','drop_cell':'left out completely',None:'RF used as is'}[action]
+            print(f"RF cut off by the stimulus edge: {n_edge} selected cells ({text}).",flush=True)
         # Bank is independent of selected groups and feature switches.
         response_settings={k:p[k] for k in ('bandwidth_s','samples','durations','frames_per_direction',
                            'directions','direction_duration_s','selectivity_bin_s')}
@@ -367,6 +424,8 @@ def load_data(c, force=False):
                         dsi,osi=selectivity(np.mean([v['direction_response'] for v in values],axis=0),p['directions_deg'])
                         extras['DSI'][i,0]=dsi; extras['OSI'][i,0]=osi
             rf=selection['rf_lookup'].get((row.recording,int(row.cell_index)),{})
+            if row.rf_at_edge and c['quality'].get('rf_edge')=='drop_rf':
+                rf={}  # RF cut off by the stimulus edge: shape features left missing (temporal STA kept)
             for name in ('center_size_mm2','surround_size_mm2','elongation'):
                 value=rf.get(name,np.nan)
                 if np.isfinite(value) and (value>=0 if name=='surround_size_mm2' else value>=1 if name=='elongation' else value>0):
@@ -391,7 +450,12 @@ def load_data(c, force=False):
                 if status!='ok': errors.append(dict(recording=row.recording,cell_index=row.cell_index,stimulus_index=None,error=status))
             if (i+1)%100==0: print(f'  {i+1}/{len(rows)} observations',flush=True)
         write_cache(bank_path,bank)
-        dataset=dict(signature=signature,group_mode=c['group_mode'],rows=rows,responses=data,extras=extras,selection_audit=selection['audit'],
+        adjust_rf_sizes(extras,rows,c)
+        settings_used={k:c.get(k) for k in ('recordings','groups','groups_by_recording','group_mode','quality','bar_indices',
+                       'bar_indices_by_recording','rf_sources','rf_pixel_rule','rf_recordings_only','rf_min_cells',
+                       'rf_scale_by_pixel','rf_surround','exclude_missing')}
+        settings_used['master_file']=str(c['master_file']); settings_used['master_revision']=storage.fingerprint(c['master_file'])
+        dataset=dict(signature=signature,rf_scale_by_pixel=dict(c.get('rf_scale_by_pixel') or {}),settings_used=settings_used,group_mode=c['group_mode'],rows=rows,responses=data,extras=extras,selection_audit=selection['audit'],
                      group_audit=selection['group_audit'],processing=p,errors=pd.DataFrame(errors),
                      sta_grid=np.linspace(*p['sta_time_range_s'],p['sta_samples']))
         write_cache(target,dataset)
@@ -429,7 +493,7 @@ def make_features(dataset,c):
         for seg,mask in enumerate(masks):
             block=matrix[:,mask]
             observed=np.isfinite(block).all(axis=1)&retained
-            weight=float(c['analysis']['feature_weights'].get(name,1.))
+            weight=float(c['analysis'].get('feature_weights',{}).get(name,1.))
             if not np.isfinite(weight) or weight<=0: raise ValueError('Feature weights must be positive')
             scores=np.empty((n,0)); variance=0.; model={}
             if observed.sum()>=2:
@@ -453,7 +517,7 @@ def make_features(dataset,c):
     scale_array=np.concatenate(scales) if scales else np.array([1.])
     reference=np.median(scale_array[scale_array>1e-12]) if np.any(scale_array>1e-12) else 1.
     for part in pieces:
-        scale=part['weight']
+        scale=1.  # data scale only; weights act on the likelihood (column_weights), not here
         if part['name'] in EXTRAS:
             sd=np.sqrt(np.nansum(np.nanvar(part['scores'],axis=0)))
             scale*=reference/sd
@@ -462,16 +526,44 @@ def make_features(dataset,c):
     if not pieces: raise ValueError('No variable enabled features are available; inspect availability and STA time range')
     x=np.hstack([p['scores'] for p in pieces])
     x[~retained]=np.nan
+    column_weights=likelihood_weights(pieces,c['analysis'])
     return dict(x=x,availability=availability,retained=retained,report=pd.DataFrame(report),models=models,
-                column_blocks=[(p['name'],p['segment'],p['scores'].shape[1],p['scale']) for p in pieces])
+                column_blocks=[(p['name'],p['segment'],p['scores'].shape[1],p['scale']) for p in pieces],
+                column_weights=column_weights)
 
 
-def log_probabilities(x,means,variances,weights):
-    """Marginal diagonal-Gaussian density over OBSERVED coordinates only."""
+RF_GROUP = ('center_size_mm2','surround_size_mm2','elongation','orientation','temporal_sta')
+
+
+def likelihood_weights(pieces,analysis):
+    """How much each column counts when cells are assigned to clusters (weighted likelihood).
+
+    Every column (one PCA component of a response, or one RF number) starts at 1, times
+    feature_weights[name]. If analysis['rf_share'] is set (0-1), the RF columns (RF_GROUP)
+    are rescaled to that share of the total weight and all other columns (flash, steps,
+    chirp, moving bar, DSI, OSI) to the rest; the average column weight stays 1.
+    Rescaling the data cannot do this: each cluster fits its own spread per column, so a
+    column's influence does not depend on its scale, only on these weights.
+    """
+    w=np.concatenate([np.full(p['scores'].shape[1],p['weight']) for p in pieces])
+    is_rf=np.concatenate([np.full(p['scores'].shape[1],p['name'] in RF_GROUP) for p in pieces])
+    share=analysis.get('rf_share')
+    if share is not None:
+        if not 0<share<1: raise ValueError('rf_share must be between 0 and 1 (or None)')
+        if not is_rf.any() or is_rf.all(): raise ValueError('rf_share needs both RF and response features enabled')
+        total=w.sum()
+        w=np.where(is_rf,w*share*total/w[is_rf].sum(),w*(1-share)*total/w[~is_rf].sum())
+    return w
+
+
+def log_probabilities(x,means,variances,weights,column_weights=None):
+    """Marginal diagonal-Gaussian density over OBSERVED coordinates only; each column's
+    log-density is multiplied by its weight (weighted likelihood; all 1 = ordinary GMM)."""
     observed=np.isfinite(x); values=np.where(observed,x,0.)
+    cw=np.ones(x.shape[1]) if column_weights is None else np.asarray(column_weights,float)
     terms=[]
     for mean,var,weight in zip(means,variances,weights):
-        contribution=np.where(observed,np.log(2*np.pi*var)+(values-mean)**2/var,0.)
+        contribution=cw*np.where(observed,np.log(2*np.pi*var)+(values-mean)**2/var,0.)
         terms.append(np.log(max(weight,1e-300))-.5*contribution.sum(axis=1))
     logp=np.column_stack(terms)
     maximum=logp.max(axis=1)
@@ -479,7 +571,7 @@ def log_probabilities(x,means,variances,weights):
     return logp-normaliser[:,None],normaliser
 
 
-def fit_mixture(x,k,covariance,settings,seed):
+def fit_mixture(x,k,covariance,settings,seed,column_weights=None):
     """EM with observed-data likelihood; missing entries never become measurements.
 
     Model centres are initialised from marginal population statistics plus random
@@ -493,7 +585,7 @@ def fit_mixture(x,k,covariance,settings,seed):
     variances=np.tile(var0,(k,1)); weights=np.full(k,1/k)
     previous=-np.inf; converged=False
     for iteration in range(settings['max_iterations']):
-        logr,ll=log_probabilities(x,means,variances,weights)
+        logr,ll=log_probabilities(x,means,variances,weights,column_weights)
         likelihood=ll.sum()
         if np.isfinite(previous) and abs(likelihood-previous)/n < settings['tolerance']:
             converged=True; break
@@ -510,7 +602,7 @@ def fit_mixture(x,k,covariance,settings,seed):
         else:
             variances=np.divide(squared,denominator,out=variances.copy(),where=denominator>1e-12)
             variances=np.maximum(variances,settings['reg_covar'])
-    logr,ll=log_probabilities(x,means,variances,weights)
+    logr,ll=log_probabilities(x,means,variances,weights,column_weights)
     params=(k-1)+k*d+(d if covariance=='tied_diag' else k*d)
     return dict(means=means,variances=variances,weights=weights,log_likelihood=float(ll.sum()),
                 bic=float(-2*ll.sum()+params*np.log(n)),converged=converged,iterations=iteration+1,
@@ -541,7 +633,7 @@ def cluster(c,dataset=None,force=False):
         for k in counts:
             winner=None
             for start in range(settings['n_initialisations']):
-                model=fit_mixture(xf,k,covariance,settings,settings['random_seed']+1009*k+start)
+                model=fit_mixture(xf,k,covariance,settings,settings['random_seed']+1009*k+start,features['column_weights'])
                 if winner is None or (model['converged'] and not winner['converged']) or (model['converged']==winner['converged'] and model['bic']<winner['bic']): winner=model
             candidates.append({key:winner[key] for key in ('k','covariance','bic','converged','iterations')})
             print(f"K={k}, {covariance}: BIC {winner['bic']:.1f}; converged={winner['converged']}",flush=True)

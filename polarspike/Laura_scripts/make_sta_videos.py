@@ -6,9 +6,12 @@ receptive field out of its spike-triggered average (kernel.npy) and writes the f
 T_FROM_MS to T_TO_MS (0 = spike) as a grey video: bright = light before the spike, dark =
 dark before the spike, mid-grey = no preference.
 
-Orientation and scale follow noise_data_v2.nc: kernel.npy is in stimulus coordinates
-(x = column, y = row, +y down), exactly like the v2 rms / cm_most_important maps, so the
-videos line up with the RF maps in the explorer. The window is centred on the peak of the
+Orientation: kernel.npy is in stimulus coordinates (x = column, y = row, +y down), like the
+v2 rms / cm_most_important maps. Each video is turned into the DOOR VIEW (the stimulus as it
+lands on the retina, seen facing the MEA from the door; top = up), with the per-date rule in
+clustering_data_extraction_all_functions.door_matrix (changed 8 Oct 2026). The explorer's RF
+maps and moving-bar polar plots use the same view. (Videos made before 19 Nov 2026 evening
+were in stimulus coordinates.) The window is centred on the peak of the
 v2 RMS map (fallback: covariance map), converted to kernel pixels with the v2 grid
 spacing (micrometres per stimulus pixel).
 
@@ -43,7 +46,7 @@ T_FROM_MS, T_TO_MS = -400, 30
 FPS = 10                   # playback speed (frames per second); one frame = one STA bin
 OUT_PX = 252               # video width/height in pixels (even number)
 CONTRAST_PERCENTILE = 99.5 # colour scale: this percentile of |STA - baseline| maps to white/black
-FORCE = False
+FORCE = False              # True = remake existing videos
 
 
 def kernel_path(phase_dir, sta_path):
@@ -122,6 +125,7 @@ def videos_for_recording(db, rec, out_dir, log=print):
                 sy0, sy1, sx0, sx1 = max(0, y0), min(H, y1), max(0, x0), min(W, x1)
                 if sy1 > sy0 and sx1 > sx0:
                     win[:, sy0 - y0:sy1 - y0, sx0 - x0:sx1 - x0] = k[i0:i1, sy0:sy1, sx0:sx1]
+                win = storage.stimulus_image_to_door(win, rec)   # door view, like the explorer maps / polar plot
                 write_mp4(to_frames(win, OUT_PX, CONTRAST_PERCENTILE), out, FPS)
                 made += 1
             except Exception as exc:  # noqa: BLE001

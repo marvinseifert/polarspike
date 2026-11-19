@@ -37,7 +37,9 @@ import pandas as pd
 SCHEMA_VERSION = 1
 FFF = ('scf', 'csteps', 'chirp')
 RF_SCALARS = ('rf_quality', 'center_size_mm2', 'surround_size_mm2', 'elongation', 'orientation_deg',
-              'tir', 'center_shift', 'center_std', 'surround_std', 'rf_x_um', 'rf_y_um')
+              'tir', 'center_shift', 'center_std', 'surround_std', 'rf_x_um', 'rf_y_um',
+              'rf_edge_margin_um', 'rf_outline_edge_um', 'rf_map_edge_um',
+              'stimulus_half_width_x_um', 'stimulus_half_width_y_um')
 
 SCHEMA = """
 create table if not exists meta(key text primary key, value text);
@@ -75,6 +77,76 @@ RF_PIXEL_RULE = dict(change_date='20_04_2026', before_px=12, after_px=32)
 def recording_date(recording):
     day, month, year = (int(v) for v in recording.split('_')[:3])
     return year, month, day
+
+
+# ----------------------------------------------------------------------------
+# Door view: the stimulus as it lands on the retina, seen facing the MEA from the door
+# (x = right, y = down). Same rule as rf_analysis Alignment_pipeline/alignment_geometry.py
+# (confirmed there with the L-shaped noise, 14_08_2026 Phase_01):
+#   before 8 Oct 2026: OpenGL up-down flip + projector 90 deg anticlockwise: (x, y) -> (-y, -x)
+#   from 8 Oct 2026 (fps_py):           projector 90 deg anticlockwise only: (x, y) -> (y, -x)
+# Stimulus frame = numpy layout of the noise/bar stimulus (x = column, y = row, + down);
+# kernel.npy and the v2 rms / cm maps are in it.
+# ----------------------------------------------------------------------------
+PROJECTION_CHANGE_DATE = '08_10_2026'
+# Moving bar: presentation order of the 8 directions (stimulus frame) and the door-view
+# order every recording is put into (= the projected order before 8 Oct 2026, so the
+# October explorer's names/angles stay valid).
+BAR_STIMULUS_ORDER = ((1, 0), (-1, 0), (0, -1), (0, 1), (1, -1), (-1, -1), (1, 1), (-1, 1))
+BAR_DOOR_NAMES = ('up', 'down', 'right', 'left', 'up-right', 'down-right', 'up-left', 'down-left')
+
+
+def door_matrix(recording):
+    """2x2 matrix taking stimulus (x, y) to door view (x right, y down) for this recording."""
+    if recording_date(recording) >= recording_date(PROJECTION_CHANGE_DATE):
+        return np.array([[0, 1], [-1, 0]])
+    return np.array([[0, -1], [-1, 0]])
+
+
+def _door_name(v):
+    vertical = 'up' if v[1] < -0.5 else 'down' if v[1] > 0.5 else ''
+    horizontal = 'right' if v[0] > 0.5 else 'left' if v[0] < -0.5 else ''
+    return '-'.join(p for p in (vertical, horizontal) if p)
+
+
+def bar_door_order(recording):
+    """For each door-view direction (BAR_DOOR_NAMES order), the index of the presented block."""
+    m = door_matrix(recording)
+    shown = [_door_name(m @ np.array(v)) for v in BAR_STIMULUS_ORDER]
+    return [shown.index(name) for name in BAR_DOOR_NAMES]
+
+
+def bar_times_to_door(times, recording, direction_s):
+    """Moving-bar spike times laid out as presented (block d = [d*s, (d+1)*s)) -> laid out in
+    door-view order (block k = BAR_DOOR_NAMES[k]). Identity before 8 Oct 2026."""
+    order = bar_door_order(recording)
+    if order == list(range(len(order))):
+        return times
+    times = np.asarray(times, float)
+    block = np.clip((times // direction_s).astype(int), 0, len(order) - 1)
+    position = np.empty(len(order), int)
+    position[order] = np.arange(len(order))
+    return times + (position[block] - block) * direction_s
+
+
+def stimulus_image_to_door(img, recording):
+    """Square, centred image(s) [..., row = stimulus y (down), col = stimulus x] -> door view
+    [..., row = down, col = right] (top of the array = up when shown with imshow/'upper')."""
+    m = np.linalg.inv(door_matrix(recording))
+    n = img.shape[-1]
+    if img.shape[-2] != n:
+        raise ValueError('stimulus_image_to_door needs a square image')
+    o = np.arange(n) - (n - 1) / 2
+    X, Y = np.meshgrid(o, o)                       # output grid: Y = row (down), X = col (right)
+    ix = np.rint(m[0, 0] * X + m[0, 1] * Y + (n - 1) / 2).astype(int)
+    iy = np.rint(m[1, 0] * X + m[1, 1] * Y + (n - 1) / 2).astype(int)
+    return img[..., iy, ix]
+
+
+def stimulus_point_to_door(x, y, recording):
+    """Stimulus (x, y) um -> door view (x right, y down) um."""
+    m = door_matrix(recording)
+    return m[0, 0] * x + m[0, 1] * y, m[1, 0] * x + m[1, 1] * y
 
 
 def rf_allowed(recording, channel, rule=RF_PIXEL_RULE):
@@ -373,6 +445,96 @@ def flash_qis(spikes_by_cell, bounds, fs, role):
     return out
 
 
+RF_EDGE_MAP_FRACTION = 0.3   # RF blob = connected part of the RMS map above this fraction of its peak
+
+
+def _stimulus_half_widths(sel, ds, folder, quality):
+    """Half-widths (um) of the noise stimulus in v2 map coordinates = extent of the STA kernel.
+
+    kernel.npy is H x W stimulus pixels, centred on 0, v2 grid spacing dx um per pixel
+    (checked: kernel peak = RMS peak; 14_08 maps drop to nothing exactly at +-800 um).
+    Stimuli are not always square (15_10_2026: 1024 x 800 px). None if no kernel found.
+    """
+    if 'sta_path' not in sel:
+        return None
+    dx = float(np.median(np.abs(np.diff(ds['x'].values.astype(float)))))
+    for c in np.where(np.isfinite(quality))[0]:
+        kfile = Path(folder) / str(sel['sta_path'].isel(cell_index=int(c)).item()).replace('\\', '/')
+        if kfile.is_file():
+            shape = np.load(kfile, mmap_mode='r').shape
+            return shape[2] * dx / 2, shape[1] * dx / 2, dx
+    return None
+
+
+def _rf_position_and_edge(sel, ds, folder, quality, fallback_x, fallback_y):
+    """RF centre (um) and how far the RF stays inside the noise stimulus (um; <= 0 = cut off).
+
+    Centre = peak of the v2 RMS map (same point the STA videos are centred on). The stored
+    'positions' are offset for non-square stimuli (15_10: ~200 um in y), so only a fallback.
+
+    Two edge checks, the smaller distance is kept as rf_edge_margin_um:
+      outline: centre outline (center_outline_um, x = cx + r cos a, y = cy + r sin a,
+               checked against the cm maps) distance to the edge. Misses many cut RFs,
+               because the outline is fitted to the visible part and stops just short.
+      map:     the RF blob (connected part of the RMS map above RF_EDGE_MAP_FRACTION of
+               its peak, containing the peak) distance to the last stimulus pixel
+               (0 = blob touches the edge).
+    surround_outline_um is NOT a full radius (median ~5 um), so no surround check.
+    """
+    from scipy import ndimage
+    xs, ys = ds['x'].values.astype(float), ds['y'].values.astype(float)
+    cx, cy = np.array(fallback_x, float), np.array(fallback_y, float)
+    n = len(quality)
+    halves = _stimulus_half_widths(sel, ds, folder, quality)
+    out = {}
+    map_edge = np.full(n, np.nan)
+    if 'rms' in sel:
+        for i in np.where(np.isfinite(quality))[0]:
+            m = np.abs(np.nan_to_num(sel['rms'].isel(cell_index=int(i)).values.astype(float)))
+            if m.max() <= 0:
+                continue
+            iy, ix = np.unravel_index(int(np.argmax(m)), m.shape)
+            cx[i], cy[i] = xs[ix], ys[iy]
+            if halves:
+                hx, hy, dx = halves
+                labels, _ = ndimage.label(m > RF_EDGE_MAP_FRACTION * m.max())
+                by, bx = np.where(labels == labels[iy, ix])
+                map_edge[i] = min(hx - dx - np.abs(xs[bx]).max(), hy - dx - np.abs(ys[by]).max())
+    if halves:
+        hx, hy, dx = halves
+        out.update(stimulus_half_width_x_um=np.full(n, hx), stimulus_half_width_y_um=np.full(n, hy),
+                   rf_map_edge_um=map_edge)
+        edge = map_edge.copy()
+        if 'center_outline_um' in sel:
+            angle = np.deg2rad(ds['degree'].values.astype(float))
+            r = sel['center_outline_um'].transpose('cell_index', 'degree').values.astype(float)
+            margin = np.minimum(hx - np.abs(cx[:, None] + r * np.cos(angle)), hy - np.abs(cy[:, None] + r * np.sin(angle)))
+            with np.errstate(invalid='ignore'), __import__('warnings').catch_warnings():
+                __import__('warnings').simplefilter('ignore', RuntimeWarning)
+                outline = np.where(np.isfinite(r).any(axis=1), np.nanmin(margin, axis=1), np.nan)
+            out['rf_outline_edge_um'] = outline
+            edge = np.fmin(edge, outline)
+        out['rf_edge_margin_um'] = edge
+    return cx, cy, out
+
+
+def refresh_rf(master_path, rec, cfg, nas_root, log=print):
+    """Re-read only the receptive-field values of one recording (no spike re-extraction)."""
+    folder = Path(nas_root) / f'zebrafish_{rec}' / cfg['phase']
+    rows, rf_row = _rf_features(rec, cfg, folder, log)
+    con = open_for_writing(master_path)
+    try:
+        con.execute("delete from features where recording=? and context like 'rf:%'", (rec,))
+        con.execute('delete from rf_sources where recording=?', (rec,))
+        con.executemany('insert into features values (?,?,?,?,?,?,?)', rows)
+        con.execute('insert into rf_sources values (?,?,?,?,?,?)', rf_row)
+        bump_revision(con)
+        con.commit()
+    finally:
+        con.close()
+    return len(rows)
+
+
 def _rf_features(rec, cfg, folder, log):
     """Read receptive-field values for one recording. Returns (feature rows, rf_source row)."""
     import xarray as xr
@@ -402,11 +564,17 @@ def _rf_features(rec, cfg, folder, log):
                        orientation_deg=angle, tir=get('tir'), center_shift=get('center_shift'),
                        center_std=get('center_std'), surround_std=get('surround_std'))
         if 'positions' in sel:
-            pos = sel['positions'].transpose('cell_index', 'pos_dim').values.astype(float)
+            # positions are indices into the v2 map grid (x, y) -> convert to micrometres
+            pos = sel['positions'].transpose('cell_index', 'pos_dim').values.astype(int)
             dims = [str(p) for p in ds['pos_dim'].values]
-            scalars['rf_x_um'], scalars['rf_y_um'] = pos[:, dims.index('x')], pos[:, dims.index('y')]
+            xs, ys = ds['x'].values.astype(float), ds['y'].values.astype(float)
+            ix = np.clip(pos[:, dims.index('x')], 0, len(xs) - 1)
+            iy = np.clip(pos[:, dims.index('y')], 0, len(ys) - 1)
+            scalars['rf_x_um'], scalars['rf_y_um'], edges = _rf_position_and_edge(sel, ds, folder, quality, xs[ix], ys[iy])
+            scalars.update(edges)
         units = dict(orientation_deg=angle_unit, center_size_mm2='mm2', surround_size_mm2='mm2',
-                     elongation='1/tilt', rf_x_um='um', rf_y_um='um')
+                     elongation='1/tilt', rf_x_um='um', rf_y_um='um', rf_edge_margin_um='um', rf_outline_edge_um='um', rf_map_edge_um='um',
+                     stimulus_half_width_x_um='um', stimulus_half_width_y_um='um')
         sta = sel['sta_single_pixel'].transpose('cell_index', 'time_max').values.astype(float) \
             if 'sta_single_pixel' in sel else None
         sta_time = ds['time_max'].values.astype(float) if sta is not None else None
@@ -428,8 +596,11 @@ def _rf_features(rec, cfg, folder, log):
         provenance = dict(file=dict(path=str(path), size=stat.st_size, mtime=stat.st_mtime),
                           channel=channel, stimulus_index=index, attrs={k: str(v) for k, v in ds.attrs.items()},
                           angle_unit_inferred=angle_unit)
+    edge = scalars.get('rf_edge_margin_um')
+    edge_note = '' if edge is None else \
+        f', {int(np.sum((quality > 10) & (edge <= 0)))} of those cut off by the stimulus edge'
     log(f'    RF: {context}: {sum(np.isfinite(quality))} cells with quality, '
-        f'{int(np.sum(quality > 10))} > 10, angle unit {angle_unit}')
+        f'{int(np.sum(quality > 10))} > 10{edge_note}, angle unit {angle_unit}')
     return rows, (rec, index, channel, 'complete', pixel, dumps(provenance))
 
 

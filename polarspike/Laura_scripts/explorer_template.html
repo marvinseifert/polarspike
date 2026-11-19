@@ -108,6 +108,8 @@ body{padding:1.25rem clamp(.75rem,3vw,2.5rem) 3rem}
 .lx-ov-head{padding:.4rem .6rem;font-size:var(--cds-font-size-caption);color:var(--color-fg-muted);border-bottom:1px solid var(--color-border-line)}
 .lx-ov-row{padding:.65rem .6rem;border-bottom:1px solid var(--color-border-line);cursor:pointer;border-radius:var(--cds-radius)}
 .lx-ov-row:hover{background:var(--color-panel)}
+.lx-used{display:grid;grid-template-columns:minmax(9rem,14rem) 1fr;gap:.35rem 1rem;margin:0}.lx-used dt{font-weight:600}.lx-used dd{margin:0}
+@media (max-width:760px){.lx-used{grid-template-columns:1fr}.lx-used dd{margin-bottom:.4rem}}
 .lx-ov-id{font-family:var(--font-anthropic-serif);font-size:var(--cds-font-size-title);line-height:1.1}
 .lx-ov-meta{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted);line-height:1.4}
 .lx-ov-div{padding:.9rem .6rem .3rem;color:var(--color-fg-muted);font-size:var(--cds-font-size-caption)}
@@ -214,6 +216,7 @@ body{padding:1.25rem clamp(.75rem,3vw,2.5rem) 3rem}
     <p data-needs="unassigned"><span class="lx-n" data-source="run_summary" data-field="value" data-where="key=n_unassigned">—</span> rows could not be assigned to a cluster and are not shown.</p>
   </div>
 
+  <div class="lx-card" style="margin-top:1.2rem" data-needs="used"><h3>Exactly what went into this clustering</h3><dl id="ds-used" class="lx-used"></dl></div>
   <div class="lx-note" style="margin-top:1.2rem" data-needs="rf"><b>Noise pixel size rule.</b> The projector pixel size changed on 20/04/2026. Receptive fields are taken only from 12&nbsp;px noise in recordings before that date and only from 32&nbsp;px noise in recordings after it, so the real checker size is similar throughout. Recordings whose noise breaks this rule keep their flash and bar responses but have no receptive field data here.</div>
   <div class="lx-note" style="margin-top:1.2rem" data-needs="rf multipx"><b>Read with care.</b> The receptive field noise stimulus differs between recordings (pixel sizes <span class="lx-n" data-source="run_summary" data-field="value" data-where="key=n_pixel_sizes">—</span>, see the table), so receptive field sizes and strengths are not strictly comparable across recordings.</div>
   <div class="lx-note" data-needs="rfonly"><b>Read with care.</b> The <span class="lx-n" data-source="run_summary" data-field="value" data-where="key=n_rf_only">—</span> cells admitted on receptive field quality alone may respond weakly or not at all to flashes.</div>
@@ -246,6 +249,7 @@ body{padding:1.25rem clamp(.75rem,3vw,2.5rem) 3rem}
     <ol>
       <li><b>Turn spikes into smooth responses.</b> For each cell and stimulus, spike times from all repeats are pooled and smoothed with a Gaussian kernel of <span class="lx-n" data-source="run_summary" data-field="value" data-where="key=bandwidth_ms">—</span>, giving <span class="lx-n" data-source="run_summary" data-field="value" data-where="key=samples">—</span> samples per stimulus. Two versions are kept: firing rate in Hz, which is what the plots show, and a version rescaled so that its area is one, which is what the clustering uses. The second removes overall firing rate, so clusters reflect response shape and timing, not how many spikes a cell fired.<span data-needs="bar"> For the moving bar, each direction is shifted so its peak lands at the same time, so direction preference does not change the shape.</span><span data-needs="sel"> Selectivity enters separately through DSI and OSI.</span></li>
       <li><b>Compress with PCA.</b> Principal component analysis finds the few patterns that explain most of the differences between cells. It is run separately on each segment of the stimuli, such as each flash colour or contrast step<span data-needs="bar"> or bar direction</span>, keeping enough components to explain <span class="lx-n" data-source="run_summary" data-field="value" data-where="key=pca_variance">—</span> of the variance in each. The result is <span class="lx-n" data-source="run_summary" data-field="value" data-where="key=n_features">—</span> numbers per cell: <span class="lx-n" data-source="run_summary" data-field="value" data-where="key=components_text">—</span>.</li>
+      <li><b>Weight the features.</b> <span class="lx-n" data-source="run_summary" data-field="value" data-where="key=weighting_text">—</span></li>
       <li data-needs="extras"><b>Balance the contributions.</b> <span class="lx-n" data-source="run_summary" data-field="value" data-where="key=extras_text">—</span> are scaled so that each measure carries about as much weight as one typical response component. Because they supply only <span class="lx-n" data-source="run_summary" data-field="value" data-where="key=n_extras_comp">—</span> of the <span class="lx-n" data-source="run_summary" data-field="value" data-where="key=n_features">—</span> numbers, they shape the clusters far less than the responses do.</li>
       <li><b>Fit the mixture.</b> Each cluster has its own centre and its own variance for every number (a diagonal covariance, meaning the numbers are treated as independent within a cluster). The fit alternates two moves, called expectation-maximisation. First, for every cell, work out how likely each cluster is to have produced it. Second, move each cluster's centre, spread and size to suit the cells it is responsible for, weighting cells by those likelihoods. This repeats until the improvement falls below <span class="lx-n" data-source="run_summary" data-field="value" data-where="key=tolerance">—</span> per cell, or after at most <span class="lx-n" data-source="run_summary" data-field="value" data-where="key=max_iter">—</span> rounds.<span data-needs="missing"> When a measurement is missing, that number is left out of the likelihood for that cell. It is never replaced by a guess.</span></li>
       <li><b>Choose how many clusters.</b> The counts tried were <span class="lx-n" data-source="run_summary" data-field="value" data-where="key=k_candidates">—</span>. For each count the model is refitted from <span class="lx-n" data-source="run_summary" data-field="value" data-where="key=n_init">—</span> random starting points and the best fit kept. Models are compared with the Bayesian information criterion (BIC), which rewards fitting the data and charges for every extra parameter, so lower is better. Two spread assumptions were compared: a separate spread for each cluster (diag) and one spread shared by all clusters (tied_diag). The best model has <span class="lx-n" data-source="run_summary" data-field="value" data-where="key=k_selected">—</span> clusters (BIC <span class="lx-n" data-source="run_summary" data-field="value" data-where="key=bic">—</span>).</li>
@@ -262,7 +266,7 @@ body{padding:1.25rem clamp(.75rem,3vw,2.5rem) 3rem}
     </div>
     <div class="lx-card">
       <h3>Numbers kept from each part of the data</h3>
-      <p class="lx-sub">PCA components retained per stimulus segment, then the single measures.</p>
+      <p class="lx-sub">How many numbers each stimulus or measure contributes to the clustering.</p>
       <div id="m-blocks" class="lx-box" data-source="feature_blocks"></div>
       <div class="lx-legend" id="m-blocks-legend"></div>
     </div>
@@ -306,7 +310,7 @@ body{padding:1.25rem clamp(.75rem,3vw,2.5rem) 3rem}
   <p class="lx-sub" style="max-width:60rem">Each row shows the average response of one cluster, with the spread (standard error) shaded. Every row uses its own vertical scale. The coloured bar under the cluster name shows which recordings its cells came from. Select a row to look inside the cluster.</p>
   <div class="lx-controls"><button type="button" class="lx-btn" id="ov-toggle"></button></div>
   <div class="lx-ov-head" aria-hidden="true"><div>Cluster</div><div>Full-field flashes</div><div>Contrast steps</div><div>Chirp</div><div>Moving bar</div><div>Receptive field time course</div></div>
-  <div id="ov-grid" data-source="clusters cluster_means cluster_sta cluster_recording recordings stim_axes"></div>
+  <div id="ov-grid" data-source="clusters cluster_means cluster_sta cluster_recording recordings stim_axes cells"></div>
   <div class="lx-legend" id="ov-legend"></div>
 </template>
 
@@ -714,7 +718,12 @@ window.__EXPLORER__ = "__EXPLORER_DATA__";
       return true;
     }).map((c) => (c[0] === 'ff_only' && !FLAGS.rfq ? ['ff_only', 'Passed flash quality', 1] : c));
   }
+  function drawUsed() {
+    const box = q('#ds-used'), d = get('data_used'); if (!box || !d) return; box.textContent = '';
+    d.forEach((r) => { const dt = document.createElement('dt'); dt.textContent = r.item; const dd = document.createElement('dd'); dd.textContent = r.detail; box.appendChild(dt); box.appendChild(dd); });
+  }
   function drawDataset() {
+    drawUsed();
     const rec = get('recordings'), cells = get('cells');
     const tb = q('#ds-table'), srcBox = q('#ds-sources'), qBox = q('#ds-quality');
     if (!rec) { [srcBox, qBox].forEach((b) => b.classList.add('dash-skeleton')); return; }
@@ -841,30 +850,43 @@ window.__EXPLORER__ = "__EXPLORER_DATA__";
     kinds.forEach((k) => { const sp = document.createElement('span'); const sw = document.createElement('i'); sw.className = 'lx-sw'; sw.style.background = k[2]; sp.appendChild(sw); sp.appendChild(document.createTextNode(k[1])); lg.appendChild(sp); });
   }
   function drawBlocks(box, rows) {
+    // one row per stimulus (its segments stacked) or per single measure; readable labels, numbers written out
     box.textContent = ''; box.classList.add('lx-box');
-    const W = Math.max(300, box.clientWidth || 0), H = 240, m = { l: 30, r: 8, t: 10, b: 58 };
-    const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', '0 0 ' + W + ' ' + H).style('display', 'block');
-    const groups = [['scf', 'Flashes'], ['csteps', 'Steps'], ['chirp', 'Chirp'], ['moving_bar', 'Bar'], ['sel', 'RF and selectivity']];
-    const gi = (f) => { const i = groups.findIndex((g) => g[0] === f); return i < 0 ? 4 : i; };
-    const x = d3.scaleBand(rows.map((r, i) => i), [m.l, W - m.r]).paddingInner(0.15);
-    const y = d3.scaleLinear([0, d3.max(rows, (r) => r.components) * 1.1], [H - m.b, m.t]);
-    y.ticks(4).forEach((v) => { svg.append('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y(v)).attr('y2', y(v)).style('stroke', 'var(--cds-chart-grid)'); svg.append('text').attr('class', 'lx-tick').attr('x', m.l - 6).attr('y', y(v) + 3).attr('text-anchor', 'end').text(v); });
-    const tip = tipFor(box);
-    rows.forEach((r, i) => {
-      const c = dash.colors[gi(r.feature) % dash.colors.length];
-      svg.append('rect').attr('x', x(i)).attr('width', x.bandwidth()).attr('y', y(r.components)).attr('height', H - m.b - y(r.components)).attr('rx', 2).style('fill', c)
-        .on('pointermove', (ev) => { setTip(tip, [{ text: r.feature + ', segment ' + r.segment, dim: true, color: c }, { text: r.components + ' components' }, { text: p0(r.variance_retained) + ' of variance kept' }, { text: fi(r.observed_cells) + ' cells' }]); placeTip(box, tip, ev.clientX, ev.clientY); })
-        .on('pointerleave', () => { tip.hidden = true; });
+    const NAMES = { scf: 'Full-field flashes', csteps: 'Contrast steps', chirp: 'Chirp', moving_bar: 'Moving bar', DSI: 'Direction selectivity (DSI)', OSI: 'Orientation selectivity (OSI)', center_size_mm2: 'RF centre size', surround_size_mm2: 'RF surround size', elongation: 'RF elongation', orientation: 'RF orientation', temporal_sta: 'RF time course' };
+    const SEGS = { scf: (s) => 'colour ' + s, csteps: (s) => 'step ' + s, moving_bar: (s) => (CFG.bar_names || [])[s - 1] || 'direction ' + s };
+    const order = ['scf', 'csteps', 'chirp', 'moving_bar', 'DSI', 'OSI', 'center_size_mm2', 'surround_size_mm2', 'elongation', 'orientation', 'temporal_sta'];
+    const used = rows.filter((r) => r.components > 0);
+    const feats = order.filter((f) => used.some((r) => r.feature === f)).concat(Array.from(new Set(used.map((r) => r.feature))).filter((f) => order.indexOf(f) < 0));
+    const resp = (f) => ['scf', 'csteps', 'chirp', 'moving_bar'].indexOf(f) >= 0;
+    const lines = feats.map((f) => {
+      const segs = used.filter((r) => r.feature === f).sort((a, b) => a.segment - b.segment);
+      const n = d3.sum(segs, (r) => r.components), w = d3.sum(segs, (r) => Number(r.weight_share) || 0);
+      const vk = segs.length ? d3.mean(segs, (r) => Number(r.variance_retained)) : 0;
+      return { f: f, segs: segs, n: n, w: w, vk: vk };
     });
-    svg.append('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', H - m.b).attr('y2', H - m.b).style('stroke', 'var(--cds-chart-axis)');
-    groups.forEach((g, gix) => {
-      const idx = rows.map((r, i) => [r, i]).filter((p) => gi(p[0].feature) === gix).map((p) => p[1]);
-      if (!idx.length) return;
-      const xs = (x(idx[0]) + x(idx[idx.length - 1]) + x.bandwidth()) / 2;
-      svg.append('text').attr('class', 'lx-tick').attr('transform', 'translate(' + xs + ',' + (H - m.b + 12) + ') rotate(-25)').attr('text-anchor', 'end').text(g[1]);
+    const total = d3.sum(lines, (l) => l.n), hasW = lines.some((l) => l.w > 0);
+    const W = Math.max(320, box.clientWidth || 0), rh = 26, lw = Math.min(190, W * 0.36), rw = Math.min(210, W * 0.36), m = { t: 4, b: 4 };
+    const H = m.t + m.b + rh * lines.length;
+    const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', '0 0 ' + W + ' ' + H).style('display', 'block');
+    const x = d3.scaleLinear([0, d3.max(lines, (l) => l.n) || 1], [lw, W - rw]);
+    const tip = tipFor(box);
+    lines.forEach((l, i) => {
+      const y0 = m.t + i * rh, c = resp(l.f) ? dash.colors[0] : dash.colors[2 % dash.colors.length];
+      svg.append('text').attr('class', 'lx-tick').attr('x', lw - 8).attr('y', y0 + rh / 2 + 4).attr('text-anchor', 'end').style('font-size', '12px').text(NAMES[l.f] || l.f);
+      let acc = 0;
+      l.segs.forEach((r) => {
+        const xa = x(acc), xb = x(acc + r.components); acc += r.components;
+        svg.append('rect').attr('x', xa).attr('width', Math.max(1, xb - xa - (l.segs.length > 1 ? 1 : 0))).attr('y', y0 + 5).attr('height', rh - 10).attr('rx', 2).style('fill', c)
+          .on('pointermove', (ev) => { setTip(tip, [{ text: (NAMES[l.f] || l.f) + (SEGS[l.f] ? ', ' + SEGS[l.f](r.segment) : ''), dim: true, color: c }, { text: r.components + (r.components === 1 ? ' number' : ' numbers') }, { text: resp(l.f) || r.feature === 'temporal_sta' ? p0(r.variance_retained) + ' of its variance kept by PCA' : 'used as it is (one measured number)' }, { text: fi(r.observed_cells) + ' cells have it' }]); placeTip(box, tip, ev.clientX, ev.clientY); })
+          .on('pointerleave', () => { tip.hidden = true; });
+      });
+      const txt = l.n + (l.n === 1 ? ' number' : ' numbers') + (l.segs.length > 1 ? ' from ' + l.segs.length + ' parts' : '') + (hasW ? ' · ' + p0(l.w) + ' of weight' : '');
+      svg.append('text').attr('class', 'lx-tick').attr('x', x(l.n) + 8).attr('y', y0 + rh / 2 + 4).style('font-size', '12px').text(txt);
     });
     const lg = q('#m-blocks-legend'); lg.textContent = '';
-    const sp = document.createElement('span'); sp.textContent = 'Each bar is one segment: eight flash colours, ten contrast steps, the chirp, eight bar directions, then single measures.'; lg.appendChild(sp);
+    const sp = document.createElement('span');
+    sp.textContent = 'In total ' + total + ' numbers describe each cell. Responses (blue) are cut into parts (each flash colour, contrast step and bar direction) and each part is compressed by PCA, keeping ' + (sumVal('pca_variance') || '50%') + ' of its variance; hover a part for details. Single measures (other colour) are used as they are; the RF time course is compressed the same way.' + (hasW ? ' The weight is how much each row counts when cells are assigned to clusters.' : '');
+    lg.appendChild(sp);
   }
 
   // ---------- All clusters tab ----------
@@ -873,11 +895,19 @@ window.__EXPLORER__ = "__EXPLORER_DATA__";
   }
   function drawOverview() {
     const box = q('#ov-grid'); if (!box) return;
-    const cl = get('clusters'), cm = get('cluster_means'), cs = get('cluster_sta'), cr = get('cluster_recording'), rec = get('recordings');
-    if (!(cl && cm && (cs || !FLAGS.sta) && cr && rec && loadAxes())) { box.classList.add('dash-skeleton'); return; }
+    const cl = get('clusters'), cm = get('cluster_means'), cs = get('cluster_sta'), cr = get('cluster_recording'), rec = get('recordings'), allCells = get('cells');
+    if (!(cl && cm && (cs || !FLAGS.sta) && cr && rec && allCells && loadAxes())) { box.classList.add('dash-skeleton'); return; }
     box.classList.remove('dash-skeleton'); box.textContent = '';
-    const headEl = q('.lx-ov-head'); const ncol = STIMS.length + (FLAGS.sta ? 1 : 0);
-    if (headEl) { headEl.textContent = ''; ['Cluster'].concat(STIMS.map((s) => STIM_LABEL[s])).concat(FLAGS.sta ? ['Receptive field time course'] : []).forEach((t) => { const d = document.createElement('div'); d.textContent = t; headEl.appendChild(d); }); }
+    // per-cluster histograms of single-number features (centre size, elongation, DSI, OSI)
+    const ovHists = OV_HISTS.filter((h) => histOk(h[0])).map((h) => {
+      const all = allCells.map((c) => c[h[0]]).filter((v) => v !== null && v !== undefined && isFinite(v)).map(Number);
+      let dom = h[2]; if (!dom) { const srt = all.slice().sort(d3.ascending); dom = [d3.quantile(srt, 0.01), d3.quantile(srt, 0.99)]; }
+      if (!(dom[1] > dom[0])) dom = [dom[0] - 0.5, dom[0] + 0.5];
+      return { f: h[0], label: h[1], dom: dom, all: all };
+    }).filter((h) => h.all.length);
+    const byCluster = groupBy(allCells, 'cluster', (c) => c.cluster);
+    const headEl = q('.lx-ov-head'); const ncol = STIMS.length + (FLAGS.sta ? 1 : 0) + ovHists.length;
+    if (headEl) { headEl.textContent = ''; ['Cluster'].concat(STIMS.map((s) => STIM_LABEL[s])).concat(FLAGS.sta ? ['Receptive field time course'] : []).concat(ovHists.map((h) => h.label)).forEach((t) => { const d = document.createElement('div'); d.textContent = t; headEl.appendChild(d); }); }
     q('#view-clusters').style.setProperty('--ov-cols', 'minmax(9.5rem,11.5rem) repeat(' + ncol + ', minmax(0,1fr))');
     const cmap = indexBy(cm, 'cs', (r) => r.cluster + '|' + r.stim), smap = FLAGS.sta && cs ? indexBy(cs, 'c', (r) => r.cluster) : null;
     const crg = groupBy(cr, 'c', (r) => r.cluster); const colors = recColors(rec);
@@ -915,6 +945,12 @@ window.__EXPLORER__ = "__EXPLORER_DATA__";
         const sr = smap.get(c.cluster);
         if (sr && sr.n > 0) drawStaMini(sb, arr(sr.mean), arr(sr.sem)); else { sb.className = 'lx-mini lx-empty'; sb.textContent = 'No receptive field trace'; }
       }
+      ovHists.forEach((h) => {
+        const hb = document.createElement('div'); hb.className = 'lx-mini'; row.appendChild(hb);
+        const mine = (byCluster.get(c.cluster) || []).map((x) => x[h.f]).filter((v) => v !== null && v !== undefined && isFinite(v)).map(Number);
+        if (!mine.length) { hb.className = 'lx-mini lx-empty'; hb.textContent = 'No values'; return; }
+        drawHistMini(hb, h, mine);
+      });
       box.appendChild(row);
     });
     const lg = q('#ov-legend'); lg.textContent = '';
@@ -1057,6 +1093,26 @@ window.__EXPLORER__ = "__EXPLORER_DATA__";
     });
   }
   const HISTS = [['dsi', 'Direction selectivity (DSI)', [0, 1]], ['osi', 'Orientation selectivity (OSI)', [0, 1]], ['center_mm2', 'RF centre size (mm\u00b2)', null], ['elongation', 'RF elongation', null], ['scf_qi', 'Flash quality (flashes)', [0, 1]], ['conf', 'Confidence', [0, 1]]];
+  // shown as small histograms on the All clusters page (same x range for every cluster)
+  const OV_HISTS = [['center_mm2', 'RF centre size (mm\u00b2)', null], ['elongation', 'RF elongation', null], ['dsi', 'DSI', [0, 1]], ['osi', 'OSI', [0, 1]]];
+  function drawHistMini(box, h, mine) {
+    const W = Math.max(90, box.clientWidth || 0), H = 48, mb = 11;
+    box.textContent = '';
+    const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', '0 0 ' + W + ' ' + H).style('display', 'block');
+    const bin = d3.bin().domain(h.dom).thresholds(d3.range(1, 12).map((i) => h.dom[0] + i * (h.dom[1] - h.dom[0]) / 12));
+    const clamp = (v) => Math.min(h.dom[1], Math.max(h.dom[0], v));
+    const bm = bin(mine.map(clamp)), ba = bin(h.all.map(clamp)); const scale = mine.length / Math.max(1, h.all.length);
+    const x = d3.scaleLinear(h.dom, [1, W - 1]);
+    const ymax = Math.max(1, d3.max(bm, (b) => b.length), d3.max(ba, (b) => b.length * scale));
+    const y = d3.scaleLinear([0, ymax], [H - mb, 2]);
+    bm.forEach((b) => svg.append('rect').attr('x', x(b.x0) + 0.5).attr('width', Math.max(0, x(b.x1) - x(b.x0) - 1)).attr('y', y(b.length)).attr('height', H - mb - y(b.length)).style('fill', accent()).attr('opacity', 0.85));
+    svg.append('path').attr('d', d3.line().curve(d3.curveStepAfter)(ba.map((b) => [x(b.x0), y(b.length * scale)]).concat([[x(ba[ba.length - 1].x1), y(ba[ba.length - 1].length * scale)]]))).style('fill', 'none').style('stroke', 'var(--color-fg)').attr('stroke-width', 0.8).attr('opacity', 0.55);
+    const med = d3.median(mine);
+    svg.append('text').attr('class', 'lx-tick').attr('x', 1).attr('y', H - 1).text(d3.format('~g')(+h.dom[0].toPrecision(2)));
+    svg.append('text').attr('class', 'lx-tick').attr('x', W - 1).attr('y', H - 1).attr('text-anchor', 'end').text(d3.format('~g')(+h.dom[1].toPrecision(2)));
+    svg.append('text').attr('class', 'lx-tick').attr('x', W / 2).attr('y', H - 1).attr('text-anchor', 'middle').text('median ' + d3.format('.2~g')(med));
+    svg.append('title').text(h.label + ': bars = this cluster (' + mine.length + ' cells), line = all cells scaled to the same total. Median ' + d3.format('.3~g')(med) + '.');
+  }
   function histOk(f) {
     if (f === 'dsi' || f === 'osi') return !!FLAGS.sel;
     if (f === 'center_mm2' || f === 'elongation') return !!FLAGS.centre;
@@ -1155,7 +1211,7 @@ window.__EXPLORER__ = "__EXPLORER_DATA__";
     head.textContent = '';
     const h = document.createElement('div'); h.className = 'lx-headline';
     const big = document.createElement('div'); big.className = 'lx-big'; big.textContent = c.uid; h.appendChild(big);
-    [ 'Cluster ' + c.cluster + ' with ' + p1(c.conf) + ' confidence', c.region ? 'Region: ' + c.region : null, c.ff_pass ? 'Passed flash quality' : 'Did not pass flash quality', FLAGS.rf ? (c.rf_pass ? 'Passed receptive field quality' : 'Did not pass receptive field quality') : null].filter(Boolean).forEach((t) => { const s = document.createElement('span'); s.textContent = t; h.appendChild(s); });
+    [ 'Cluster ' + c.cluster + ' with ' + p1(c.conf) + ' confidence', c.region ? 'Region: ' + c.region : null, c.ff_pass ? 'Passed flash quality' : 'Did not pass flash quality', FLAGS.rf ? (c.rf_pass ? 'Passed receptive field quality' : 'Did not pass receptive field quality') : null, c.rf_edge ? 'RF cut off by the stimulus edge' : null].filter(Boolean).forEach((t) => { const s = document.createElement('span'); s.textContent = t; h.appendChild(s); });
     head.appendChild(h);
     const alts = document.createElement('div'); alts.className = 'lx-sub'; alts.style.marginTop = '.5rem';
     const al = [[c.p1_cluster, c.p1], [c.p2_cluster, c.p2], [c.p3_cluster, c.p3]].filter((a) => a[0] != null);
@@ -1487,8 +1543,8 @@ window.__EXPLORER__ = "__EXPLORER_DATA__";
     row.appendChild(fig(r, true)); others.forEach((o) => row.appendChild(fig(o, false)));
     box.appendChild(row);
     const scale = Number(r[key + '_s']); const one = others.length === 1;
-    sub.textContent = (key === 'cm' ? 'Covariance map' : 'RMS map') + ', ' + (CFG.rf_crop_um || 300) + ' \u00b5m window centred on the most important pixel (x ' + f1(Number(r.cx)) + ', y ' + f1(Number(r.cy)) + ' \u00b5m). ' + (key === 'cm' ? 'Colour runs from \u2212' + d3.format('.3g')(scale) + ' (blue) to +' + d3.format('.3g')(scale) + ' (red).' : 'Grey runs from 0 to ' + d3.format('.3g')(scale) + '.') + (r.ch ? ' Noise stimulus: ' + r.ch + '.' : '') +
-      (others.length ? ' The ' + (one ? 'map' : others.length + ' maps') + ' with a dashed border ' + (one ? 'comes' : 'come') + ' from the recording\u2019s other noise ' + (one ? 'stimulus' : 'stimuli') + ', cut out at the same place for comparison. ' + (one ? 'It was' : 'They were') + ' not used for clustering, and each map has its own colour scale.' : '');
+    sub.textContent = (key === 'cm' ? 'Covariance map' : 'RMS map') + ', ' + Math.round((Number(r.n) - 1) * Number(r.um)) + ' \u00b5m window centred on the most important pixel (x ' + f1(Number(r.cx)) + ', y ' + f1(Number(r.cy)) + ' \u00b5m). ' + (key === 'cm' ? 'Colour runs from \u2212' + d3.format('.3g')(scale) + ' (blue) to +' + d3.format('.3g')(scale) + ' (red).' : 'Grey runs from 0 to ' + d3.format('.3g')(scale) + '.') + (r.ch ? ' Noise stimulus: ' + r.ch + '.' : '') +
+      (others.length ? ' The ' + (one ? 'map' : others.length + ' maps') + ' with a dashed border ' + (one ? 'comes' : 'come') + ' from the recording\u2019s other noise ' + (one ? 'stimulus' : 'stimuli') + ', cut out at the same place for comparison. ' + (one ? 'It was' : 'They were') + ' not used for clustering, and each map has its own colour scale.' : '') + ' Viewed from the door (as the stimulus lands on the retina, facing the MEA): top = up, right = right, the same view as the receptive field map, STA video and bar polar plot.';
   }
 
   // ---------- STA video (cell tab): mp4 files in sta_videos/ next to the page ----------
@@ -1513,7 +1569,7 @@ window.__EXPLORER__ = "__EXPLORER_DATA__";
     STV.v = null; STV.r = r || null; box.textContent = '';
     ['#ce-stv-play', '#ce-stv-pos', '#ce-stv-speed'].forEach((s) => { q(s).disabled = !r; });
     if (!r) { q('#ce-stv-time').textContent = ''; sub.textContent = 'No receptive field video for this cell: it has no receptive field map or its STA file was not found.'; return; }
-    const crop = Number(CFG.rf_crop_um || 300), half = crop / 2;
+    const crop = Number(r.win_um || CFG.rf_crop_um || 300), half = crop / 2;
     const avail = box.clientWidth || 480, side = Math.max(200, Math.min(360, avail - 60));
     const ml = 40, mb = 30;
     const wrap = document.createElement('div'); wrap.style.position = 'relative'; wrap.style.width = (side + ml + 8) + 'px'; wrap.style.height = (side + mb + 6) + 'px';
@@ -1535,7 +1591,7 @@ window.__EXPLORER__ = "__EXPLORER_DATA__";
     if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(tick); else v.addEventListener('timeupdate', stvLabel);
     ['play', 'pause', 'seeked', 'loadeddata'].forEach((ev) => v.addEventListener(ev, stvLabel));
     v.addEventListener('error', () => { sub.textContent = 'The video file ' + r.src + ' could not be loaded. It must sit in the sta_videos folder next to this page.'; });
-    sub.textContent = 'Spike-triggered average from ' + (r.ch || 'the noise stimulus') + ' (the noise stimulus used for clustering), ' + crop + ' µm window centred on the most important pixel, as in the map above. Each frame is ' + d3.format('~g')(Number(r.dt_ms)) + ' ms; 0 ms is the spike. Grey runs from the lowest (black) to the highest (white) value in this cell’s video. Plays at ' + r.fps + ' frames per second at 1×.';
+    sub.textContent = 'Spike-triggered average from ' + (r.ch || 'the noise stimulus') + ' (the noise stimulus used for clustering), ' + crop + ' µm window centred on the most important pixel, as in the map above. Each frame is ' + d3.format('~g')(Number(r.dt_ms)) + ' ms; 0 ms is the spike. Grey runs from the lowest (black) to the highest (white) value in this cell’s video. Plays at ' + r.fps + ' frames per second at 1×.' + ' Viewed from the door (as the stimulus lands on the retina, facing the MEA): top = up, right = right, the same view as the receptive field map, STA video and bar polar plot.';
     stvLabel();
   }
 
@@ -1604,7 +1660,7 @@ window.__EXPLORER__ = "__EXPLORER_DATA__";
     }
     [['DSI', c.dsi], ['OSI', c.osi]].forEach((k) => { const d = document.createElement('div'); d.className = 'lx-polar-stat'; const b = document.createElement('b'); b.textContent = nz(k[1], f2); const l = document.createElement('span'); l.textContent = k[0]; d.appendChild(b); d.appendChild(l); st.appendChild(d); });
     sub.textContent = 'Peak firing rate for each bar direction: the numbers DSI and OSI were calculated from. Rings are in Hz. The black arrow is the vector average of the responses: it points to the preferred direction, and its length (0 at the centre, 1 at the outer ring) shows how strongly the cell prefers it.' +
-      (reps ? ' Around the plot, each raster shows every repeat (one row each) for the direction its bar moved, over the ' + d3.format('~g')(dsec) + ' s that direction was shown. Rasters show raw spike times, not peak-aligned.' : '');
+      (reps ? ' Around the plot, each raster shows every repeat (one row each) for the direction its bar moved, over the ' + d3.format('~g')(dsec) + ' s that direction was shown. Rasters show raw spike times, not peak-aligned.' : '') + ' Viewed from the door (as the stimulus lands on the retina, facing the MEA): top = up, right = right, the same view as the receptive field map, STA video and bar polar plot.';
   }
 
   // ---------- individual repeats (cell tab) ----------
