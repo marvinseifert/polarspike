@@ -40,7 +40,7 @@ def read_cache(path):
 def load_signature(c):
     keys = ('recordings','groups','groups_by_recording','group_mode','quality',
             'bar_indices','bar_indices_by_recording','rf_sources','processing',
-            'rf_recordings_only','rf_min_cells')
+            'rf_recordings_only','rf_min_cells','rf_pixel_rule')
     return digest(dict(version=VERSION,master=storage.fingerprint(c['master_file']),
                        settings={k:c[k] for k in keys}))
 
@@ -60,7 +60,9 @@ def rf_choices(db, c):
         if c['recordings'] is not None and recording not in c['recordings']:
             continue
         subset = table[(table.recording==recording)&(table.status=='complete')]
-        options = [f'rf:{int(r.stimulus_index)}:{r.channel}' for r in subset.itertuples()]
+        rule = c.get('rf_pixel_rule', storage.RF_PIXEL_RULE)
+        options = [f'rf:{int(r.stimulus_index)}:{r.channel}' for r in subset.itertuples()
+                   if storage.rf_allowed(recording, r.channel, rule)]
         if recording in c['rf_sources']:
             value = c['rf_sources'][recording]
             if value is not None and value not in options:

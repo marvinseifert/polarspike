@@ -56,6 +56,7 @@ import numpy as np
 import pandas as pd
 
 warnings.filterwarnings('ignore')
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 # =============================================================================
 # SETTINGS  (everything here can also be set on the command line)
@@ -81,8 +82,8 @@ CROP_UM = 500
 # Also show each cell's map from the other (finer) noise stimulus of its recording.
 RF_OTHER = True
 
-# STA videos (mp4) made for the October 2026 explorer. None = no videos.
-STA_VIDEO_DIR = Path('/run/media/laura/Crucial X9/Laura Steel - Baden Lab backup/Tom meetings/explorer/sta_videos')
+# STA videos made by make_sta_videos.py from the v2 noise data. None = no videos.
+STA_VIDEO_DIR = Path('/mnt/mea_nas/Laura/RGC_clustering/sta_videos_v2')
 
 # Feature space tab (cells plotted in the clustering space).
 FEATURE_SPACE = True
@@ -925,6 +926,15 @@ def build(args):
         all_recs = sorted([r[0] for r in con.execute('select recording from recordings')], key=date_key)
         cells_in_master = dict(con.execute('select recording, count(*) from cells group by recording').fetchall())
     rf_by_rec = {}
+    rf_rule_broken = set()
+    if con is not None:
+        try:
+            import clustering_data_extraction_all_functions as storage
+            for rec, ch in con.execute("select recording, channel from rf_sources where status='complete'"):
+                if not storage.rf_allowed(rec, ch):
+                    rf_rule_broken.add(rec)
+        except Exception:  # noqa: BLE001
+            pass
     if con is not None and rf_on:
         for rec in all_recs:
             if rec in used_recs:
@@ -966,7 +976,9 @@ def build(args):
             n = int(cells_in_master.get(rec, 0))
             if rf_on:
                 best = rf_by_rec.get(rec, np.nan)
-                if not math.isfinite(best):
+                if rec in rf_rule_broken:
+                    note, rel = 'Receptive field noise breaks the 12 px / 32 px rule (pixel size change on 20/04/2026)', True
+                elif not math.isfinite(best):
                     note, rel = 'No receptive field data', True
                 elif rf_thr is not None and best <= rf_thr:
                     note, rel = f'No cell with receptive field quality above {rf_thr:g} (best {best:.1f})', True

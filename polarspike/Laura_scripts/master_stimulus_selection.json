@@ -7,7 +7,8 @@
     "region": "Where on the retina the recording was made (e.g. 'dorsal', 'ventral'). Fill in later; can be changed without re-extracting spikes.",
     "notes": "Free text, copied into the master file.",
     "regions_table": "Retinal region of every recording ('<date>/<phase>'), given by Laura 2026-11-19. Used for 'region' when a recording entry has none.",
-    "excluded": "Recordings that must not be extracted, with the reason (Laura, 2026-11-19)."
+    "excluded": "Recordings that must not be extracted, with the reason (Laura, 2026-11-19).",
+    "rf_pixel_rule": "Projector pixel size changed on 20/04/2026: only 12px noise is used before that date and only 32px noise after it (RF_PIXEL_RULE in the extraction functions / clustering_master_main.py). RF data that breaks the rule stays in the master file but is not used."
   },
   "nas_root": "/mnt/mea_nas/Laura",
   "expected_bar_repeats": 10,
@@ -419,7 +420,7 @@
         "file": "noise_analysis_QI10/noise_data_v2.nc"
       },
       "region": null,
-      "notes": "ND series: only the ND0 block is used (flashes 14-16, bar 17, noise 18). RF noise is 12px 15 min 1000px."
+      "notes": "ND series: only the ND0 block is used (flashes 14-16, bar 17, noise 18). RF noise is 12px 15 min 1000px. RF NOT USED: 12px noise after the 20/04/2026 pixel size change."
     },
     "23_04_2026": {
       "phase": "Phase_00",
@@ -465,7 +466,7 @@
         "file": "noise_analysis_QI10/noise_data_v2.nc"
       },
       "region": null,
-      "notes": "ND series: only the ND0 block is used (flashes 14-16, bar 17, noise 18). RF noise is 12px 15 min 1000px."
+      "notes": "ND series: only the ND0 block is used (flashes 14-16, bar 17, noise 18). RF noise is 12px 15 min 1000px. RF NOT USED: 12px noise after the 20/04/2026 pixel size change."
     },
     "30_04_2026": {
       "phase": "Phase_00",
@@ -547,7 +548,7 @@
         "file": "noise_analysis_QI10/noise_data_v2.nc"
       },
       "region": null,
-      "notes": "RF noise is 12px 25 min x12 (different version from 12px_20Hz_shuffle)."
+      "notes": "RF noise is 12px 25 min x12 (different version from 12px_20Hz_shuffle). RF NOT USED: 12px noise after the 20/04/2026 pixel size change."
     },
     "15_05_2026": {
       "phase": "Phase_00",
@@ -587,7 +588,7 @@
         "file": "noise_analysis_QI10/noise_data_v2.nc"
       },
       "region": null,
-      "notes": "Bar 4 (3 is moving_bar_tiny). RF noise is 12px 25 min white."
+      "notes": "Bar 4 (3 is moving_bar_tiny). RF noise is 12px 25 min white. RF NOT USED: 12px noise after the 20/04/2026 pixel size change."
     },
     "15_10_2026": {
       "phase": "Phase_00",

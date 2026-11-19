@@ -66,6 +66,26 @@ create table if not exists rf_sources(
 """
 TABLES = ('meta', 'recordings', 'cells', 'stimuli', 'qi_timing', 'observations', 'features', 'rf_sources')
 
+# Projector pixel size changed on 20/04/2026: only 12 px noise is comparable before that
+# date and only 32 px noise after it (similar real checker size). RF data from any other
+# combination is not used (Laura, 2026-11-19).
+RF_PIXEL_RULE = dict(change_date='20_04_2026', before_px=12, after_px=32)
+
+
+def recording_date(recording):
+    day, month, year = (int(v) for v in recording.split('_')[:3])
+    return year, month, day
+
+
+def rf_allowed(recording, channel, rule=RF_PIXEL_RULE):
+    """True if the RF noise channel may be used for this recording under the pixel-size rule."""
+    if not rule:
+        return True
+    match = re.match(r'(\d+)px', str(channel))
+    pixel = int(match.group(1)) if match else None
+    before = recording_date(recording) < recording_date(rule['change_date'])
+    return pixel == (rule['before_px'] if before else rule['after_px'])
+
 
 # ----------------------------------------------------------------------------
 # small helpers

@@ -57,6 +57,10 @@ MOVING_BAR_INDICES_BY_RECORDING = {}  # e.g. {'12_08_2026': [11]}
 # Choose one exact RF context per recording if you exported multiple RF sources.
 # Print run.inspect_master() to see names. None means do not use RF for that rec.
 RF_SOURCES = {}  # e.g. {'02_12_2025': 'rf:4:12px_20Hz_shuffle'}
+# Projector pixel size changed on 20/04/2026: use 12 px noise only before that date and
+# 32 px noise only after it. RF data breaking the rule is ignored (cells keep their flash
+# and bar responses). None = use every RF source.
+RF_PIXEL_RULE = dict(change_date='20_04_2026', before_px=12, after_px=32)
 
 PROCESSING = dict(
     bandwidth_s=0.05, samples=1000,
@@ -96,7 +100,7 @@ def config():
         group_mode=GROUP_MODE, quality=QUALITY, features=FEATURES,
         rf_recordings_only=RF_RECORDINGS_ONLY, rf_min_cells=RF_MIN_CELLS,
         exclude_missing=EXCLUDE_MISSING_FEATURES, bar_indices=MOVING_BAR_INDICES,
-        bar_indices_by_recording=MOVING_BAR_INDICES_BY_RECORDING, rf_sources=RF_SOURCES,
+        bar_indices_by_recording=MOVING_BAR_INDICES_BY_RECORDING, rf_sources=RF_SOURCES, rf_pixel_rule=RF_PIXEL_RULE,
         processing=PROCESSING, analysis=ANALYSIS, plotting=PLOTTING))
 
 

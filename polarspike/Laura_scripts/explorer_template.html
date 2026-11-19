@@ -214,6 +214,7 @@ body{padding:1.25rem clamp(.75rem,3vw,2.5rem) 3rem}
     <p data-needs="unassigned"><span class="lx-n" data-source="run_summary" data-field="value" data-where="key=n_unassigned">—</span> rows could not be assigned to a cluster and are not shown.</p>
   </div>
 
+  <div class="lx-note" style="margin-top:1.2rem" data-needs="rf"><b>Noise pixel size rule.</b> The projector pixel size changed on 20/04/2026. Receptive fields are taken only from 12&nbsp;px noise in recordings before that date and only from 32&nbsp;px noise in recordings after it, so the real checker size is similar throughout. Recordings whose noise breaks this rule keep their flash and bar responses but have no receptive field data here.</div>
   <div class="lx-note" style="margin-top:1.2rem" data-needs="rf multipx"><b>Read with care.</b> The receptive field noise stimulus differs between recordings (pixel sizes <span class="lx-n" data-source="run_summary" data-field="value" data-where="key=n_pixel_sizes">—</span>, see the table), so receptive field sizes and strengths are not strictly comparable across recordings.</div>
   <div class="lx-note" data-needs="rfonly"><b>Read with care.</b> The <span class="lx-n" data-source="run_summary" data-field="value" data-where="key=n_rf_only">—</span> cells admitted on receptive field quality alone may respond weakly or not at all to flashes.</div>
 
