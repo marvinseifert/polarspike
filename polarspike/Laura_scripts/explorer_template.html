@@ -46,6 +46,26 @@ body{padding:1.25rem clamp(.75rem,3vw,2.5rem) 3rem}
 .lx-tabs{display:flex;gap:.15rem;border-bottom:1px solid var(--color-border-line);margin:1.1rem 0 1.25rem;overflow-x:auto}
 .lx-tab{appearance:none;background:none;border:0;border-bottom:2px solid transparent;margin-bottom:-1px;padding:.55rem .9rem;color:var(--color-fg-muted);font:inherit;cursor:pointer;white-space:nowrap}
 .lx-tab:hover{color:var(--color-fg)}
+.lx-rf-h{margin:1.1rem 0 .5rem}
+.lx-sp-lab{font-size:12px;font-weight:var(--cds-font-weight-medium);paint-order:stroke;stroke:var(--color-bg);stroke-width:3px}
+.lx-rf-row{display:flex;flex-wrap:wrap;gap:var(--cds-gap-md);align-items:flex-start}
+.lx-rf-fig{margin:0;padding:.5rem;border:1px solid transparent;border-radius:var(--cds-radius);min-width:0;max-width:100%;overflow-x:auto}
+.lx-rf-other{border:1px dashed var(--color-border-line)}
+.lx-rf-fig figcaption{display:flex;flex-wrap:wrap;gap:.4rem;align-items:baseline;margin:0 0 .35rem;font-size:var(--cds-font-size-caption)}
+.lx-rf-tag{font-weight:var(--cds-font-weight-medium);color:var(--color-fg)}
+.lx-rf-tag-off{font-weight:normal;color:var(--color-fg-muted);font-style:italic}
+.lx-rf-ch{color:var(--color-fg-muted)}
+.lx-polar{display:flex;flex-wrap:wrap;gap:var(--cds-gap-md);align-items:center}
+.lx-polar>.lx-box{flex:1 1 300px;min-width:0;overflow-x:auto}
+.lx-dir-raster{position:absolute;border:1px solid var(--color-border-line);border-radius:2px;background:var(--color-bg)}
+.lx-dir-lab{position:absolute;bottom:100%;left:0;right:0;font-size:10px;color:var(--color-fg-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;line-height:14px}
+.lx-polar-stats{display:flex;flex-direction:column;gap:.75rem;min-width:6rem}
+.lx-polar-stat b{display:block;font-size:1.6rem;font-variant-numeric:tabular-nums;line-height:1.1}
+.lx-polar-stat span{color:var(--color-fg-muted);font-size:var(--cds-font-size-caption)}
+.lx-rf-grid{display:grid;gap:.5rem}
+.lx-rf-tile{appearance:none;background:none;border:1px solid var(--color-border-line);border-radius:var(--cds-radius);padding:0;cursor:pointer;min-width:0;overflow:hidden;font:inherit;color:var(--color-fg-muted);text-align:left}
+.lx-rf-tile:hover,.lx-rf-tile:focus-visible{border-color:var(--color-fg);color:var(--color-fg)}
+.lx-rf-lab{display:block;font-size:10px;padding:.15rem .3rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lx-tab[aria-selected=true]{color:var(--color-fg);border-bottom-color:var(--color-fg);font-weight:var(--cds-font-weight-medium)}
 .lx button:focus-visible,.lx select:focus-visible,.lx input:focus-visible,.lx [tabindex]:focus-visible{outline:2px solid var(--color-fg);outline-offset:2px}
 .lx-view[hidden]{display:none}
@@ -119,7 +139,9 @@ body{padding:1.25rem clamp(.75rem,3vw,2.5rem) 3rem}
       <button class="lx-tab" id="tab-dataset" data-tab="dataset" type="button">Dataset</button>
       <button class="lx-tab" id="tab-method" data-tab="method" type="button">Method</button>
       <button class="lx-tab" id="tab-clusters" data-tab="clusters" type="button">All clusters</button>
+      <button class="lx-tab" id="tab-space" data-tab="space" type="button" data-needs="space">Feature space</button>
       <button class="lx-tab" id="tab-cluster" data-tab="cluster" type="button">One cluster</button>
+      <button class="lx-tab" id="tab-rfs" data-tab="rfs" type="button" data-needs="rfmap">Receptive fields</button>
       <button class="lx-tab" id="tab-cell" data-tab="cell" type="button">One cell</button>
     </nav>
   </header>
@@ -127,10 +149,39 @@ body{padding:1.25rem clamp(.75rem,3vw,2.5rem) 3rem}
     <section class="lx-view" id="view-dataset"></section>
     <section class="lx-view" id="view-method" hidden></section>
     <section class="lx-view" id="view-clusters" hidden></section>
+    <section class="lx-view" id="view-space" hidden data-needs="space"></section>
     <section class="lx-view" id="view-cluster" hidden></section>
+    <section class="lx-view" id="view-rfs" hidden data-needs="rfmap"></section>
     <section class="lx-view" id="view-cell" hidden></section>
   </main>
 </div>
+
+<template id="tpl-space">
+  <h2>Feature space</h2>
+  <p class="lx-sub" style="max-width:62rem">Every cell is a point in the space the clustering was done in: the PCA scores of each stimulus (and any extra measures such as DSI), joined together. That space has many dimensions, so this view shows two directions through it at a time. Each ellipse is one fitted cluster, drawn 2 standard deviations wide from the model itself, so it shows the cloud the clustering found, seen from the chosen angle. Clusters that overlap here may still be well apart in other directions.</p>
+  <div class="lx-controls">
+    <label>View<select id="sp-view"><option value="ld">Best separation of clusters</option><option value="pc">Largest spread (combined PCA)</option><option value="custom">Choose axes</option></select></label>
+    <label>Horizontal axis<select id="sp-x"></select></label>
+    <label>Vertical axis<select id="sp-y"></select></label>
+    <label>Highlight<select id="sp-hi"></select></label>
+  </div>
+  <div class="lx-controls">
+    <label class="lx-inline"><input type="checkbox" id="sp-pts" checked> Cells</label>
+    <label class="lx-inline"><input type="checkbox" id="sp-ell" checked> Cluster spread</label>
+    <label class="lx-inline">only for clusters with more than <input type="number" id="sp-min" min="0" step="1" value="0" style="width:4.5rem"> cells</label>
+    <label class="lx-inline"><input type="checkbox" id="sp-lab" checked> Cluster numbers</label>
+    <button type="button" class="lx-btn" id="sp-reset">Reset zoom</button>
+  </div>
+  <div id="sp-plot" class="lx-box" style="position:relative"></div>
+  <p class="lx-sub" id="sp-note"></p>
+</template>
+
+<template id="tpl-rfs">
+  <h2>Receptive field maps</h2>
+  <p class="lx-sub" id="rf-sub"></p>
+  <div class="lx-controls"><label>Map<select id="rf-type"></select></label><label>Cluster<select id="rf-cluster"></select></label><label>Map size<select id="rf-size"><option value="64">Small</option><option value="96">Medium</option><option value="140">Large</option></select></label></div>
+  <div id="rf-grid" class="lx-box"></div>
+</template>
 
 <template id="tpl-dataset">
   <div class="lx-prose">
@@ -276,6 +327,7 @@ body{padding:1.25rem clamp(.75rem,3vw,2.5rem) 3rem}
     <div class="lx-card" data-needs="sta"><h3>Receptive field time course</h3><p class="lx-sub" id="cl-sta-sub"></p><div id="cl-sta" class="lx-box" data-source="cell_sta cluster_sta cells stim_axes"></div></div>
     <div class="lx-card"><h3>Which recordings these cells came from</h3><p class="lx-sub">Bars are cell counts. The tick marks how many to expect if recordings were mixed evenly.</p><div id="cl-recs" class="lx-box" data-source="cluster_recording recordings"></div></div>
   </div>
+  <div class="lx-card"><h3>Which retinal regions these cells came from</h3><p class="lx-sub">Bars are cell counts, summed over the recordings from each region. The tick marks how many to expect if regions were mixed evenly.</p><div id="cl-regions" class="lx-box" data-source="cluster_recording recordings"></div></div>
   <div class="lx-card"><h3>Other features</h3><p class="lx-sub">Bars are this cluster. The line is all cells, scaled to the same total.</p><div id="cl-hists" class="lx-box" data-source="cells"></div></div>
   <h2 id="cluster-cells">Cells in this cluster</h2>
   <div class="lx-tablewrap"><table id="cl-cells" data-source="cells" data-row-key="uid"></table></div>
@@ -304,7 +356,9 @@ body{padding:1.25rem clamp(.75rem,3vw,2.5rem) 3rem}
     <div class="lx-card" data-needs="sta"><h3>Receptive field time course</h3><p class="lx-sub" id="ce-sta-sub"></p><div id="ce-sta" class="lx-box" data-source="cell_sta cluster_sta stim_axes cells"></div></div>
     <div class="lx-card"><h3>Response quality</h3><p class="lx-sub">Quality index per stimulus. The dashed line is the cutoff for inclusion.</p><div id="ce-qi" class="lx-box" data-source="cells run_summary"></div></div>
   </div>
+  <div class="lx-card" data-needs="polar"><h3>Moving bar direction tuning</h3><p class="lx-sub" id="ce-polar-sub"></p><div class="lx-polar"><div id="ce-polar" class="lx-box"></div><div id="ce-polar-stats" class="lx-polar-stats"></div></div></div>
   <div class="lx-card" data-needs="rfmap"><h3>Receptive field map</h3><p class="lx-sub" id="ce-rf-sub"></p><div class="lx-controls"><label>Map<select id="ce-rf-type"></select></label></div><div id="ce-rf" class="lx-box"></div></div>
+  <div class="lx-card" data-needs="stavideo"><h3>Receptive field video</h3><p class="lx-sub" id="ce-stv-sub"></p><div class="lx-controls"><button class="lx-btn" id="ce-stv-play" type="button">Play</button><label>Frame<input type="range" id="ce-stv-pos" min="0" max="0" value="0" step="1" style="min-width:12rem"></label><label>Speed<select id="ce-stv-speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select></label><span class="lx-n" id="ce-stv-time" style="font-variant-numeric:tabular-nums;min-width:7rem"></span></div><div id="ce-stv" class="lx-box"></div></div>
   <div class="lx-card"><h3>All numbers for this cell</h3><dl class="lx-kv" id="ce-kv" data-source="cells"></dl></div>
 </template>
 
@@ -335,7 +389,7 @@ window.__EXPLORER__ = "__EXPLORER_DATA__";
 </script>
 <script>
 (function () {
-  const TABS = ['dataset', 'method', 'clusters', 'cluster', 'cell'];
+  const TABS = ['dataset', 'method', 'clusters', 'space', 'cluster', 'rfs', 'cell'];
   const EX = window.__EXPLORER__ || {}; const CFG = EX.config || {}; const FLAGS = CFG.flags || {};
   const ALL_STIMS = ['scf', 'csteps', 'chirp', 'moving_bar'];
   const STIMS = (CFG.stims && CFG.stims.length) ? CFG.stims : ALL_STIMS;
@@ -346,7 +400,7 @@ window.__EXPLORER__ = "__EXPLORER_DATA__";
   const root = document.getElementById('lx-root');
   const q = (s, r) => (r || root).querySelector(s);
   const qa = (s, r) => Array.from((r || root).querySelectorAll(s));
-  const S = { tab: 'dataset', cluster: 1, uid: null, norm: 'hz', sort: 'conf', small: false, overlay: true, rep: 'off', repZoom: 1, repPos: 0 };
+  const S = { tab: 'dataset', cluster: 1, uid: null, norm: 'hz', sort: 'conf', small: false, overlay: true, rep: 'raster', repZoom: 1, repPos: 0, rfCluster: 'all', rfSize: 96, spView: 'ld', spX: 'ld1', spY: 'ld2', spHi: 'all', spPts: true, spEll: true, spLab: true, spMin: 0, stvSpeed: 1 };
   const built = {};
   const fi = d3.format(','), f1 = d3.format('.1f'), f2 = d3.format('.2f'), f3 = d3.format('.3f');
   const p0 = d3.format('.0%'), p1 = d3.format('.1%');
@@ -498,7 +552,7 @@ window.__EXPLORER__ = "__EXPLORER_DATA__";
     bands(svg.append('g'), stim, x, H, 1);
     const X = (i) => x(i * dur / (n - 1));
     if (sem) svg.append('path').attr('d', d3.area().defined((d) => Number.isFinite(d)).x((d, i) => X(i)).y0((d, i) => yy(Math.max(0, y[i] - sem[i]))).y1((d, i) => yy(y[i] + sem[i]))(y)).style('fill', accent()).attr('opacity', 0.2);
-    svg.append('path').attr('d', d3.line().defined((d) => Number.isFinite(d)).x((d, i) => X(i)).y((d) => yy(d))(y)).style('fill', 'none').style('stroke', accent()).attr('stroke-width', 1.1).attr('stroke-linejoin', 'round');
+    svg.append('path').attr('d', d3.line().defined((d) => Number.isFinite(d)).x((d, i) => X(i)).y((d) => yy(d))(y)).style('fill', 'none').style('stroke', accent()).attr('stroke-width', 0.6).attr('vector-effect', 'non-scaling-stroke').attr('stroke-linejoin', 'round');
     svg.append('line').attr('x1', 0).attr('x2', W).attr('y1', H - 0.5).attr('y2', H - 0.5).style('stroke', 'var(--cds-chart-axis)');
   }
 
@@ -616,10 +670,10 @@ window.__EXPLORER__ = "__EXPLORER_DATA__";
   function showTab(t, fromLink) {
     S.tab = t;
     qa('.lx-tab').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === t)));
-    TABS.forEach((n) => { q('#view-' + n).hidden = n !== t; });
+    TABS.forEach((n) => { const v = q('#view-' + n); if (v) v.hidden = n !== t; });
     if (!built[t]) {
       const tpl = document.getElementById('tpl-' + t); q('#view-' + t).appendChild(tpl.content.cloneNode(true)); built[t] = true; applyNeeds(q('#view-' + t));
-      if (t === 'clusters') wireOverview(); if (t === 'cluster') wireCluster(); if (t === 'cell') wireCell();
+      if (t === 'clusters') wireOverview(); if (t === 'cluster') wireCluster(); if (t === 'cell') wireCell(); if (t === 'rfs') wireRfs(); if (t === 'space') wireSpace();
     }
     if (!fromLink) dash.setLink('tab-' + t);
     fillSummary(); drawActive();
@@ -643,7 +697,7 @@ window.__EXPLORER__ = "__EXPLORER_DATA__";
   }
 
   // ---------- Dataset tab ----------
-  const DS_COLS = [['recording', 'Recording', 0], ['status', 'Status', 0], ['examined', 'Cells examined', 1], ['used', 'Cells used', 1], ['ff_only', 'Flash only', 1], ['rf_only', 'RF only', 1], ['both', 'Both', 1], ['with_sta', 'With RF trace', 1], ['scf_qi_med', 'Flash QI', 1], ['csteps_qi_med', 'Step QI', 1], ['chirp_qi_med', 'Chirp QI', 1], ['rf_quality_med', 'RF quality', 1], ['rf_context', 'RF noise stimulus', 0], ['rep_scf', 'Flash repeats', 1], ['rep_csteps', 'Step repeats', 1], ['rep_chirp', 'Chirp repeats', 1], ['rep_bar', 'Bar repeats', 1], ['note', 'Note', 0]];
+  const DS_COLS = [['recording', 'Recording', 0], ['region', 'Retinal region', 0], ['status', 'Status', 0], ['examined', 'Cells examined', 1], ['used', 'Cells used', 1], ['ff_only', 'Flash only', 1], ['rf_only', 'RF only', 1], ['both', 'Both', 1], ['with_sta', 'With RF trace', 1], ['scf_qi_med', 'Flash QI', 1], ['csteps_qi_med', 'Step QI', 1], ['chirp_qi_med', 'Chirp QI', 1], ['rf_quality_med', 'RF quality', 1], ['rf_context', 'RF noise stimulus', 0], ['rep_scf', 'Flash repeats', 1], ['rep_csteps', 'Step repeats', 1], ['rep_chirp', 'Chirp repeats', 1], ['rep_bar', 'Bar repeats', 1], ['note', 'Note', 0]];
   function dsCols() {
     return DS_COLS.filter((c) => {
       const k = c[0];
@@ -843,6 +897,7 @@ window.__EXPLORER__ = "__EXPLORER_DATA__";
       const l1 = document.createElement('div'); l1.textContent = fi(c.cells) + ' cells from ' + c.recordings + (c.recordings === 1 ? ' recording' : ' recordings'); meta.appendChild(l1);
       const l2 = document.createElement('div'); l2.textContent = 'Median rate ' + nz(c.rate_med, f1) + ' Hz'; meta.appendChild(l2);
       if (FLAGS.sta) { const l3 = document.createElement('div'); l3.textContent = 'RF trace: ' + fi(c.rf_cells) + ' cells'; meta.appendChild(l3); }
+      if (c.top_region) { const l5 = document.createElement('div'); l5.textContent = p0(c.top_region_share) + ' ' + c.top_region; meta.appendChild(l5); }
       if (c.top_ratio >= 3 && c.cells >= 20) { const l4 = document.createElement('div'); l4.className = 'lx-warn'; l4.textContent = p0(c.top_share) + ' from ' + c.top_recording; meta.appendChild(l4); }
       lab.appendChild(meta);
       const svg = d3.select(lab).append('svg').attr('width', '100%').attr('height', 8).attr('viewBox', '0 0 100 8').attr('preserveAspectRatio', 'none').style('display', 'block').style('margin-top', '6px');
@@ -872,7 +927,7 @@ window.__EXPLORER__ = "__EXPLORER_DATA__";
     const pad = (hi - lo) * 0.1 || 0.02; const yy = d3.scaleLinear([lo - pad, hi + pad], [H - 2, 2]); const x = d3.scaleLinear([0, n - 1], [1, W - 1]);
     svg.append('line').attr('x1', 0).attr('x2', W).attr('y1', yy(0.5)).attr('y2', yy(0.5)).style('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '3 3');
     svg.append('path').attr('d', d3.area().defined((d) => Number.isFinite(d)).x((d, i) => x(i)).y0((d, i) => yy(y[i] - sem[i])).y1((d, i) => yy(y[i] + sem[i]))(y)).style('fill', accent()).attr('opacity', 0.2);
-    svg.append('path').attr('d', d3.line().defined((d) => Number.isFinite(d)).x((d, i) => x(i)).y((d) => yy(d))(y)).style('fill', 'none').style('stroke', accent()).attr('stroke-width', 1.4).attr('stroke-linejoin', 'round');
+    svg.append('path').attr('d', d3.line().defined((d) => Number.isFinite(d)).x((d, i) => x(i)).y((d) => yy(d))(y)).style('fill', 'none').style('stroke', accent()).attr('stroke-width', 0.6).attr('vector-effect', 'non-scaling-stroke').attr('stroke-linejoin', 'round');
     svg.append('line').attr('x1', 0).attr('x2', W).attr('y1', H - 0.5).attr('y2', H - 0.5).style('stroke', 'var(--cds-chart-axis)');
   }
 
@@ -939,6 +994,7 @@ window.__EXPLORER__ = "__EXPLORER_DATA__";
     });
     if (FLAGS.sta) drawClusterSta(list);
     drawClusterRecs(cr, rec);
+    drawClusterRegions(cr, rec);
     drawHists(cells, list);
     drawClusterTable(list);
   }
@@ -951,6 +1007,31 @@ window.__EXPLORER__ = "__EXPLORER_DATA__";
     sub.textContent = lines.length ? fi(lines.length) + ' of ' + fi(list.length) + ' cells have a trace. Thin lines are single cells; the thick line is the average.' : 'No cell in this cluster has a receptive field trace.';
     if (!lines.length) { box.textContent = ''; return; }
     drawSta(box, lines, [{ y: arr(m.mean), sem: arr(m.sem), color: accent(), width: 2.2, label: 'Cluster average' }], { h: 210 });
+  }
+  function drawClusterRegions(cr, rec) {
+    const box = q('#cl-regions'); if (!(cr && rec)) { box.classList.add('dash-skeleton'); return; } box.classList.remove('dash-skeleton');
+    box.textContent = ''; box.classList.add('lx-box');
+    const used = rec.filter((r) => r.status === 'Used'); const regionOf = new Map(used.map((r) => [r.recording, r.region || 'unknown']));
+    const totals = d3.rollup(used, (v) => d3.sum(v, (r) => r.used), (r) => r.region || 'unknown');
+    const mine = d3.rollup(cr.filter((r) => r.cluster === S.cluster), (v) => d3.sum(v, (r) => r.cells), (r) => regionOf.get(r.recording) || 'unknown');
+    const recsIn = d3.rollup(used, (v) => v.map((r) => r.recording), (r) => r.region || 'unknown');
+    const regions = Array.from(totals.keys()).sort((a, b) => totals.get(b) - totals.get(a));
+    const total = d3.sum(Array.from(totals.values())); const n = d3.sum(Array.from(mine.values()));
+    const rh = 24, W = Math.max(300, box.clientWidth || 0), m = { l: 170, r: 40, t: 4, b: 20 }; const H = m.t + m.b + rh * regions.length;
+    const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', '0 0 ' + W + ' ' + H).style('display', 'block');
+    const mx = Math.max(1, d3.max(regions, (g) => Math.max(mine.get(g) || 0, n * totals.get(g) / total)));
+    const x = d3.scaleLinear([0, mx * 1.05], [m.l, W - m.r]); const tip = tipFor(box);
+    x.ticks(4).forEach((v) => { svg.append('line').attr('x1', x(v)).attr('x2', x(v)).attr('y1', m.t).attr('y2', H - m.b).style('stroke', 'var(--cds-chart-grid)'); svg.append('text').attr('class', 'lx-tick').attr('x', x(v)).attr('y', H - 5).attr('text-anchor', 'middle').text(fi(v)); });
+    regions.forEach((g, i) => {
+      const y = m.t + i * rh; const v = mine.get(g) || 0; const e = n * totals.get(g) / total;
+      svg.append('text').attr('class', 'lx-lab').attr('x', m.l - 8).attr('y', y + rh / 2 + 4).attr('text-anchor', 'end').text(g);
+      svg.append('rect').attr('x', m.l).attr('y', y + 4).attr('width', Math.max(0, x(v) - m.l)).attr('height', rh - 8).attr('rx', 2).style('fill', accent());
+      svg.append('line').attr('x1', x(e)).attr('x2', x(e)).attr('y1', y + 1).attr('y2', y + rh - 1).style('stroke', 'var(--color-fg)').attr('stroke-width', 2);
+      svg.append('text').attr('class', 'lx-tick').attr('x', Math.max(x(v), x(e)) + 6).attr('y', y + rh / 2 + 4).text(fi(v));
+      svg.append('rect').attr('x', m.l).attr('y', y).attr('width', W - m.l - m.r).attr('height', rh).style('fill', 'transparent')
+        .on('pointermove', (ev) => { setTip(tip, [{ text: g, dim: true }, { text: fi(v) + ' cells in this cluster' }, { text: f1(e) + ' expected if mixed evenly', dim: true }, { text: 'Recordings: ' + (recsIn.get(g) || []).join(', '), dim: true }]); placeTip(box, tip, ev.clientX, ev.clientY); })
+        .on('pointerleave', () => { tip.hidden = true; });
+    });
   }
   function drawClusterRecs(cr, rec) {
     const box = q('#cl-recs'); if (!(cr && rec)) { box.classList.add('dash-skeleton'); return; } box.classList.remove('dash-skeleton');
@@ -970,7 +1051,7 @@ window.__EXPLORER__ = "__EXPLORER_DATA__";
       svg.append('line').attr('x1', x(e)).attr('x2', x(e)).attr('y1', y + 1).attr('y2', y + rh - 1).style('stroke', 'var(--color-fg)').attr('stroke-width', 2);
       svg.append('text').attr('class', 'lx-tick').attr('x', Math.max(x(v), x(e)) + 6).attr('y', y + rh / 2 + 4).text(fi(v));
       svg.append('rect').attr('x', m.l).attr('y', y).attr('width', W - m.l - m.r).attr('height', rh).style('fill', 'transparent')
-        .on('pointermove', (ev) => { setTip(tip, [{ text: r.recording, dim: true, color: colors[r.recording] }, { text: fi(v) + ' cells in this cluster' }, { text: f1(e) + ' expected if mixed evenly', dim: true }]); placeTip(box, tip, ev.clientX, ev.clientY); })
+        .on('pointermove', (ev) => { setTip(tip, [{ text: r.recording + (r.region ? ' (' + r.region + ')' : ''), dim: true, color: colors[r.recording] }, { text: fi(v) + ' cells in this cluster' }, { text: f1(e) + ' expected if mixed evenly', dim: true }]); placeTip(box, tip, ev.clientX, ev.clientY); })
         .on('pointerleave', () => { tip.hidden = true; });
     });
   }
@@ -1040,6 +1121,11 @@ window.__EXPLORER__ = "__EXPLORER_DATA__";
       q('#ce-rep-pos').addEventListener('input', (e) => { S.repPos = (+e.target.value) / 100; drawCell(); });
     }
     if (FLAGS.rfmap) q('#ce-rf-type').addEventListener('change', (e) => { S.rfType = e.target.value; drawCell(); });
+    if (FLAGS.stavideo) {
+      q('#ce-stv-play').addEventListener('click', () => { const v = STV.v; if (!v) return; if (v.paused) { if (v.ended) v.currentTime = 0; v.play(); } else v.pause(); });
+      q('#ce-stv-pos').addEventListener('input', (e) => { const v = STV.v; if (!v || !STV.r) return; v.pause(); v.currentTime = (+e.target.value + 0.5) / Number(STV.r.fps); stvLabel(); });
+      q('#ce-stv-speed').addEventListener('change', (e) => { S.stvSpeed = +e.target.value; if (STV.v) STV.v.playbackRate = S.stvSpeed; });
+    }
     q('#ce-find').addEventListener('change', (e) => {
       const cells = get('cells'); const t = e.target.value.trim().toLowerCase(); if (!cells || !t) return;
       const hit = cells.find((c) => c.uid.toLowerCase() === t) || cells.find((c) => c.uid.toLowerCase().includes(t));
@@ -1068,7 +1154,7 @@ window.__EXPLORER__ = "__EXPLORER_DATA__";
     head.textContent = '';
     const h = document.createElement('div'); h.className = 'lx-headline';
     const big = document.createElement('div'); big.className = 'lx-big'; big.textContent = c.uid; h.appendChild(big);
-    [ 'Cluster ' + c.cluster + ' with ' + p1(c.conf) + ' confidence', c.ff_pass ? 'Passed flash quality' : 'Did not pass flash quality', FLAGS.rf ? (c.rf_pass ? 'Passed receptive field quality' : 'Did not pass receptive field quality') : null].filter(Boolean).forEach((t) => { const s = document.createElement('span'); s.textContent = t; h.appendChild(s); });
+    [ 'Cluster ' + c.cluster + ' with ' + p1(c.conf) + ' confidence', c.region ? 'Region: ' + c.region : null, c.ff_pass ? 'Passed flash quality' : 'Did not pass flash quality', FLAGS.rf ? (c.rf_pass ? 'Passed receptive field quality' : 'Did not pass receptive field quality') : null].filter(Boolean).forEach((t) => { const s = document.createElement('span'); s.textContent = t; h.appendChild(s); });
     head.appendChild(h);
     const alts = document.createElement('div'); alts.className = 'lx-sub'; alts.style.marginTop = '.5rem';
     const al = [[c.p1_cluster, c.p1], [c.p2_cluster, c.p2], [c.p3_cluster, c.p3]].filter((a) => a[0] != null);
@@ -1097,6 +1183,8 @@ window.__EXPLORER__ = "__EXPLORER_DATA__";
     if (FLAGS.sta) drawCellSta(c);
     drawCellQi(c); drawCellKv(c);
     if (FLAGS.rfmap) drawCellRf(c);
+    if (FLAGS.stavideo) drawCellStaVideo(c);
+    if (FLAGS.polar) drawCellPolar(c);
   }
   function drawCellSta(c) {
     const box = q('#ce-sta'), sub = q('#ce-sta-sub'); const ss = get('cell_sta'), cs = get('cluster_sta');
@@ -1154,21 +1242,9 @@ window.__EXPLORER__ = "__EXPLORER_DATA__";
     const lo = [59, 76, 192], mid = [221, 221, 221], hi = [180, 4, 38]; const a = t < 0 ? lo : hi, u = Math.min(1, Math.abs(t));
     return [mid[0] + (a[0] - mid[0]) * u, mid[1] + (a[1] - mid[1]) * u, mid[2] + (a[2] - mid[2]) * u].map(Math.round);
   }
-  function drawCellRf(c) {
-    const box = q('#ce-rf'), sub = q('#ce-rf-sub'), ctl = q('#ce-rf-type'); if (!box) return;
-    const rows = get('rfmaps'); const types = CFG.rf_maps || [];
-    if (ctl.options.length !== types.length) {
-      ctl.textContent = '';
-      types.forEach((t) => { const o = document.createElement('option'); o.value = t; o.textContent = t === 'cm' ? 'Covariance map' : 'RMS'; ctl.appendChild(o); });
-      ctl.parentNode.hidden = types.length < 2;
-    }
-    if (types.indexOf(S.rfType) < 0) S.rfType = types[0];
-    ctl.value = S.rfType; box.textContent = '';
-    const r = rows ? indexBy(rows, 'uid', (x) => x.uid).get(c.uid) : null;
-    const key = S.rfType;
-    if (!r || !r[key + '_d']) { sub.textContent = 'No receptive field map for this cell: it has no usable map in the noise file.'; return; }
-    const n = Number(r.n), um = Number(r.um), half = (n - 1) / 2 * um;
-    const bytes = b64bytes(r[key + '_d']); const scale = Number(r[key + '_s']);
+  // one n x n canvas per map, one pixel per map pixel; callers scale it up with CSS
+  function rfCanvas(r, key) {
+    const n = Number(r.n); const bytes = b64bytes(r[key + '_d']);
     const cv = document.createElement('canvas'); cv.width = n; cv.height = n; const ctx = cv.getContext('2d'); const img = ctx.createImageData(n, n);
     for (let i = 0; i < n * n; i++) {
       let rgb;
@@ -1176,18 +1252,358 @@ window.__EXPLORER__ = "__EXPLORER_DATA__";
       img.data[i * 4] = rgb[0]; img.data[i * 4 + 1] = rgb[1]; img.data[i * 4 + 2] = rgb[2]; img.data[i * 4 + 3] = 255;
     }
     ctx.putImageData(img, 0, 0);
-    const side = Math.max(200, Math.min(360, (box.clientWidth || 360) - 56)), ml = 40, mb = 30;
-    const wrap = document.createElement('div'); wrap.style.position = 'relative'; wrap.style.width = (side + ml + 8) + 'px'; wrap.style.height = (side + mb + 6) + 'px';
+    return cv;
+  }
+  function rfTypeOptions(ctl) {
+    const types = CFG.rf_maps || [];
+    if (ctl.options.length !== types.length) {
+      ctl.textContent = '';
+      types.forEach((t) => { const o = document.createElement('option'); o.value = t; o.textContent = t === 'cm' ? 'Covariance map' : 'RMS'; ctl.appendChild(o); });
+      ctl.parentNode.hidden = types.length < 2;
+    }
+    if (types.indexOf(S.rfType) < 0) S.rfType = types[0];
+    ctl.value = S.rfType;
+  }
+
+  // ---------- Feature space tab ----------
+  const spColour = (k, K) => d3.hcl((k * 137.508) % 360, 52, 58).formatHex();
+  let spZoom = d3.zoomIdentity;
+  function wireSpace() {
+    const preset = { ld: ['ld1', 'ld2'], pc: ['pc1', 'pc2'] };
+    q('#sp-view').addEventListener('change', (e) => { S.spView = e.target.value; if (preset[S.spView]) { S.spX = preset[S.spView][0]; S.spY = preset[S.spView][1]; } spZoom = d3.zoomIdentity; drawSpace(); });
+    q('#sp-x').addEventListener('change', (e) => { S.spX = e.target.value; S.spView = 'custom'; spZoom = d3.zoomIdentity; drawSpace(); });
+    q('#sp-y').addEventListener('change', (e) => { S.spY = e.target.value; S.spView = 'custom'; spZoom = d3.zoomIdentity; drawSpace(); });
+    q('#sp-hi').addEventListener('change', (e) => { S.spHi = e.target.value; drawSpace(); });
+    q('#sp-pts').addEventListener('change', (e) => { S.spPts = e.target.checked; drawSpace(); });
+    q('#sp-ell').addEventListener('change', (e) => { S.spEll = e.target.checked; drawSpace(); });
+    q('#sp-lab').addEventListener('change', (e) => { S.spLab = e.target.checked; drawSpace(); });
+    q('#sp-min').addEventListener('change', (e) => { const v = Math.floor(+e.target.value); S.spMin = Number.isFinite(v) && v > 0 ? v : 0; drawSpace(); });
+    q('#sp-reset').addEventListener('click', () => { spZoom = d3.zoomIdentity; drawSpace(); });
+  }
+  function spAxisOptions(sel, axes, labels, groups) {
+    if (sel.options.length) return;
+    const add = (parent, v, t) => { const o = document.createElement('option'); o.value = v; o.textContent = t; parent.appendChild(o); };
+    const og = (t) => { const g = document.createElement('optgroup'); g.label = t; sel.appendChild(g); return g; };
+    const ld = axes.filter((a) => a.kind === 'lda'), pc = axes.filter((a) => a.kind === 'pca');
+    if (ld.length) { const g = og('Best separation of clusters'); ld.forEach((a) => add(g, a.id, a.label)); }
+    if (pc.length) { const g = og('Largest spread (combined PCA)'); pc.forEach((a) => add(g, a.id, a.label)); }
+    let g = null, last = null;
+    labels.forEach((l, i) => { if (groups[i] !== last) { g = og('Clustering input: ' + groups[i]); last = groups[i]; } add(g, 'c' + i, l); });
+  }
+  function drawSpace() {
+    const pts = get('space_points'), cl = get('space_clusters'), axes = get('space_axes'), cells = get('cells');
+    const box = q('#sp-plot'), note = q('#sp-note');
+    if (!(pts && cl && axes && cells)) { box.classList.add('dash-skeleton'); box.style.minHeight = '20rem'; return; }
+    box.classList.remove('dash-skeleton'); box.style.minHeight = '';
+    const labels = CFG.space_labels || [], groups = CFG.space_groups || []; const D = labels.length;
+    spAxisOptions(q('#sp-x'), axes, labels, groups); spAxisOptions(q('#sp-y'), axes, labels, groups);
+    if (!axes.some((a) => a.id === 'ld1')) { if (S.spView === 'ld') S.spView = 'pc'; if (S.spX === 'ld1') { S.spX = 'pc1'; S.spY = 'pc2'; } }
+    if (!q('#sp-view option[value="ld"]') || !axes.some((a) => a.id === 'ld1')) { const o = q('#sp-view option[value="ld"]'); if (o) o.remove(); }
+    q('#sp-view').value = S.spView; q('#sp-x').value = S.spX; q('#sp-y').value = S.spY;
+    const hsel = q('#sp-hi');
+    if (hsel.options.length !== cl.length + 1) {
+      hsel.textContent = ''; const a = document.createElement('option'); a.value = 'all'; a.textContent = 'All clusters'; hsel.appendChild(a);
+      cl.forEach((c) => { const o = document.createElement('option'); o.value = String(c.cluster); o.textContent = 'C' + c.cluster; hsel.appendChild(o); });
+    }
+    hsel.value = S.spHi; q('#sp-pts').checked = S.spPts; q('#sp-ell').checked = S.spEll; q('#sp-lab').checked = S.spLab; q('#sp-min').value = String(S.spMin); q('#sp-min').disabled = !S.spEll;
+    // an axis is a direction w through the D-dimensional space; a single input column is a one-hot w
+    const axisOf = (id) => {
+      if (id.charAt(0) === 'c') { const i = +id.slice(1); return { col: i, label: labels[i] }; }
+      const a = axes.find((x) => x.id === id); return { w: arr(a.w).map(Number), label: a.label };
+    };
+    const ax = axisOf(S.spX), ay = axisOf(S.spY);
+    const proj = (A, xv) => {
+      if (A.col != null) { const v = xv[A.col]; return v == null ? null : Number(v); }
+      let s = 0; for (let i = 0; i < D; i++) { const v = xv[i]; if (v != null) s += Number(v) * A.w[i]; } return s;
+    };
+    const wOf = (A) => { if (A.w) return A.w; const w = new Array(D).fill(0); w[A.col] = 1; return w; };
+    const wx = wOf(ax), wy = wOf(ay);
+    const cmap = indexBy(cells, 'uid', (c) => c.uid);
+    const K = cl.length; const col = {}; cl.forEach((c) => { col[c.cluster] = spColour(c.cluster, K); });
+    const P = []; let missing = 0;
+    pts.forEach((p) => { const xv = arr(p.x); const a = proj(ax, xv), b = proj(ay, xv); if (a == null || b == null) { missing++; return; } P.push({ uid: p.uid, k: p.cluster, a: a, b: b }); });
+    const size = d3.rollup(pts, (g) => g.length, (p) => p.cluster);
+    const E = cl.map((c) => {
+      const m = arr(c.mean).map(Number), v = arr(c.var).map(Number);
+      let mx = 0, my = 0, sxx = 0, syy = 0, sxy = 0;
+      for (let i = 0; i < D; i++) { mx += m[i] * wx[i]; my += m[i] * wy[i]; sxx += v[i] * wx[i] * wx[i]; syy += v[i] * wy[i] * wy[i]; sxy += v[i] * wx[i] * wy[i]; }
+      const tr = (sxx + syy) / 2, df = Math.sqrt(((sxx - syy) / 2) ** 2 + sxy * sxy), l1 = tr + df, l2 = Math.max(0, tr - df), th = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+      const ring = d3.range(49).map((j) => { const t = j / 48 * 2 * Math.PI, u = 2 * Math.sqrt(l1) * Math.cos(t), w = 2 * Math.sqrt(l2) * Math.sin(t); return [mx + u * Math.cos(th) - w * Math.sin(th), my + u * Math.sin(th) + w * Math.cos(th)]; });
+      return { k: c.cluster, mx: mx, my: my, ring: ring, n: size.get(c.cluster) || 0 };
+    });
+    // extent from the cells, padded
+    const xs = P.map((p) => p.a), ys = P.map((p) => p.b);
+    // default view: the central 96% of cells, so a few far outliers do not squash the rest (zoom out to see them)
+    const lo = (a) => d3.quantile(a.slice().sort(d3.ascending), 0.02), hi = (a) => d3.quantile(a.slice().sort(d3.ascending), 0.98);
+    const xr = [lo(xs), hi(xs)], yr = [lo(ys), hi(ys)]; const px = (xr[1] - xr[0]) * 0.12 || 1, py = (yr[1] - yr[0]) * 0.12 || 1;
+    const W = Math.max(320, box.clientWidth || 800), H = Math.round(Math.min(680, Math.max(320, W * 0.68))), m = { l: 46, r: 12, t: 10, b: 40 };
+    const x0 = d3.scaleLinear([xr[0] - px, xr[1] + px], [m.l, W - m.r]), y0 = d3.scaleLinear([yr[0] - py, yr[1] + py], [H - m.b, m.t]);
+    box.textContent = '';
+    const svg = d3.select(box).append('svg').attr('width', W).attr('height', H).style('display', 'block').style('touch-action', 'none');
+    svg.append('defs').append('clipPath').attr('id', 'sp-clip').append('rect').attr('x', m.l).attr('y', m.t).attr('width', W - m.l - m.r).attr('height', H - m.t - m.b);
+    const gAx = svg.append('g'), gAy = svg.append('g');
+    const plot = svg.append('g').attr('clip-path', 'url(#sp-clip)');
+    const gE = plot.append('g'), gP = plot.append('g'), gL = plot.append('g');
+    svg.append('text').attr('class', 'lx-tick').attr('x', W - m.r).attr('y', H - 6).attr('text-anchor', 'end').text(ax.label);
+    svg.append('text').attr('class', 'lx-tick').attr('transform', 'translate(12,' + m.t + ') rotate(-90)').attr('text-anchor', 'end').text(ay.label);
+    const hi_ = S.spHi === 'all' ? null : +S.spHi;
+    const on = (k) => hi_ == null || k === hi_;
+    const order = P.slice().sort((p, q2) => (on(p.k) ? 1 : 0) - (on(q2.k) ? 1 : 0));
+    const circles = S.spPts ? gP.selectAll('circle').data(order).enter().append('circle').attr('r', on ? 2.4 : 2.4).style('fill', (p) => col[p.k]).attr('opacity', (p) => (on(p.k) ? 0.75 : 0.07)) : null;
+    const ringE = E.filter((e) => e.n > S.spMin || (hi_ != null && e.k === hi_));
+    const rings = S.spEll ? gE.selectAll('path').data(ringE).enter().append('path').style('fill', (e) => col[e.k]).style('fill-opacity', (e) => (on(e.k) ? (hi_ == null ? 0.05 : 0.12) : 0)).style('stroke', (e) => col[e.k]).attr('stroke-width', (e) => (hi_ != null && on(e.k) ? 2 : 1.2)).attr('opacity', (e) => (on(e.k) ? 1 : 0.15)) : null;
+    const labs = S.spLab ? gL.selectAll('text').data(E).enter().append('text').attr('class', 'lx-sp-lab').attr('text-anchor', 'middle').attr('dy', '0.35em').text((e) => e.k).style('fill', (e) => col[e.k]).attr('opacity', (e) => (on(e.k) ? 1 : 0.2)).style('cursor', 'pointer')
+      .on('click', (ev, e) => { ev.stopPropagation(); S.spHi = S.spHi === String(e.k) ? 'all' : String(e.k); drawSpace(); })
+      .on('dblclick', (ev, e) => { ev.stopPropagation(); openCluster(e.k); }) : null;
+    let zx = x0, zy = y0, delaunay = null;
+    const place = () => {
+      zx = spZoom.rescaleX(x0); zy = spZoom.rescaleY(y0);
+      gAx.selectAll('*').remove(); gAy.selectAll('*').remove();
+      zx.ticks(6).forEach((v) => { gAx.append('line').attr('x1', zx(v)).attr('x2', zx(v)).attr('y1', m.t).attr('y2', H - m.b).style('stroke', 'var(--cds-chart-grid)'); gAx.append('text').attr('class', 'lx-tick').attr('x', zx(v)).attr('y', H - m.b + 14).attr('text-anchor', 'middle').text(d3.format('~g')(v)); });
+      zy.ticks(6).forEach((v) => { gAy.append('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', zy(v)).attr('y2', zy(v)).style('stroke', 'var(--cds-chart-grid)'); gAy.append('text').attr('class', 'lx-tick').attr('x', m.l - 6).attr('y', zy(v) + 3).attr('text-anchor', 'end').text(d3.format('~g')(v)); });
+      if (circles) circles.attr('cx', (p) => zx(p.a)).attr('cy', (p) => zy(p.b));
+      if (rings) rings.attr('d', (e) => d3.line()(e.ring.map((r) => [zx(r[0]), zy(r[1])])));
+      if (labs) labs.attr('x', (e) => zx(e.mx)).attr('y', (e) => zy(e.my));
+      delaunay = d3.Delaunay.from(P, (p) => zx(p.a), (p) => zy(p.b));
+    };
+    place();
+    const zoom = d3.zoom().scaleExtent([0.1, 40]).filter((ev) => !ev.button && ev.type !== 'dblclick').on('zoom', (ev) => { spZoom = ev.transform; place(); });
+    svg.call(zoom).call(zoom.transform, spZoom);
+    // hover and click: the nearest cell within 10 px
+    const tip = tipFor(box); let hit = null;
+    const ring = svg.append('circle').attr('r', 5).style('fill', 'none').style('stroke', 'var(--color-fg)').attr('stroke-width', 1.5).style('pointer-events', 'none').attr('opacity', 0);
+    const nearest = (ev) => {
+      if (!S.spPts || !P.length) return null;
+      const [mx, my] = d3.pointer(ev, svg.node()); const i = delaunay.find(mx, my); const p = P[i];
+      return Math.hypot(zx(p.a) - mx, zy(p.b) - my) <= 10 ? p : null;
+    };
+    svg.on('pointermove.tip', (ev) => {
+      hit = nearest(ev);
+      if (!hit) { tip.hidden = true; ring.attr('opacity', 0); svg.style('cursor', null); return; }
+      const c = cmap.get(hit.uid);
+      ring.attr('cx', zx(hit.a)).attr('cy', zy(hit.b)).attr('opacity', 1); svg.style('cursor', 'pointer');
+      setTip(tip, [{ text: hit.uid, color: col[hit.k] }, { text: 'Cluster ' + hit.k + (c ? ' \u00b7 ' + p1(c.conf) + ' confidence' : '') }, { text: 'Select to open this cell', dim: true }]);
+      placeTip(box, tip, ev.clientX, ev.clientY);
+    }).on('pointerleave.tip', () => { tip.hidden = true; ring.attr('opacity', 0); });
+    svg.on('click.open', (ev) => { const p = nearest(ev); if (p) openCell(p.uid, p.k); });
+    const kx = ax.col != null ? 'one clustering input' : 'a summary direction', ky = ay.col != null ? 'one clustering input' : 'a summary direction';
+    const hidden = S.spEll ? E.length - ringE.length : 0;
+    note.textContent = fi(P.length) + ' cells shown' + (hidden ? '; spread hidden for ' + hidden + ' cluster' + (hidden === 1 ? '' : 's') + ' with ' + fi(S.spMin) + ' cells or fewer' : '') + (missing ? ' (' + fi(missing) + ' have no value for the chosen input and are left out)' : '') + '. Horizontal: ' + kx + '; vertical: ' + ky + '. ' +
+      (ax.col == null || ay.col == null ? 'Summary directions mix all ' + D + ' inputs; a missing input counts as the population average there. ' : '') +
+      'Scroll or pinch to zoom, drag to pan. Hover a point to see the cell and select it to open that cell. Select a cluster number to highlight it, double-click it to open that cluster.';
+  }
+
+  // ---------- Receptive fields tab ----------
+  function wireRfs() {
+    q('#rf-type').addEventListener('change', (e) => { S.rfType = e.target.value; drawRfs(); });
+    q('#rf-cluster').addEventListener('change', (e) => { S.rfCluster = e.target.value; drawRfs(); });
+    q('#rf-size').addEventListener('change', (e) => { S.rfSize = +e.target.value; drawRfs(); });
+  }
+  function drawRfs() {
+    const cl = get('clusters'), cells = get('cells'), rows = get('rfmaps');
+    const box = q('#rf-grid'), sub = q('#rf-sub');
+    if (!(cl && cells && rows)) { box.classList.add('dash-skeleton'); return; }
+    box.classList.remove('dash-skeleton');
+    rfTypeOptions(q('#rf-type')); const key = S.rfType;
+    const csel = q('#rf-cluster');
+    if (csel.options.length !== cl.length + 1) {
+      csel.textContent = ''; const a = document.createElement('option'); a.value = 'all'; a.textContent = 'All clusters'; csel.appendChild(a);
+      cl.slice().sort((x, y) => x.cluster - y.cluster).forEach((c) => { const o = document.createElement('option'); o.value = String(c.cluster); o.textContent = 'C' + c.cluster + ' · ' + fi(c.cells) + ' cells'; csel.appendChild(o); });
+    }
+    csel.value = S.rfCluster; q('#rf-size').value = String(S.rfSize);
+    const maps = indexBy(rows, 'uid', (x) => x.uid);
+    const ks = cl.map((c) => c.cluster).sort((a, b) => a - b).filter((k) => S.rfCluster === 'all' || String(k) === S.rfCluster);
+    box.textContent = ''; let shown = 0, missing = 0;
+    ks.forEach((k) => {
+      const list = sortCells(cellsOf(cells, k), 'conf'); const have = list.filter((c) => { const r = maps.get(c.uid); return r && r[key + '_d']; });
+      missing += list.length - have.length; if (!have.length) return;
+      const h = document.createElement('h3'); h.className = 'lx-rf-h'; h.textContent = 'Cluster ' + k + ' · ' + fi(have.length) + ' of ' + fi(list.length) + ' cells have a map';
+      box.appendChild(h);
+      const grid = document.createElement('div'); grid.className = 'lx-rf-grid'; grid.style.gridTemplateColumns = 'repeat(auto-fill,minmax(' + S.rfSize + 'px,1fr))';
+      have.forEach((c) => {
+        const r = maps.get(c.uid); const b = document.createElement('button'); b.type = 'button'; b.className = 'lx-rf-tile';
+        b.title = c.uid + ' · cluster ' + k + ' · ' + p1(c.conf) + ' confidence · open this cell';
+        const cv = rfCanvas(r, key); cv.style.width = '100%'; cv.style.aspectRatio = '1'; cv.style.height = 'auto'; cv.style.imageRendering = 'pixelated'; cv.style.display = 'block';
+        const lab = document.createElement('span'); lab.className = 'lx-rf-lab'; lab.textContent = c.uid;
+        b.appendChild(cv); b.appendChild(lab);
+        b.addEventListener('click', () => openCell(c.uid, k));
+        grid.appendChild(b); shown++;
+      });
+      box.appendChild(grid);
+    });
+    sub.textContent = fi(shown) + ' cells shown' + (missing ? ' (' + fi(missing) + ' without a usable map are left out)' : '') + '. Each map is ' + (CFG.rf_crop_um || 300) + ' µm across, centred on the cell’s most important pixel, and scaled to that cell’s own maximum' + (key === 'cm' ? ' (blue negative, red positive).' : ' (black 0, white maximum).') + ' Within a cluster, cells are ordered by confidence. Select a map to open that cell.';
+  }
+
+  // one map with axes in um and its own colour bar; returns the element
+  function rfPanel(r, key, side) {
+    const n = Number(r.n), um = Number(r.um), half = (n - 1) / 2 * um;
+    const scale = Number(r[key + '_s']);
+    const cv = rfCanvas(r, key);
+    const ml = 40, mb = 30, mr = 72;
+    const wrap = document.createElement('div'); wrap.style.position = 'relative'; wrap.style.width = (side + ml + mr) + 'px'; wrap.style.height = (side + mb + 6) + 'px';
     cv.style.position = 'absolute'; cv.style.left = ml + 'px'; cv.style.top = '4px'; cv.style.width = side + 'px'; cv.style.height = side + 'px'; cv.style.imageRendering = 'pixelated'; cv.style.border = '1px solid var(--color-border-line)';
     wrap.appendChild(cv);
-    const svg = d3.select(wrap).append('svg').attr('width', side + ml + 8).attr('height', side + mb + 6).style('position', 'absolute').style('left', '0').style('top', '0').style('pointer-events', 'none');
+    const svg = d3.select(wrap).append('svg').attr('width', side + ml + mr).attr('height', side + mb + 6).style('position', 'absolute').style('left', '0').style('top', '0').style('pointer-events', 'none');
     const x = d3.scaleLinear([-half - um / 2, half + um / 2], [ml, ml + side]), y = d3.scaleLinear([-half - um / 2, half + um / 2], [4 + side, 4]);
     x.ticks(5).forEach((v) => { svg.append('line').attr('x1', x(v)).attr('x2', x(v)).attr('y1', 4 + side).attr('y2', 4 + side + 3).style('stroke', 'var(--cds-chart-axis)'); svg.append('text').attr('class', 'lx-tick').attr('x', x(v)).attr('y', 4 + side + 15).attr('text-anchor', 'middle').text(v); });
     y.ticks(5).forEach((v) => { svg.append('line').attr('x1', ml - 3).attr('x2', ml).attr('y1', y(v)).attr('y2', y(v)).style('stroke', 'var(--cds-chart-axis)'); svg.append('text').attr('class', 'lx-tick').attr('x', ml - 6).attr('y', y(v) + 3).attr('text-anchor', 'end').text(v); });
     svg.append('text').attr('class', 'lx-tick').attr('x', ml + side).attr('y', side + mb + 2).attr('text-anchor', 'end').text('\u00b5m from the most important pixel');
     svg.append('path').attr('d', 'M' + x(0) + ',' + (y(0) - 6) + 'V' + (y(0) + 6) + 'M' + (x(0) - 6) + ',' + y(0) + 'H' + (x(0) + 6)).style('stroke', 'var(--color-fg)').style('fill', 'none').attr('stroke-width', 1).attr('opacity', 0.6);
+    // colour bar to the right of the map, using the same colour scale as the map
+    const cbX = ml + side + 14, cbW = 12, cbN = 128;
+    const cb = document.createElement('canvas'); cb.width = 1; cb.height = cbN; const cbx = cb.getContext('2d'); const cbi = cbx.createImageData(1, cbN);
+    for (let i = 0; i < cbN; i++) {
+      const t = 1 - i / (cbN - 1); const rgb = key === 'cm' ? cmColour(2 * t - 1) : [Math.round(255 * t), Math.round(255 * t), Math.round(255 * t)];
+      cbi.data[i * 4] = rgb[0]; cbi.data[i * 4 + 1] = rgb[1]; cbi.data[i * 4 + 2] = rgb[2]; cbi.data[i * 4 + 3] = 255;
+    }
+    cbx.putImageData(cbi, 0, 0);
+    cb.style.position = 'absolute'; cb.style.left = cbX + 'px'; cb.style.top = '4px'; cb.style.width = cbW + 'px'; cb.style.height = side + 'px'; cb.style.border = '1px solid var(--color-border-line)';
+    wrap.appendChild(cb);
+    const cy = d3.scaleLinear(key === 'cm' ? [-scale, scale] : [0, scale], [4 + side, 4]);
+    cy.ticks(5).forEach((v) => { svg.append('line').attr('x1', cbX + cbW).attr('x2', cbX + cbW + 3).attr('y1', cy(v)).attr('y2', cy(v)).style('stroke', 'var(--cds-chart-axis)'); svg.append('text').attr('class', 'lx-tick').attr('x', cbX + cbW + 6).attr('y', cy(v) + 3).attr('text-anchor', 'start').text(d3.format('~g')(v)); });
+    return wrap;
+  }
+  function drawCellRf(c) {
+    const box = q('#ce-rf'), sub = q('#ce-rf-sub'), ctl = q('#ce-rf-type'); if (!box) return;
+    const rows = get('rfmaps');
+    rfTypeOptions(ctl); box.textContent = '';
+    const r = rows ? indexBy(rows, 'uid', (x) => x.uid).get(c.uid) : null;
+    const key = S.rfType;
+    if (!r || !r[key + '_d']) { sub.textContent = 'No receptive field map for this cell: it has no usable map in the noise file.'; return; }
+    const orows = get('rfmaps_other');
+    const others = orows ? (groupBy(orows, 'uid', (x) => x.uid).get(c.uid) || []).filter((o) => o[key + '_d']) : [];
+    const avail = box.clientWidth || 480;
+    const side = others.length ? Math.max(160, Math.min(240, avail - 120)) : Math.max(200, Math.min(360, avail - 120));
+    const row = document.createElement('div'); row.className = 'lx-rf-row';
+    const fig = (rr, used) => {
+      const f = document.createElement('figure'); f.className = 'lx-rf-fig' + (used ? '' : ' lx-rf-other');
+      const cap = document.createElement('figcaption');
+      const tag = document.createElement('span'); tag.className = used ? 'lx-rf-tag' : 'lx-rf-tag lx-rf-tag-off'; tag.textContent = used ? 'Used for clustering' : 'Not used for clustering';
+      const nm = document.createElement('span'); nm.className = 'lx-rf-ch'; nm.textContent = rr.ch || 'noise stimulus';
+      cap.appendChild(tag); cap.appendChild(nm); f.appendChild(cap); f.appendChild(rfPanel(rr, key, side));
+      return f;
+    };
+    row.appendChild(fig(r, true)); others.forEach((o) => row.appendChild(fig(o, false)));
+    box.appendChild(row);
+    const scale = Number(r[key + '_s']); const one = others.length === 1;
+    sub.textContent = (key === 'cm' ? 'Covariance map' : 'RMS map') + ', ' + (CFG.rf_crop_um || 300) + ' \u00b5m window centred on the most important pixel (x ' + f1(Number(r.cx)) + ', y ' + f1(Number(r.cy)) + ' \u00b5m). ' + (key === 'cm' ? 'Colour runs from \u2212' + d3.format('.3g')(scale) + ' (blue) to +' + d3.format('.3g')(scale) + ' (red).' : 'Grey runs from 0 to ' + d3.format('.3g')(scale) + '.') + (r.ch ? ' Noise stimulus: ' + r.ch + '.' : '') +
+      (others.length ? ' The ' + (one ? 'map' : others.length + ' maps') + ' with a dashed border ' + (one ? 'comes' : 'come') + ' from the recording\u2019s other noise ' + (one ? 'stimulus' : 'stimuli') + ', cut out at the same place for comparison. ' + (one ? 'It was' : 'They were') + ' not used for clustering, and each map has its own colour scale.' : '');
+  }
+
+  // ---------- STA video (cell tab): mp4 files in sta_videos/ next to the page ----------
+  const STV = { v: null, r: null };
+  function stvFrame() {
+    const v = STV.v, r = STV.r; if (!v || !r) return 0;
+    return Math.max(0, Math.min(Number(r.frames) - 1, Math.floor(v.currentTime * Number(r.fps) + 1e-3)));
+  }
+  function stvLabel() {
+    const r = STV.r; if (!r) return;
+    const fr = stvFrame(), ms = (fr - Number(r.zero)) * Number(r.dt_ms);
+    q('#ce-stv-time').textContent = (ms > 0 ? '+' : ms < 0 ? '−' : '') + Math.abs(Math.round(ms)) + ' ms' + (ms < 0 ? ' before the spike' : ms > 0 ? ' after the spike' : ' (spike)');
+    if (document.activeElement !== q('#ce-stv-pos')) q('#ce-stv-pos').value = String(fr);
+    q('#ce-stv-play').textContent = STV.v && !STV.v.paused ? 'Pause' : 'Play';
+  }
+  function drawCellStaVideo(c) {
+    const box = q('#ce-stv'), sub = q('#ce-stv-sub'); if (!box) return;
+    const rows = get('sta_videos');
+    const r = rows ? indexBy(rows, 'uid', (x) => x.uid).get(c.uid) : null;
+    if (STV.v && STV.r && r && STV.r.uid === r.uid && box.contains(STV.v)) return;  // same cell: keep the video playing
+    if (STV.v) STV.v.pause();
+    STV.v = null; STV.r = r || null; box.textContent = '';
+    ['#ce-stv-play', '#ce-stv-pos', '#ce-stv-speed'].forEach((s) => { q(s).disabled = !r; });
+    if (!r) { q('#ce-stv-time').textContent = ''; sub.textContent = 'No receptive field video for this cell: it has no receptive field map or its STA file was not found.'; return; }
+    const crop = Number(CFG.rf_crop_um || 300), half = crop / 2;
+    const avail = box.clientWidth || 480, side = Math.max(200, Math.min(360, avail - 60));
+    const ml = 40, mb = 30;
+    const wrap = document.createElement('div'); wrap.style.position = 'relative'; wrap.style.width = (side + ml + 8) + 'px'; wrap.style.height = (side + mb + 6) + 'px';
+    const v = document.createElement('video');
+    v.muted = true; v.loop = true; v.playsInline = true; v.preload = 'auto'; v.src = r.src; v.playbackRate = S.stvSpeed || 1;
+    v.style.position = 'absolute'; v.style.left = ml + 'px'; v.style.top = '4px'; v.style.width = side + 'px'; v.style.height = side + 'px'; v.style.imageRendering = 'pixelated'; v.style.border = '1px solid var(--color-border-line)'; v.style.background = '#000';
+    wrap.appendChild(v);
+    const svg = d3.select(wrap).append('svg').attr('width', side + ml + 8).attr('height', side + mb + 6).style('position', 'absolute').style('left', '0').style('top', '0').style('pointer-events', 'none');
+    const x = d3.scaleLinear([-half, half], [ml, ml + side]), y = d3.scaleLinear([-half, half], [4 + side, 4]);
+    x.ticks(5).forEach((t) => { svg.append('line').attr('x1', x(t)).attr('x2', x(t)).attr('y1', 4 + side).attr('y2', 4 + side + 3).style('stroke', 'var(--cds-chart-axis)'); svg.append('text').attr('class', 'lx-tick').attr('x', x(t)).attr('y', 4 + side + 15).attr('text-anchor', 'middle').text(t); });
+    y.ticks(5).forEach((t) => { svg.append('line').attr('x1', ml - 3).attr('x2', ml).attr('y1', y(t)).attr('y2', y(t)).style('stroke', 'var(--cds-chart-axis)'); svg.append('text').attr('class', 'lx-tick').attr('x', ml - 6).attr('y', y(t) + 3).attr('text-anchor', 'end').text(t); });
+    svg.append('text').attr('class', 'lx-tick').attr('x', ml + side).attr('y', side + mb + 2).attr('text-anchor', 'end').text('µm from the most important pixel');
+    svg.append('path').attr('d', 'M' + x(0) + ',' + (y(0) - 6) + 'V' + (y(0) + 6) + 'M' + (x(0) - 6) + ',' + y(0) + 'H' + (x(0) + 6)).style('stroke', '#ff8c26').style('fill', 'none').attr('stroke-width', 1).attr('opacity', 0.8);
     box.appendChild(wrap);
-    sub.textContent = (key === 'cm' ? 'Covariance map' : 'RMS map') + ', ' + (CFG.rf_crop_um || 300) + ' \u00b5m window centred on the most important pixel (x ' + f1(Number(r.cx)) + ', y ' + f1(Number(r.cy)) + ' \u00b5m). ' + (key === 'cm' ? 'Colour runs from \u2212' + d3.format('.3g')(scale) + ' (blue) to +' + d3.format('.3g')(scale) + ' (red).' : 'Grey runs from 0 to ' + d3.format('.3g')(scale) + '.') + (r.ch ? ' Noise stimulus: ' + r.ch + '.' : '');
+    STV.v = v;
+    const pos = q('#ce-stv-pos'); pos.max = String(Number(r.frames) - 1);
+    q('#ce-stv-speed').value = String(S.stvSpeed || 1);
+    const tick = () => { if (STV.v !== v) return; stvLabel(); if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(tick); };
+    if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(tick); else v.addEventListener('timeupdate', stvLabel);
+    ['play', 'pause', 'seeked', 'loadeddata'].forEach((ev) => v.addEventListener(ev, stvLabel));
+    v.addEventListener('error', () => { sub.textContent = 'The video file ' + r.src + ' could not be loaded. It must sit in the sta_videos folder next to this page.'; });
+    sub.textContent = 'Spike-triggered average from ' + (r.ch || 'the noise stimulus') + ' (the noise stimulus used for clustering), ' + crop + ' µm window centred on the most important pixel, as in the map above. Each frame is ' + d3.format('~g')(Number(r.dt_ms)) + ' ms; 0 ms is the spike. Grey runs from the lowest (black) to the highest (white) value in this cell’s video. Plays at ' + r.fps + ' frames per second at 1×.';
+    stvLabel();
+  }
+
+  // ---------- moving bar polar plot (cell tab) ----------
+  function drawCellPolar(c) {
+    const box = q('#ce-polar'), sub = q('#ce-polar-sub'), st = q('#ce-polar-stats'); if (!box) return;
+    box.textContent = ''; st.textContent = '';
+    const v = c.bar_dirs ? arr(c.bar_dirs).map(Number) : null; const deg = (CFG.bar_deg || []).map(Number), names = CFG.bar_names || [];
+    if (!v || !v.length || v.length !== deg.length) { sub.textContent = 'No moving bar direction responses for this cell.'; return; }
+    // repeats of the moving bar, if the page has them: one raster per direction around the polar plot
+    let reps = null;
+    const rrows = FLAGS.repeats ? get('repeats_bar') : null;
+    const rrow = rrows ? indexBy(rrows, 'uid', (x) => x.uid).get(c.uid) : null;
+    if (rrow && Number(rrow.reps)) reps = decodeRepeats('moving_bar|' + c.uid, rrow);
+    const dsec = AXD.moving_bar ? AXD.moving_bar.duration / deg.length : 5;
+    // i = position in the stimulus (and in deg / names / v); sorted by angle so the outline runs round the circle
+    const pts = deg.map((d, i) => ({ i: i, d: d, v: v[i], name: names[i] || (d + '\u00b0') })).sort((a, b) => a.d - b.d);
+    const vmax = d3.max(pts, (p) => p.v) || 1;
+    const W = reps ? Math.max(300, Math.min(640, box.clientWidth || 600)) : Math.max(220, Math.min(320, box.clientWidth || 300));
+    const H = reps ? Math.round(W * 0.95) : W, cx = W / 2, cy = H / 2;
+    const rw = Math.round(W * 0.22), rh = Math.round(W * 0.12);
+    const R = reps ? W * 0.2 : W / 2 - 34;
+    const rr = d3.scaleLinear([0, vmax], [0, R]).nice(4); const rmax = rr.domain()[1];
+    // 0 deg = up, 90 deg = right, as in the bar direction names
+    const xy = (d, val) => { const a = d * Math.PI / 180; return [cx + rr(val) * Math.sin(a), cy - rr(val) * Math.cos(a)]; };
+    const wrap = document.createElement('div'); wrap.style.position = 'relative'; wrap.style.width = W + 'px'; wrap.style.height = H + 'px'; wrap.style.margin = '0 auto';
+    box.appendChild(wrap);
+    const svg = d3.select(wrap).append('svg').attr('width', W).attr('height', H).style('display', 'block').style('overflow', 'visible');
+    rr.ticks(4).filter((t) => t > 0).forEach((t) => {
+      svg.append('circle').attr('cx', cx).attr('cy', cy).attr('r', rr(t)).style('fill', 'none').style('stroke', 'var(--cds-chart-grid)');
+      svg.append('text').attr('class', 'lx-tick').attr('x', cx + 3).attr('y', cy - rr(t) - 2).text(d3.format('~g')(t));
+    });
+    pts.forEach((p) => {
+      const e = xy(p.d, rmax); svg.append('line').attr('x1', cx).attr('y1', cy).attr('x2', e[0]).attr('y2', e[1]).style('stroke', 'var(--cds-chart-grid)');
+      if (!reps) { const lab = xy(p.d, rmax * 1.13); svg.append('text').attr('class', 'lx-tick').attr('x', lab[0]).attr('y', lab[1] + 3).attr('text-anchor', Math.abs(lab[0] - cx) < 4 ? 'middle' : (lab[0] > cx ? 'start' : 'end')).text(p.name); }
+    });
+    svg.append('path').attr('d', d3.line().x((p) => xy(p.d, p.v)[0]).y((p) => xy(p.d, p.v)[1])(pts.concat([pts[0]]))).style('fill', accent()).style('fill-opacity', 0.15).style('stroke', accent()).attr('stroke-width', 1.8).attr('stroke-linejoin', 'round');
+    pts.forEach((p) => { const e = xy(p.d, p.v); svg.append('circle').attr('cx', e[0]).attr('cy', e[1]).attr('r', 3).style('fill', accent()).append('title').text(p.name + ': ' + f1(p.v) + ' Hz'); });
+    // vector average of the responses, drawn as an arrow from the centre
+    let sx = 0, sy = 0, tot = 0; pts.forEach((p) => { const a = p.d * Math.PI / 180; sx += p.v * Math.sin(a); sy += p.v * Math.cos(a); tot += p.v; });
+    if (tot > 0) {
+      const mag = Math.hypot(sx, sy) / tot, ang = Math.atan2(sx, sy) * 180 / Math.PI; const e = xy(ang, mag * rmax);
+      svg.append('line').attr('x1', cx).attr('y1', cy).attr('x2', e[0]).attr('y2', e[1]).style('stroke', 'var(--color-fg)').attr('stroke-width', 1.5);
+      svg.append('circle').attr('cx', e[0]).attr('cy', e[1]).attr('r', 2.5).style('fill', 'var(--color-fg)');
+    }
+    if (reps) {
+      // rasters sit on an ellipse round the plot, each in the direction its bar moved
+      const ex = W / 2 - rw / 2 - 2, ey = H / 2 - rh / 2 - 16;
+      const col = rgbOf(accent()); const dpr = window.devicePixelRatio || 1;
+      pts.forEach((p) => {
+        const a = p.d * Math.PI / 180, px = cx + ex * Math.sin(a), py = cy - ey * Math.cos(a);
+        const cell = document.createElement('div'); cell.className = 'lx-dir-raster';
+        cell.style.left = Math.round(px - rw / 2) + 'px'; cell.style.top = Math.round(py - rh / 2 + 7) + 'px'; cell.style.width = rw + 'px';
+        cell.title = p.name + ': ' + reps.length + ' repeats, ' + f1(p.v) + ' Hz peak. Each row is one repeat; the raster spans the ' + d3.format('~g')(dsec) + ' s this direction was shown.';
+        const lab = document.createElement('div'); lab.className = 'lx-dir-lab'; lab.textContent = p.name + ' \u00b7 ' + f1(p.v) + ' Hz'; cell.appendChild(lab);
+        const cv = document.createElement('canvas'); cv.width = Math.floor(rw * dpr); cv.height = Math.floor(rh * dpr); cv.style.width = rw + 'px'; cv.style.height = rh + 'px'; cv.style.display = 'block';
+        cell.appendChild(cv); wrap.appendChild(cell);
+        const ctx = cv.getContext('2d'); const rowH = cv.height / reps.length;
+        const lo = p.i * dsec * 1000, hi = lo + dsec * 1000, sc = cv.width / (hi - lo), pxw = Math.max(1, Math.round(dpr * 0.8));
+        ctx.fillStyle = 'rgba(' + col[0] + ',' + col[1] + ',' + col[2] + ',0.85)';
+        reps.forEach((t, k) => {
+          const y0 = Math.round(k * rowH + rowH * 0.15), hh = Math.max(1, Math.round(rowH * 0.7));
+          for (let m = 0; m < t.length; m++) { const ms = t[m]; if (ms < lo || ms >= hi) continue; ctx.fillRect(Math.floor((ms - lo) * sc), y0, pxw, hh); }
+        });
+      });
+    }
+    [['DSI', c.dsi], ['OSI', c.osi]].forEach((k) => { const d = document.createElement('div'); d.className = 'lx-polar-stat'; const b = document.createElement('b'); b.textContent = nz(k[1], f2); const l = document.createElement('span'); l.textContent = k[0]; d.appendChild(b); d.appendChild(l); st.appendChild(d); });
+    sub.textContent = 'Peak firing rate for each bar direction: the numbers DSI and OSI were calculated from. Rings are in Hz. The black arrow is the vector average of the responses: it points to the preferred direction, and its length (0 at the centre, 1 at the outer ring) shows how strongly the cell prefers it.' +
+      (reps ? ' Around the plot, each raster shows every repeat (one row each) for the direction its bar moved, over the ' + d3.format('~g')(dsec) + ' s that direction was shown. Rasters show raw spike times, not peak-aligned.' : '');
   }
 
   // ---------- individual repeats (cell tab) ----------
@@ -1280,7 +1696,7 @@ window.__EXPLORER__ = "__EXPLORER_DATA__";
     const t = S.tab; if (!built[t]) return;
     const prev = q('.lx-fail', q('#view-' + t)); if (prev) prev.remove();
     try {
-      if (t === 'dataset') drawDataset(); else if (t === 'method') drawMethod(); else if (t === 'clusters') drawOverview(); else if (t === 'cluster') drawCluster(); else drawCell();
+      if (t === 'dataset') drawDataset(); else if (t === 'method') drawMethod(); else if (t === 'clusters') drawOverview(); else if (t === 'cluster') drawCluster(); else if (t === 'rfs') drawRfs(); else if (t === 'space') drawSpace(); else drawCell();
     } catch (e) {
       console.error(e);
       const v = q('#view-' + t);
@@ -1292,7 +1708,7 @@ window.__EXPLORER__ = "__EXPLORER_DATA__";
   applyNeeds(root);
   qa('.lx-tab').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
   const named = (location.hash || '').replace(/^#/, '');
-  const start = TABS.find((t) => 'tab-' + t === named) || 'dataset';
+  const start = TABS.find((t) => 'tab-' + t === named && q('#view-' + t)) || 'dataset';
   showTab(start, true);
   dash.onData(() => { fillSummary(); drawActive(); });
 })();

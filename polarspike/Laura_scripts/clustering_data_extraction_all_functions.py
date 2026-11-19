@@ -235,11 +235,13 @@ def delete_recording(con, recording):
 
 def update_recording_info(path, selection):
     """Copy region / notes from the selection file into the master without re-extracting."""
+    table = selection.get('regions', {})
     con = open_for_writing(path)
     try:
         for rec, cfg in selection['recordings'].items():
+            region = cfg.get('region') or table.get(f"{rec}/{cfg.get('phase')}")
             con.execute('update recordings set region=?, notes=?, selection=? where recording=?',
-                        (cfg.get('region'), cfg.get('notes', ''), dumps(cfg), rec))
+                        (region, cfg.get('notes', ''), dumps(cfg), rec))
         bump_revision(con)
         con.commit()
     finally:

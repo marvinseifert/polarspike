@@ -5,73 +5,276 @@
     "moving_bar": "Stimulus indices of the moving bar (8 directions x 300 frames, should be 10 repeats).",
     "rf": "Noise stimulus used for the receptive field: stimulus index, channel name inside noise_data_v2.nc, and the file (relative to the phase folder). null = no RF data.",
     "region": "Where on the retina the recording was made (e.g. 'dorsal', 'ventral'). Fill in later; can be changed without re-extracting spikes.",
-    "notes": "Free text, copied into the master file."
+    "notes": "Free text, copied into the master file.",
+    "regions_table": "Retinal region of every recording ('<date>/<phase>'), given by Laura 2026-11-19. Used for 'region' when a recording entry has none."
   },
   "nas_root": "/mnt/mea_nas/Laura",
   "expected_bar_repeats": 10,
+  "regions": {
+    "05_11_2025/Phase_00": "ventral temporal",
+    "05_11_2025/Phase_01": "ventral temporal",
+    "18_12_2025/Phase_00": "central",
+    "08_01_2026/Phase_00": "dorsal nasal",
+    "15_01_2026/Phase_00": "dorsal nasal",
+    "19_02_2026/Phase_00": "dorsal nasal",
+    "26_02_2026/Phase_00": "dorsal nasal",
+    "21_04_2026/Phase_00": "dorsal nasal/central",
+    "22_04_2026/Phase_00": "ventral temporal/central",
+    "23_04_2026/Phase_00": "dorsal",
+    "24_04_2026/Phase_00": "central",
+    "07_05_2026/Phase_00": "dorsal central",
+    "13_05_2026/Phase_00": "dorsal central",
+    "15_05_2026/Phase_00": "dorsal central",
+    "21_07_2026/Phase_00": "central",
+    "22_07_2026/Phase_00": "central",
+    "14_08_2026/Phase_00": "central",
+    "15_10_2026/Phase_00": "dorsal nasal",
+    "22_10_2026/Phase_00": "dorsal temporal"
+  },
   "recordings": {
     "05_11_2025": {
       "phase": "Phase_01",
-      "groups": {"1": [0, 2, 1], "2": [18, null, 7]},
-      "moving_bar": [5],
-      "rf": {"stimulus_index": 6, "channel": "12px_20Hz_shuffle", "file": "noise_analysis_QI10/noise_data_v2.nc"},
-      "region": null,
+      "groups": {
+        "1": [
+          0,
+          2,
+          1
+        ],
+        "2": [
+          18,
+          null,
+          7
+        ]
+      },
+      "moving_bar": [
+        5
+      ],
+      "rf": {
+        "stimulus_index": 6,
+        "channel": "12px_20Hz_shuffle",
+        "file": "noise_analysis_QI10/noise_data_v2.nc"
+      },
+      "region": "ventral temporal",
       "notes": "Group 1 order is scf, chirp, csteps. Coloured chirps (10-17) not used."
     },
     "02_12_2025": {
       "phase": "Phase_01",
-      "groups": {"1": [0, 1, 2], "2": [5, 6, 7], "3": [11, 10, 9]},
-      "moving_bar": [3],
-      "rf": {"stimulus_index": 8, "channel": "12px_20Hz_shuffle", "file": "noise_analysis_QI10/noise_data_v2.nc"},
+      "groups": {
+        "1": [
+          0,
+          1,
+          2
+        ],
+        "2": [
+          5,
+          6,
+          7
+        ],
+        "3": [
+          11,
+          10,
+          9
+        ]
+      },
+      "moving_bar": [
+        3
+      ],
+      "rf": {
+        "stimulus_index": 8,
+        "channel": "12px_20Hz_shuffle",
+        "file": "noise_analysis_QI10/noise_data_v2.nc"
+      },
       "region": null,
       "notes": "Moving bar had one dropped trigger (9 repeats in overview); repaired to 10."
     },
     "15_01_2026": {
       "phase": "Phase_00",
-      "groups": {"1": [0, 1, 2], "2": [5, 6, 7], "3": [9, 10, 11], "4": [13, 14, 15], "5": [17, 18, 19]},
-      "moving_bar": [3],
-      "rf": {"stimulus_index": 16, "channel": "12px_20Hz_shuffle", "file": "noise_analysis_QI10/noise_data_v2.nc"},
-      "region": null,
+      "groups": {
+        "1": [
+          0,
+          1,
+          2
+        ],
+        "2": [
+          5,
+          6,
+          7
+        ],
+        "3": [
+          9,
+          10,
+          11
+        ],
+        "4": [
+          13,
+          14,
+          15
+        ],
+        "5": [
+          17,
+          18,
+          19
+        ]
+      },
+      "moving_bar": [
+        3
+      ],
+      "rf": {
+        "stimulus_index": 16,
+        "channel": "12px_20Hz_shuffle",
+        "file": "noise_analysis_QI10/noise_data_v2.nc"
+      },
+      "region": "dorsal nasal",
       "notes": "RF stimulus is named 12px_20Hz_shuffle_white in the overview."
     },
     "26_02_2026": {
       "phase": "Phase_00",
-      "groups": {"1": [0, 1, 2], "2": [5, 6, 7], "3": [9, 10, 11], "4": [13, 14, 15]},
-      "moving_bar": [3],
-      "rf": {"stimulus_index": 12, "channel": "12px_20Hz_shuffle", "file": "noise_analysis_QI10/noise_data_v2.nc"},
-      "region": null,
+      "groups": {
+        "1": [
+          0,
+          1,
+          2
+        ],
+        "2": [
+          5,
+          6,
+          7
+        ],
+        "3": [
+          9,
+          10,
+          11
+        ],
+        "4": [
+          13,
+          14,
+          15
+        ]
+      },
+      "moving_bar": [
+        3
+      ],
+      "rf": {
+        "stimulus_index": 12,
+        "channel": "12px_20Hz_shuffle",
+        "file": "noise_analysis_QI10/noise_data_v2.nc"
+      },
+      "region": "dorsal nasal",
       "notes": ""
     },
     "05_03_2026": {
       "phase": "Phase_00",
-      "groups": {"1": [0, 1, 2], "2": [5, 6, 7], "3": [9, 8, 10]},
-      "moving_bar": [3],
-      "rf": {"stimulus_index": 11, "channel": "12px_20Hz_shuffle", "file": "noise_analysis_QI10/noise_data_v2.nc"},
+      "groups": {
+        "1": [
+          0,
+          1,
+          2
+        ],
+        "2": [
+          5,
+          6,
+          7
+        ],
+        "3": [
+          9,
+          8,
+          10
+        ]
+      },
+      "moving_bar": [
+        3
+      ],
+      "rf": {
+        "stimulus_index": 11,
+        "channel": "12px_20Hz_shuffle",
+        "file": "noise_analysis_QI10/noise_data_v2.nc"
+      },
       "region": null,
       "notes": "Moving bar had one dropped trigger (9 repeats in overview); repaired to 10."
     },
     "22_07_2026": {
       "phase": "Phase_00",
-      "groups": {"1": [0, 1, 2], "2": [9, 10, 11], "3": [16, 15, 17]},
-      "moving_bar": [3],
-      "rf": {"stimulus_index": 14, "channel": "32px_15Hz_20mins_shuffle_x4", "file": "noise_analysis_QI10/noise_data_v2.nc"},
-      "region": null,
+      "groups": {
+        "1": [
+          0,
+          1,
+          2
+        ],
+        "2": [
+          9,
+          10,
+          11
+        ],
+        "3": [
+          16,
+          15,
+          17
+        ]
+      },
+      "moving_bar": [
+        3
+      ],
+      "rf": {
+        "stimulus_index": 14,
+        "channel": "32px_15Hz_20mins_shuffle_x4",
+        "file": "noise_analysis_QI10/noise_data_v2.nc"
+      },
+      "region": "central",
       "notes": "Moving bar shown on only 600x600 px."
     },
     "12_08_2026": {
       "phase": "Phase_00",
-      "groups": {"1": [0, 1, 2], "2": [4, 5, 6], "3": [8, 9, 10]},
-      "moving_bar": [11],
-      "rf": {"stimulus_index": 3, "channel": "32px_15Hz_20mins_shuffle_x4", "file": "noise_analysis_QI10/noise_data_v2.nc"},
+      "groups": {
+        "1": [
+          0,
+          1,
+          2
+        ],
+        "2": [
+          4,
+          5,
+          6
+        ],
+        "3": [
+          8,
+          9,
+          10
+        ]
+      },
+      "moving_bar": [
+        11
+      ],
+      "rf": {
+        "stimulus_index": 3,
+        "channel": "32px_15Hz_20mins_shuffle_x4",
+        "file": "noise_analysis_QI10/noise_data_v2.nc"
+      },
       "region": null,
       "notes": "Moving bar had one dropped trigger (9 repeats in overview); repaired to 10. Group 2 chirp (6) has 2 repeats."
     },
     "14_08_2026": {
       "phase": "Phase_00",
-      "groups": {"1": [0, 1, 2], "2": [9, 8, 7]},
-      "moving_bar": [3],
-      "rf": {"stimulus_index": 6, "channel": "32px_15Hz_20mins_shuffle_x4", "file": "noise_analysis_QI10/noise_data_v2.nc"},
-      "region": null,
+      "groups": {
+        "1": [
+          0,
+          1,
+          2
+        ],
+        "2": [
+          9,
+          8,
+          7
+        ]
+      },
+      "moving_bar": [
+        3
+      ],
+      "rf": {
+        "stimulus_index": 6,
+        "channel": "32px_15Hz_20mins_shuffle_x4",
+        "file": "noise_analysis_QI10/noise_data_v2.nc"
+      },
+      "region": "central",
       "notes": ""
     }
   }

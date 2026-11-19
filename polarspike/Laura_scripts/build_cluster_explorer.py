@@ -76,7 +76,16 @@ OUT_DIR = None
 RF_MAP = 'both'
 
 # Width of the square window cut out around the most important pixel (micrometres).
-CROP_UM = 300
+CROP_UM = 500
+
+# Also show each cell's map from the other (finer) noise stimulus of its recording.
+RF_OTHER = True
+
+# STA videos (mp4) made for the October 2026 explorer. None = no videos.
+STA_VIDEO_DIR = Path('/run/media/laura/Crucial X9/Laura Steel - Baden Lab backup/Tom meetings/explorer/sta_videos')
+
+# Feature space tab (cells plotted in the clustering space).
+FEATURE_SPACE = True
 
 # Rebuild individual repeats (rasters) from the spike times in the master file.
 INCLUDE_REPEATS = True
@@ -408,11 +417,76 @@ def _crop(arr, xs, ys, cx, cy, step, n, dx, dy):
     return block
 
 
-def build_rfmaps(rows, con, which, crop_um, overrides):
+def _cut_maps(ds, chan_name, todo, want_cm, want_rms, crop_um):
+    """Cut a square window around each cell's strongest pixel from one channel of noise_data.nc."""
+    chans = [str(c) for c in ds['channel'].values] if 'channel' in ds.coords else []
+    sel = {'channel': ds['channel'].values[chans.index(chan_name)]} if chans else {}
+
+    def var(name):
+        if name not in ds:
+            return None
+        v = ds[name]
+        return v.sel(**sel) if ('channel' in v.dims and sel) else v
+
+    v_rms, v_cm = var('rms'), var('cm_most_important')
+    if v_rms is None and v_cm is None:
+        return [], None
+    xs, ys = ds['x'].values.astype(float), ds['y'].values.astype(float)
+    dx = float(np.median(np.abs(np.diff(xs)))) if len(xs) > 1 else 1.0
+    dy = float(np.median(np.abs(np.diff(ys)))) if len(ys) > 1 else 1.0
+    step = max(dx, dy, crop_um / (MAX_MAP_PX - 1.0))
+    n = int(round(crop_um / step))
+    n = n + 1 if n % 2 == 0 else n
+    out = []
+    for k in range(0, len(todo), 40):
+        chunk = todo[k:k + 40]
+        cell_ids = [c for _, c in chunk]
+
+        def load(v):
+            if v is None:
+                return None
+            return v.sel(cell_index=cell_ids).transpose('cell_index', 'y', 'x').values.astype(float)
+
+        a_rms, a_cm = load(v_rms), load(v_cm)
+        for j, (uid, ci) in enumerate(chunk):
+            base = a_rms[j] if a_rms is not None else None
+            if base is None or not np.isfinite(base).any() or np.nanmax(base) <= 0:
+                base = np.abs(a_cm[j]) if a_cm is not None else None
+            if base is None or not np.isfinite(base).any():
+                continue
+            iy0, ix0 = np.unravel_index(np.nanargmax(base), base.shape)
+            cx, cy = xs[ix0], ys[iy0]
+            row = {'uid': uid, 'ch': chan_name, 'n': n, 'um': sig(step, 5), 'cx': sig(cx, 6), 'cy': sig(cy, 6)}
+            any_map = False
+            if want_cm and a_cm is not None and np.isfinite(a_cm[j]).any():
+                blk = _crop(a_cm[j], xs, ys, cx, cy, step, n, dx, dy)
+                s = np.nanmax(np.abs(blk)) if np.isfinite(blk).any() else 0
+                if s and np.isfinite(s):
+                    q = np.rint(np.nan_to_num(blk / s) * 127).astype(np.int8)
+                    row['cm_d'] = base64.b64encode(q.tobytes()).decode()
+                    row['cm_s'] = sig(s, 5)
+                    any_map = True
+            if want_rms and a_rms is not None and np.isfinite(a_rms[j]).any():
+                blk = _crop(a_rms[j], xs, ys, cx, cy, step, n, dx, dy)
+                s = np.nanmax(blk) if np.isfinite(blk).any() else 0
+                if s and np.isfinite(s) and s > 0:
+                    q = np.rint(np.clip(np.nan_to_num(blk) / s, 0, 1) * 255).astype(np.uint8)
+                    row['rms_d'] = base64.b64encode(q.tobytes()).decode()
+                    row['rms_s'] = sig(s, 5)
+                    any_map = True
+            if any_map:
+                out.append(row)
+    return out, (n, step)
+
+
+def build_rfmaps(rows, con, which, crop_um, overrides, other=True):
+    """Maps from the noise stimulus used for clustering ('rfmaps') and, if other=True, from the
+    best other noise stimulus of the same recording ('rfmaps_other': for each cell the channel
+    with the highest RF quality, e.g. the finer 2/4/6/8 px noise)."""
     import xarray as xr
     want_cm = which in ('cm', 'both')
     want_rms = which in ('rms', 'both')
-    out = []
+    main_rows, other_rows = [], []
     for rec, g in rows.groupby('recording', sort=False):
         ctx = next((c for c in g['rf_context'] if isinstance(c, str)), None)
         path = noise_path(con, rec, overrides)
@@ -427,78 +501,172 @@ def build_rfmaps(rows, con, which, crop_um, overrides):
         try:
             chans = [str(c) for c in ds['channel'].values] if 'channel' in ds.coords else []
             chan_name = ctx.split(':', 2)[2] if ctx and ctx.count(':') >= 2 else None
-            sel = {}
-            if chans:
-                if chan_name in chans:
-                    sel['channel'] = ds['channel'].values[chans.index(chan_name)]
-                elif len(chans) == 1:
-                    sel['channel'] = ds['channel'].values[0]
+            if chans and chan_name not in chans:
+                if len(chans) == 1:
                     chan_name = chans[0]
                 else:
                     log(f'  RF maps: {rec}: channel {chan_name!r} not in the file (has {chans}); skipped')
                     continue
-
-            def var(name):
-                if name not in ds:
-                    return None
-                v = ds[name]
-                return v.sel(**sel) if ('channel' in v.dims and sel) else v
-
-            v_rms, v_cm = var('rms'), var('cm_most_important')
-            if v_rms is None and v_cm is None:
-                log(f'  RF maps: {rec}: neither rms nor cm_most_important in the file')
-                continue
-            xs, ys = ds['x'].values.astype(float), ds['y'].values.astype(float)
-            dx = float(np.median(np.abs(np.diff(xs)))) if len(xs) > 1 else 1.0
-            dy = float(np.median(np.abs(np.diff(ys)))) if len(ys) > 1 else 1.0
-            step = max(dx, dy, crop_um / (MAX_MAP_PX - 1.0))
-            n = int(round(crop_um / step))
-            n = n + 1 if n % 2 == 0 else n
             ids = set(int(c) for c in ds['cell_index'].values)
             todo = [(u, int(c)) for u, c in zip(g['uid'], g['cell_index']) if int(c) in ids]
-            made = 0
-            for k in range(0, len(todo), 40):
-                chunk = todo[k:k + 40]
-                cell_ids = [c for _, c in chunk]
-
-                def load(v):
-                    if v is None:
-                        return None
-                    return v.sel(cell_index=cell_ids).transpose('cell_index', 'y', 'x').values.astype(float)
-
-                a_rms, a_cm = load(v_rms), load(v_cm)
-                for j, (uid, ci) in enumerate(chunk):
-                    base = a_rms[j] if a_rms is not None else None
-                    if base is None or not np.isfinite(base).any() or np.nanmax(base) <= 0:
-                        base = np.abs(a_cm[j]) if a_cm is not None else None
-                    if base is None or not np.isfinite(base).any():
-                        continue
-                    iy0, ix0 = np.unravel_index(np.nanargmax(base), base.shape)
-                    cx, cy = xs[ix0], ys[iy0]
-                    row = {'uid': uid, 'ch': chan_name, 'n': n, 'um': sig(step, 5), 'cx': sig(cx, 6), 'cy': sig(cy, 6)}
-                    any_map = False
-                    if want_cm and a_cm is not None and np.isfinite(a_cm[j]).any():
-                        blk = _crop(a_cm[j], xs, ys, cx, cy, step, n, dx, dy)
-                        s = np.nanmax(np.abs(blk)) if np.isfinite(blk).any() else 0
-                        if s and np.isfinite(s):
-                            q = np.rint(np.nan_to_num(blk / s) * 127).astype(np.int8)
-                            row['cm_d'] = base64.b64encode(q.tobytes()).decode()
-                            row['cm_s'] = sig(s, 5)
-                            any_map = True
-                    if want_rms and a_rms is not None and np.isfinite(a_rms[j]).any():
-                        blk = _crop(a_rms[j], xs, ys, cx, cy, step, n, dx, dy)
-                        s = np.nanmax(blk) if np.isfinite(blk).any() else 0
-                        if s and np.isfinite(s) and s > 0:
-                            q = np.rint(np.clip(np.nan_to_num(blk) / s, 0, 1) * 255).astype(np.uint8)
-                            row['rms_d'] = base64.b64encode(q.tobytes()).decode()
-                            row['rms_s'] = sig(s, 5)
-                            any_map = True
-                    if any_map:
-                        out.append(row)
-                        made += 1
-            log(f'  RF maps: {rec}: {made} maps ({n}x{n} samples, {step:.1f} um apart, channel {chan_name})')
+            made, geo = _cut_maps(ds, chan_name, todo, want_cm, want_rms, crop_um)
+            main_rows += made
+            if geo:
+                log(f'  RF maps: {rec}: {len(made)} maps ({geo[0]}x{geo[0]} samples, {geo[1]:.1f} um apart, channel {chan_name})')
+            others = [c for c in chans if c != chan_name]
+            if other and others and 'quality' in ds:
+                quality = ds['quality'].sel(cell_index=[c for _, c in todo]).transpose('cell_index', 'channel')
+                qv = quality.values.astype(float)
+                order = [chans.index(c) for c in others]
+                by_channel = {}
+                for j, (uid, ci) in enumerate(todo):
+                    vals = qv[j, order]
+                    if np.isfinite(vals).any():
+                        best = others[int(np.nanargmax(vals))]
+                        by_channel.setdefault(best, []).append((uid, ci))
+                for ch, cells in by_channel.items():
+                    made, _ = _cut_maps(ds, ch, cells, want_cm, want_rms, crop_um)
+                    other_rows += made
+                log(f'  RF maps: {rec}: other noise maps: ' + ', '.join(f'{ch} {len(c)}' for ch, c in by_channel.items()))
         finally:
             ds.close()
+    return main_rows, other_rows
+
+
+# ----------------------------------------------------------------------------
+# moving bar direction tuning, feature space, STA videos
+# ----------------------------------------------------------------------------
+def build_bar_dirs(rows, con, processing):
+    """Peak rate (Hz, 100 ms bins, mean over repeats) in each bar direction, as used for DSI/OSI."""
+    st = load_stimuli_table(con)
+    p = processing
+    width, dur = p.get('selectivity_bin_s', 0.1), p['direction_duration_s']
+    bins = np.r_[np.arange(0, dur, width), dur]
+    out = {}
+    for _, r in rows.iterrows():
+        idxs = indices_for(st, r['recording'], 'moving_bar', r['groups'])
+        per_stim = []
+        for idx in idxs:
+            meta, rel, inferred = timing(con, r['recording'], idx)
+            reps = split_repeats(spikes(con, r['recording'], idx, r['cell_index']), meta, rel, inferred, 'moving_bar',
+                                 p['durations']['moving_bar'], p['frames_per_direction'], dur)
+            if not reps:
+                continue
+            t = np.concatenate(reps)
+            per_stim.append([np.max(np.histogram(t[(t >= d * dur) & (t < (d + 1) * dur)] - d * dur, bins)[0]
+                                    / (np.diff(bins) * len(reps))) for d in range(p['directions'])])
+        if per_stim:
+            out[r['uid']] = [sig(v, 4) for v in np.mean(per_stim, axis=0)]
+    return out
+
+
+SPACE_NAMES = {'scf': 'Flashes', 'csteps': 'Contrast steps', 'chirp': 'Chirp', 'moving_bar': 'Moving bar',
+               'DSI': 'DSI', 'OSI': 'OSI', 'center_size_mm2': 'RF centre size', 'surround_size_mm2': 'RF surround size',
+               'elongation': 'RF elongation', 'orientation': 'RF orientation', 'temporal_sta': 'RF time course'}
+
+
+def build_space(rows, fit, processing, n_axes=6):
+    """The clustering space itself: per-column labels, cell coordinates, cluster Gaussians and
+    two sets of 2-D views (combined PCA = largest spread; LDA = best separation of clusters).
+    Missing values are shown at the column mean (display only; the clustering never fills them)."""
+    feats = fit['features']
+    x_all = np.asarray(feats['x'], float)
+    names = processing.get('direction_names', [])
+    labels, groups = [], []
+    for name, seg, ncol, _ in feats['column_blocks']:
+        group = SPACE_NAMES.get(name, name)
+        if name in ('scf', 'csteps'):
+            base = f'{group} {4 * seg}\u2013{4 * (seg + 1)} s'
+        elif name == 'moving_bar':
+            base = f'{group} {names[seg] if seg < len(names) else seg + 1}'
+        else:
+            base = group
+        for c in range(ncol):
+            labels.append(f'{base} PC{c + 1}' if (ncol > 1 or name in RESPONSE_BLOCKS) else base)
+            groups.append(group)
+    X = x_all[rows['data_row'].to_numpy()]
+    col_mean = np.nanmean(X, axis=0)
+    Xf = np.where(np.isfinite(X), X, col_mean)
+    lab = rows['cluster'].to_numpy()
+    axes = []
+    Xc = Xf - Xf.mean(axis=0)
+    _, sv, vt = np.linalg.svd(Xc, full_matrices=False)
+    ratio = sv ** 2 / np.sum(sv ** 2)
+    for i in range(min(n_axes, len(sv))):
+        axes.append(dict(id=f'pc{i + 1}', kind='pca', label=f'Combined PC{i + 1} ({ratio[i]:.1%} of variance)',
+                         w=[sig(v, 5) for v in vt[i]]))
+    try:
+        from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+        k = len(np.unique(lab))
+        if k > 2:
+            lda = LinearDiscriminantAnalysis(n_components=min(n_axes, k - 1)).fit(Xf, lab)
+            for i in range(lda.scalings_.shape[1] if lda.scalings_.ndim == 2 else 0):
+                if i >= min(n_axes, k - 1):
+                    break
+                w = lda.scalings_[:, i] / np.linalg.norm(lda.scalings_[:, i])
+                axes.append(dict(id=f'ld{i + 1}', kind='lda',
+                                 label=f'Discriminant {i + 1} ({lda.explained_variance_ratio_[i]:.1%} of cluster separation)',
+                                 w=[sig(v, 5) for v in w]))
+    except ImportError:
+        log('Feature space: scikit-learn not installed, only PCA views.')
+    points = [dict(uid=u, cluster=int(c), x=[sig(v, 4) for v in xv]) for u, c, xv in zip(rows['uid'], lab, Xf)]
+    model = fit['model']
+    clusters = []
+    for raw, disp in sorted(fit['label_mapping'].items(), key=lambda kv: kv[1]):
+        clusters.append(dict(cluster=int(disp), weight=sig(model['weights'][raw], 4),
+                             mean=[sig(v, 4) for v in model['means'][raw]],
+                             var=[sig(v, 4) for v in model['variances'][raw]]))
+    return dict(space_points=points, space_axes=axes, space_clusters=clusters), labels, groups
+
+
+RESPONSE_BLOCKS = ('scf', 'csteps', 'chirp', 'moving_bar', 'temporal_sta')
+
+
+def build_sta_videos(rows, video_dir, out_dir):
+    """Link each cell to its STA video (made by the lost video script; files named
+    <rec>_<channel>_cell<N>_<um>um_<fps>fps_from<a>to<b>ms.mp4) and copy the files beside the page."""
+    import shutil
+    import subprocess
+    video_dir = Path(video_dir)
+    if not video_dir.is_dir():
+        log(f'STA videos: folder not found ({video_dir}); skipped.')
+        return []
+    pat = re.compile(r'^(?P<rec>\d\d_\d\d_\d{4})_(?P<ch>.+)_cell(?P<cell>\d+)_(?P<um>\d+)um_(?P<fps>[\d.]+)fps_from(?P<a>-?\d+)to(?P<b>-?\d+)ms\.mp4$')
+    found = {}
+    for f in video_dir.iterdir():
+        m = pat.match(f.name)
+        if m:
+            found[(m['rec'], int(m['cell']), m['ch'])] = (f, m)
+    target = out_dir / 'sta_videos'
+    target.mkdir(parents=True, exist_ok=True)
+    out, frames_cache = [], {}
+    for _, r in rows.iterrows():
+        ch = r['rf_context'].split(':', 2)[2] if isinstance(r.get('rf_context'), str) else None
+        hit = found.get((r['recording'], int(r['cell_index']), ch))
+        if hit is None:
+            hit = next((v for k, v in found.items() if k[0] == r['recording'] and k[1] == int(r['cell_index'])), None)
+        if hit is None:
+            continue
+        f, m = hit
+        a, b = int(m['a']), int(m['b'])
+        key = (a, b, m['fps'])
+        if key not in frames_cache:
+            try:
+                res = subprocess.run(['ffprobe', '-v', 'error', '-count_frames', '-select_streams', 'v:0',
+                                      '-show_entries', 'stream=nb_read_frames', '-of', 'csv=p=0', str(f)],
+                                     capture_output=True, text=True, timeout=30)
+                frames_cache[key] = int(res.stdout.strip().split(',')[0])
+            except Exception:  # noqa: BLE001
+                frames_cache[key] = None
+        frames = frames_cache[key]
+        dt = (b - a) / (frames - 1) if frames and frames > 1 else 10.0
+        frames = frames or int(round((b - a) / dt)) + 1
+        dst = target / f.name
+        if not dst.exists() or dst.stat().st_size != f.stat().st_size:
+            shutil.copy2(f, dst)
+        out.append(dict(uid=r['uid'], src='sta_videos/' + f.name, ch=m['ch'], frames=frames, fps=sig(float(m['fps']), 3),
+                        dt_ms=sig(dt, 4), zero=int(round(-a / dt))))
+    log(f'STA videos: {len(out)} of {len(rows)} cells have a video (copied to {target})')
     return out
 
 
@@ -526,6 +694,13 @@ def build(args):
     con = open_master(master_path)
     if con is None:
         log(f'Master file not found ({master_path}): repeats, noise paths and recording lists will be skipped.')
+    regions = {}
+    if con is not None:
+        try:
+            regions = {rec: (reg or None) for rec, reg in con.execute('select recording, region from recordings')}
+        except sqlite3.Error:
+            pass
+    region_of = lambda rec: regions.get(rec) or 'unknown'
 
     # ---- rows
     A['uid'] = A['cell_uid'] if group_mode == 'average' else A['observation_uid']
@@ -587,7 +762,7 @@ def build(args):
             use_repeats, repeats, per_cell = False, {}, {}
 
     # ---- RF maps
-    rfmaps, rf_types = [], []
+    rfmaps, rfmaps_other, rf_types = [], [], []
     if rf_on and args.rf_map != 'none':
         rf_try = True
         try:
@@ -597,22 +772,53 @@ def build(args):
             rf_try = False
         if rf_try:
             log('Cutting receptive field maps from the noise recordings ...')
-            rfmaps = build_rfmaps(rows, con, args.rf_map, args.crop_um, args.noise_overrides)
+            rfmaps, rfmaps_other = build_rfmaps(rows, con, args.rf_map, args.crop_um, args.noise_overrides, args.rf_other)
             have_cm = any('cm_d' in r for r in rfmaps)
             have_rms = any('rms_d' in r for r in rfmaps)
             rf_types = (['cm'] if have_cm else []) + (['rms'] if have_rms else [])
     elif not rf_on:
         log('Clustering did not use receptive field features: receptive field elements are left out of the page.')
 
+    out_dir = Path(args.out) if args.out else (cache / 'explorer')
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # ---- moving bar direction tuning (polar plot)
+    bar_dirs = {}
+    if 'moving_bar' in stims and con is not None:
+        try:
+            bar_dirs = build_bar_dirs(rows, con, data['processing'])
+            log(f'Bar direction tuning: {len(bar_dirs)} cells')
+        except Exception as exc:  # noqa: BLE001
+            log(f'Bar direction tuning skipped: {exc!r}')
+
+    # ---- feature space
+    space, space_labels, space_groups = {}, [], []
+    if args.space:
+        try:
+            space, space_labels, space_groups = build_space(rows, fit, data['processing'])
+            log(f'Feature space: {len(space_labels)} dimensions, {len(space["space_axes"])} views')
+        except Exception as exc:  # noqa: BLE001
+            log(f'Feature space skipped: {exc!r}')
+
+    # ---- STA videos
+    sta_videos = []
+    if rf_on and args.sta_videos and args.sta_videos.lower() != 'none':
+        sta_videos = build_sta_videos(rows, args.sta_videos, out_dir)
+
     # ------------------------------------------------------------------ datasets
     D = {}
+    D.update(space)
+    if sta_videos:
+        D['sta_videos'] = sta_videos
     cells = []
     for i, r in rows.iterrows():
         order = np.argsort(-post[r['data_row']])[:min(3, K)]
         d = dict(uid=r['uid'], recording=r['recording'], cell=int(r['cell_index']), cluster=int(r['cluster']),
                  conf=sig(r['posterior_max'], 6), dims=int(r['observed_dimensions']), ff_pass=bool(r['fff_pass']),
                  scf_qi=sig(r['scf_qi'], 3), csteps_qi=sig(r['csteps_qi'], 3), chirp_qi=sig(r['chirp_qi'], 3),
-                 mean_rate_hz=sig(r['mean_rate_hz'], 4))
+                 mean_rate_hz=sig(r['mean_rate_hz'], 4), region=region_of(r['recording']))
+        if r['uid'] in bar_dirs:
+            d['bar_dirs'] = bar_dirs[r['uid']]
         if rf_on:
             d.update(rf_pass=bool(r['rf_pass']), rf_quality=sig(r['rf_quality'], 4), rf_context=r['rf_context'])
         if sel_on:
@@ -684,6 +890,8 @@ def build(args):
                          for u, dr in zip(rows['uid'], di) if np.isfinite(sta_arr[dr]).all()]
     if rfmaps:
         D['rfmaps'] = rfmaps
+    if rfmaps_other:
+        D['rfmaps_other'] = rfmaps_other
 
     # clusters + composition
     overall = cdf['recording'].value_counts(normalize=True)
@@ -693,6 +901,7 @@ def build(args):
         top = vc.index[0]
         for rec, n in vc.items():
             comp.append(dict(cluster=int(k), recording=rec, cells=int(n)))
+        rc = g['recording'].map(region_of).value_counts()
 
         def med(c):
             return sig(g[c].median(skipna=True), 4) if c in g and g[c].notna().any() else None
@@ -701,6 +910,7 @@ def build(args):
             top_share=sig(vc.iloc[0] / len(g), 3), top_expected=sig(overall[top], 3),
             top_ratio=sig(vc.iloc[0] / len(g) / overall[top], 3), ff_share=sig(g['ff_pass'].mean(), 3),
             rf_cells=int(g['has_sta'].sum()) if sta_on else 0, rf_share=sig(g['has_sta'].mean(), 3) if sta_on else None,
+            top_region=rc.index[0], top_region_share=sig(rc.iloc[0] / len(g), 3),
             conf_mean=sig(g['conf'].mean(), 4), dsi_med=med('dsi'), osi_med=med('osi'),
             center_med=med('center_mm2'), elong_med=med('elongation'), rate_med=med('mean_rate_hz'),
             size_class='large' if len(g) >= 20 else 'small'))
@@ -769,6 +979,7 @@ def build(args):
                        ff_only=None, rf_only=None, both=None, neither=None, with_sta=0, scf_qi_med=None,
                        csteps_qi_med=None, chirp_qi_med=None, rf_quality_med=None, rf_context=None,
                        rep_scf=None, rep_csteps=None, rep_chirp=None, rep_bar=None, note=note)
+        row['region'] = region_of(rec)
         rec_rows.append(row)
     D['recordings'] = rec_rows
 
@@ -858,14 +1069,18 @@ def build(args):
     missing = bool((report['observed_cells'] < n_all).any() or n_unassigned)
     flags = dict(
         rf=rf_on, sta=sta_on, centre=centre_on, sel=sel_on, bar='moving_bar' in stims, rfq=rfq, extras=bool(n_extras_comp),
-        repeats=use_repeats, rfmap=bool(rfmaps), master=con is not None, excl=bool(excl_list),
+        repeats=use_repeats, rfmap=bool(rfmaps), rfother=bool(rfmaps_other), stavideo=bool(sta_videos),
+        polar=bool(bar_dirs), space=bool(space), master=con is not None, excl=bool(excl_list),
         exclrf=bool(rf_on and excl_list and excl_rf_related and all(excl_rf_related)),
         rfonly=bool(rfq and n_rf_only > 0), multipx=len(n_pixel) > 1, missing=missing,
         unassigned=n_unassigned > 0, qi=mode != 'none',
         mode_or=mode == 'fff_or_rf', mode_and=mode == 'fff_and_rf', mode_fff=mode == 'fff_only',
         mode_rf=mode == 'rf_only', mode_none=mode == 'none')
     config = dict(title=args.title, subtitle=f'{fit_path.name} \u00b7 {model["k"]} clusters \u00b7 built {datetime.date.today().isoformat()}',
-                  stims=stims, flags=flags, rf_maps=rf_types, rf_crop_um=args.crop_um, key=key)
+                  stims=stims, flags=flags, rf_maps=rf_types, rf_crop_um=args.crop_um, key=key,
+                  bar_deg=list(data['processing'].get('directions_deg', [])),
+                  bar_names=list(data['processing'].get('direction_names', [])),
+                  space_labels=space_labels, space_groups=space_groups)
 
     # ------------------------------------------------------------------ write the page
     template = Path(__file__).resolve().parent / 'explorer_template.html'
@@ -875,8 +1090,6 @@ def build(args):
     payload = json.dumps(clean({'config': config, 'datasets': D}), separators=(',', ':'))
     payload = payload.replace('</', '<\\/').replace('<!--', '<\\!--')
     html = html.replace('"__EXPLORER_DATA__"', payload, 1).replace('__EXPLORER_TITLE__', args.title)
-    out_dir = Path(args.out) if args.out else (cache / 'explorer')
-    out_dir.mkdir(parents=True, exist_ok=True)
     out = out_dir / f'cluster_explorer_{key}.html'
     out.write_text(html, encoding='utf-8')
     log(f'\nWrote {out}  ({out.stat().st_size / 1e6:.1f} MB)')
@@ -896,6 +1109,9 @@ def parse_args(argv=None):
     p.add_argument('--out', default=str(OUT_DIR) if OUT_DIR else None)
     p.add_argument('--rf-map', choices=['cm', 'rms', 'both', 'none'], default=RF_MAP)
     p.add_argument('--crop-um', type=float, default=CROP_UM)
+    p.add_argument('--no-rf-other', dest='rf_other', action='store_false', default=RF_OTHER)
+    p.add_argument('--sta-videos', default=str(STA_VIDEO_DIR) if STA_VIDEO_DIR else None, help="folder of STA mp4 files, or 'none'")
+    p.add_argument('--no-space', dest='space', action='store_false', default=FEATURE_SPACE)
     p.add_argument('--no-repeats', dest='repeats', action='store_false', default=INCLUDE_REPEATS)
     p.add_argument('--no-open', dest='open', action='store_false', default=OPEN_BROWSER)
     p.add_argument('--noise', action='append', default=[], metavar='REC=PATH', help='noise_data.nc for one recording')
