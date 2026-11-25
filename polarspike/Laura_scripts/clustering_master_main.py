@@ -74,7 +74,14 @@ RF_PIXEL_RULE = dict(change_date='20_04_2026', before_px=12, after_px=32)
 # RF_SCALE_BY_PIXEL: real size of a noise pixel relative to what the RF analysis assumed.
 #   {12: 1.25} = the 12 px noise was really 5 um per projector pixel, not 4 (makes 12 px and
 #   32 px centre sizes match: medians 0.019 vs 0.020 mm2). {} = use sizes as stored.
-RF_SCALE_BY_PIXEL = {12: 1.25}
+# NOTE (25/11/2026): the 4 -> 5 um pixel size is now corrected at source for the five 12 px
+#   recordings (05_11_2025, 02_12_2025, 15_01_2026, 26_02_2026, 05_03_2026): settings relabelled
+#   (relabel_pixel_size_settings.py, backups *_orig_4um.json), noise_data_v2.nc rebuilt at 5 um
+#   (convert_noise_data_v2.py --pixel-size 5) and their RF values re-read into
+#   retina_master.sqlite (build_master_file.py REFRESH_RF). So no scaling is needed any more:
+#   do NOT set {12: 1.25} again or the 12 px RFs are scaled twice.
+#   (A master built from the old 4 um files would need {12: 1.25}.)
+RF_SCALE_BY_PIXEL = {}
 # RF_SURROUND: 32 px noise finds much smaller surrounds than 12 px (median ~1/3), which no
 #   scale explains. 'normalise_by_pixel' = compare each surround only with cells of the same
 #   noise pixel size; 'drop' = leave surround size out; 'as_is' = use as stored.
