@@ -10,7 +10,7 @@ each recording's own spread of axes, so a direction shared by all cells cannot m
 import sys
 import numpy as np, pandas as pd
 
-ROW_CSV = '/home/laura/Box/SUSSEX/Experiments/Zebrafish/Figures/RF_cone_row_angle_prediction/rf_vs_cone_row_angle_all_recordings_cells.csv'
+ROW_CSV = '/home/laura/Box/SUSSEX/Experiments/Zebrafish/Figures/rf_analysis/Elongated receptive fields/RF_cone_row_angle_prediction/rf_vs_cone_row_angle_all_recordings_cells.csv'
 QI, ELONG, NPERM = 0.3, 1.2, 5000
 rng = np.random.default_rng(0)
 
